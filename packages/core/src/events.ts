@@ -33,6 +33,18 @@ export interface TaggedEvent {
 
 export type EventListener = (e: TaggedEvent) => void
 
+/** One node of the reconstructed agent tree (see `buildAgentTree`). */
+export interface AgentNode {
+  agentId: string
+  parentId: string | null
+  input: number
+  output: number
+  cost: number
+  status: 'running' | 'done' | 'error'
+  text?: string
+  children: AgentNode[]
+}
+
 /** Fan-out for tagged events. One hub per run; every agent logs into it. */
 export class EventHub {
   readonly #listeners = new Set<EventListener>()
@@ -58,6 +70,65 @@ export class EventHub {
     this.on((e) => out.push(e))
     return out
   }
+}
+
+/**
+ * Rebuild the agent tree from a tagged event stream. Every agent is identified by
+ * `agentId`/`parentId`; `usage` events accumulate cost, `turn.end`/`error` set the
+ * status. Returns the roots (normally just the main agent).
+ */
+export function buildAgentTree(events: TaggedEvent[]): AgentNode[] {
+  const nodes = new Map<string, AgentNode>()
+  const ensure = (agentId: string, parentId: string | null): AgentNode => {
+    let node = nodes.get(agentId)
+    if (!node) {
+      node = { agentId, parentId: parentId ?? null, input: 0, output: 0, cost: 0, status: 'running', children: [] }
+      nodes.set(agentId, node)
+    }
+    return node
+  }
+
+  for (const e of events) {
+    const node = ensure(e.agentId, e.parentId)
+    const ev = e.event
+    if (ev.type === 'usage') {
+      node.input += ev.input
+      node.output += ev.output
+      node.cost += ev.cost ?? 0
+    } else if (ev.type === 'turn.end') {
+      node.status = 'done'
+      node.text = ev.text
+    } else if (ev.type === 'error') {
+      node.status = 'error'
+      node.text = ev.message
+    }
+  }
+
+  const roots: AgentNode[] = []
+  for (const node of nodes.values()) {
+    const parent = node.parentId ? nodes.get(node.parentId) : undefined
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+  for (const node of nodes.values()) node.children.sort((a, b) => a.agentId.localeCompare(b.agentId))
+  return roots
+}
+
+/** Human-readable rendering of an agent tree, with per-agent tokens and cost. */
+export function formatAgentTree(roots: AgentNode[]): string {
+  const lines: string[] = []
+  let total = 0
+  const render = (node: AgentNode, indent: string, last: boolean): void => {
+    total += node.cost
+    const tokens = node.input + node.output
+    const cost = node.cost ? ` · $${node.cost.toFixed(6)}` : ''
+    const label = node.agentId === 'main' ? 'main' : node.agentId.split('/').pop()
+    lines.push(`${indent}${last ? '└─' : '├─'} ${label} · ${node.status} · ${tokens}tok${cost}`)
+    node.children.forEach((c, i) => render(c, indent + (last ? '   ' : '│  '), i === node.children.length - 1))
+  }
+  for (const root of roots) render(root, '', true)
+  if (total) lines.push(`total cost: $${total.toFixed(6)}`)
+  return lines.join('\n')
 }
 
 /** A per-agent emitter: tags events, assigns seq/time, forwards to the hub. */

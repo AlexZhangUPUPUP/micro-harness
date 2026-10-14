@@ -14,8 +14,10 @@ import { stdin, stdout } from 'node:process'
 import path from 'node:path'
 import { Harness } from './harness.ts'
 import { openaiProvider } from './provider.ts'
-import { EventHub, type TaggedEvent } from './events.ts'
+import { EventHub, buildAgentTree, formatAgentTree, type TaggedEvent } from './events.ts'
 import { Trace } from './trace.ts'
+import { makeTools } from './tools.ts'
+import { AgentRunner, createAgentRegistry, loadAgentRoles, makeTaskTool } from './agents.ts'
 
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`)
@@ -38,6 +40,10 @@ const maxContextTokens = Number(opt('max-context', '24000')) || 24_000
 const model = opt('model', process.env.MICRO_MODEL || process.env.OPENAI_MODEL || 'deepseek-chat')!
 const baseUrl = opt('base-url', process.env.MICRO_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com')!
 const apiKey = process.env.MICRO_API_KEY || process.env.OPENAI_API_KEY || ''
+const pricing = {
+  input: Number(opt('price-input', process.env.MICRO_PRICE_INPUT || '0')) || 0,
+  output: Number(opt('price-output', process.env.MICRO_PRICE_OUTPUT || '0')) || 0,
+}
 
 const prompt = process.argv
   .slice(2)
@@ -52,7 +58,9 @@ if (!apiKey) {
 
 const trace = traceOn ? new Trace(path.join(cwd, 'traces')) : null
 const hub = new EventHub()
+const recorded: TaggedEvent[] = []
 hub.on((e: TaggedEvent) => {
+  recorded.push(e)
   trace?.write(e)
   if (quiet) return
   const ev = e.event
@@ -72,14 +80,44 @@ hub.on((e: TaggedEvent) => {
   }
 })
 
+function printAgentTree(): void {
+  const roots = buildAgentTree(recorded)
+  const multi = roots.some((r) => r.children.length > 0)
+  if (!multi && !flag('tree')) return
+  console.log('\nagent tree:\n' + formatAgentTree(roots))
+}
+
+const roles = createAgentRegistry(loadAgentRoles(path.join(cwd, 'agents')))
+const provider = openaiProvider({ baseUrl, apiKey })
+const approval = (opt('approval', 'full-auto') as 'suggest' | 'auto-edit' | 'full-auto') ?? 'full-auto'
+const runner = new AgentRunner({
+  provider,
+  model,
+  cwd,
+  hub,
+  roles,
+  tools: makeTools(),
+  allowBash,
+  approval,
+  pricing,
+  maxDepth: Number(opt('max-depth', '3')) || 3,
+  maxConcurrency: Number(opt('max-concurrency', '4')) || 4,
+  timeoutMs: (Number(opt('agent-timeout', '300')) || 300) * 1000,
+  maxTokens: opt('agent-max-tokens') ? Number(opt('agent-max-tokens')) : undefined,
+  maxCost: opt('agent-max-cost') ? Number(opt('agent-max-cost')) : undefined,
+})
+
 const harness = new Harness({
-  provider: openaiProvider({ baseUrl, apiKey }),
+  provider,
   model,
   cwd,
   allowBash,
   maxSteps,
   maxContextTokens,
   hub,
+  pricing,
+  approval,
+  tools: [...makeTools(), makeTaskTool(runner)],
 })
 
 if (!quiet) {
@@ -89,6 +127,7 @@ if (!quiet) {
 if (prompt) {
   const answer = await harness.send(prompt)
   console.log('\n' + answer)
+  printAgentTree()
   process.exit(0)
 }
 
@@ -100,5 +139,6 @@ for (;;) {
   if (line === '/exit' || line === '/quit') break
   const answer = await harness.send(line)
   console.log('\n' + answer + '\n')
+  printAgentTree()
 }
 rl.close()

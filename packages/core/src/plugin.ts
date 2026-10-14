@@ -12,6 +12,7 @@
 import type { Plugin } from '@micro-harness/kernel'
 import { makeTools, type Tool } from './tools.ts'
 import type { Provider } from './provider.ts'
+import { DEFAULT_ROLE, createAgentRegistry, loadAgentRoles, type AgentRegistry, type AgentRole } from './agents.ts'
 
 export interface ProviderRegistry {
   register(name: string, provider: Provider): void
@@ -51,5 +52,40 @@ export const corePlugin: Plugin<CoreConfig> = {
   apply(ctx, config) {
     ctx.provide('tools', config?.tools ?? makeTools())
     ctx.provide('providers', createProviderRegistry(config?.providers))
+  },
+}
+
+/** The `agents` service: a registry of agent roles for the `task` tool. */
+export interface AgentsService {
+  roles: AgentRegistry
+  register(role: AgentRole): void
+  get(name: string): AgentRole | undefined
+  list(): string[]
+}
+
+export interface AgentsConfig {
+  roles?: AgentRole[]
+  /** Directory of `agents/*.md` role definitions (optional). */
+  dir?: string
+}
+
+export function createAgentsService(roles: AgentRole[] = []): AgentsService {
+  const registry = createAgentRegistry(roles)
+  if (!registry.has(DEFAULT_ROLE.name)) registry.register(DEFAULT_ROLE)
+  return {
+    roles: registry,
+    register: (role) => registry.register(role),
+    get: (name) => registry.get(name),
+    list: () => registry.list(),
+  }
+}
+
+/** Mount the multi-agent role registry on a kernel context. */
+export const agentsPlugin: Plugin<AgentsConfig> = {
+  name: 'agents',
+  apply(ctx, config) {
+    const roles = [...(config?.roles ?? [])]
+    if (config?.dir) roles.push(...loadAgentRoles(config.dir))
+    ctx.provide('agents', createAgentsService(roles))
   },
 }

@@ -14,6 +14,12 @@ import type { ToolDef } from './model.ts'
 export interface ToolContext {
   cwd: string
   allowBash: boolean
+  /** The agent running the tool — used by the `task` tool to link sub-agents. */
+  agentId?: string
+  /** Nesting depth of the running agent (root = 0); enforces `maxDepth`. */
+  depth?: number
+  /** Aborted when the current turn is cancelled; propagated to sub-agents. */
+  signal?: AbortSignal
 }
 
 export interface ToolResult {

@@ -27,6 +27,8 @@ git checkout "$BRANCH" >/dev/null 2>&1 || { echo "cannot checkout $BRANCH"; exit
 PROMPT="$(cat "$PROMPT_FILE")"
 echo "auto-run: branch=$BRANCH max=$MAX_ITERS timeout=${PER_TIMEOUT}s session=${SESSION_FLAG} log=$LOG" | tee -a "$LOG"
 
+RESULT="max-iterations"
+
 for i in $(seq 1 "$MAX_ITERS"); do
   echo "=== iteration $i · $(date '+%Y-%m-%d %H:%M:%S') ===" | tee -a "$LOG"
 
@@ -49,13 +51,21 @@ for i in $(seq 1 "$MAX_ITERS"); do
   fi
 
   if grep -q 'AUTO-RUN: DONE' "$LOG"; then
+    RESULT="done"
     echo "auto-run: DONE" | tee -a "$LOG"
     break
   fi
   if grep -q 'AUTO-RUN: BLOCKED' "$LOG"; then
+    RESULT="blocked"
     echo "auto-run: BLOCKED — needs a human" | tee -a "$LOG"
     break
   fi
 done
 
-echo "auto-run: finished at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$LOG"
+echo "auto-run: finished ($RESULT) at $(date '+%Y-%m-%d %H:%M:%S') after $(( $(grep -c '=== iteration' "$LOG" 2>/dev/null || echo 0) )) iteration(s)" | tee -a "$LOG"
+echo "$RESULT" > "$(dirname "$LOG")/.auto-run.status" 2>/dev/null || true
+
+# Unattended runs need a way to reach a human: macOS desktop notification.
+if command -v osascript >/dev/null 2>&1; then
+  osascript -e "display notification \"finished: $RESULT — see .auto-run.log\" with title \"micro-harness auto-run\" sound name \"Glass\"" >/dev/null 2>&1 || true
+fi
