@@ -32,8 +32,8 @@
 
 | 阶段 | 名称 | 关键交付 | 状态 |
 |---|---|---|---|
-| **P0** | 基座 | monorepo + Bun 工具链 + CI | ☐ |
-| **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ☐ |
+| **P0** | 基座 | monorepo + Bun 工具链 + CI | ✅ |
+| **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ✅ |
 | **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ☐ |
 | **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ☐ |
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ☐ |
@@ -53,18 +53,18 @@
 **目标**：把现有最小实现重组成 monorepo，工具链换成 Bun，CI 绿。
 
 **交付**
-- [ ] monorepo：`packages/kernel` `packages/core` `packages/providers` `packages/server` `packages/cli` `packages/gui`（后三个先占位）
-- [ ] 现有 `src/*` 迁进 `packages/core/src/*`，`test/*` 跟着迁
-- [ ] Bun 工具链：`bun test`、`bun run typecheck`（tsc）、workspace 脚本
-- [ ] `tsconfig` 项目引用 / paths
-- [ ] CI：`bun install && bun test && bun run typecheck`
-- [ ] `main` 保持"最小 harness"可运行；平台开发在 `platform` 分支
+- [x] monorepo：`packages/core`（迁移）+ `packages/kernel`（P1）；providers/server/cli/gui 留到各自阶段
+- [x] 现有 `src/*` 迁进 `packages/core/src/*`，`test/*` 跟着迁
+- [x] Bun 工具链：`bun test`、`bun run typecheck`、workspace 脚本
+- [x] `tsconfig.base.json` + paths（`@micro-harness/*`）
+- [x] CI：`bun install && bun test && bun run typecheck`
+- [x] `main` 保持"最小 harness"可运行；平台开发在 `platform` 分支
 
 **验收**
 ```bash
 bun install && bun test          # 7/7 通过
 bun run typecheck                # 0 错误
-bun packages/cli/src/cli.ts "hi" # 仍能跑（mock provider 或真模型）
+bun packages/core/src/cli.ts "hi" # 能跑
 ```
 
 ---
@@ -74,24 +74,24 @@ bun packages/cli/src/cli.ts "hi" # 仍能跑（mock provider 或真模型）
 **目标**：实现 ARCHITECTURE 第 3 节的 Context/DI/生命周期/作用域/事件。
 
 **交付**
-- [ ] `createContext()`：`provide/get/inject/on/emit/effect/fork/isolate`
-- [ ] 插件契约：`{ name, inject?, Config?, apply(ctx, config) }`
-- [ ] 生命周期状态机：`registered→loading→active`，`waiting`（缺依赖）、`failed`（隔离）
-- [ ] **依赖就绪才激活**；服务出现/消失触发**重绑定**
-- [ ] **销毁反序 + 异步 dispose 必须 await**
-- [ ] 作用域：`fork()`（复制 context）、`isolate(name, value)`（本作用域覆盖）
-- [ ] 事件总线（类型安全）
-- [ ] Config schema 校验（zod 薄封装）+ 错误定位到插件行
-- [ ] 错误隔离：单插件 `failed` 不崩整棵树
+- [x] `createContext()`：`provide/get/inject/on/emit/effect/fork/isolate`
+- [x] 插件契约：`{ name, inject?, Config?, apply(ctx, config) }`
+- [x] 生命周期：`waiting→active`，`failed`（隔离）
+- [x] **依赖就绪才激活**；服务出现/消失触发**重绑定**
+- [x] **销毁反序 + 异步 dispose await**
+- [x] 作用域：`fork()` / `isolate()`
+- [x] 事件总线
+- [x] Config schema 校验（结构式 `Schema.parse`）+ 错误标记
+- [x] 错误隔离：单插件 `failed` 不崩整棵树
 
-**验收（必须有测试）**
-- [ ] 依赖 B 的 A 在 B 注册后才 `active`
-- [ ] B 注销 → A 回滚/重新 `waiting`
-- [ ] `provide` 同名 → 报错
-- [ ] 销毁顺序 = 激活反序；异步 dispose 被 await
-- [ ] 一个插件抛错 → 其他插件正常，诊断里标记 `failed`
-- [ ] `fork()` 后修改子 context 的服务不影响父
-- [ ] `isolate()` 的值不外泄
+**验收（10 个测试全绿）**
+- [x] 依赖 B 的 A 在 B 注册后才 `active`
+- [x] B 注销 → A 回滚为 `waiting`，其 effect 被销毁
+- [x] `provide` 同名 → 报错
+- [x] 销毁顺序 = 激活反序；异步 dispose 被 await
+- [x] 一个插件抛错 → 其他插件正常，诊断标记 `failed`
+- [x] `fork()` 后 `isolate` 不上泄、不外泄到兄弟作用域
+- [x] `inject` 随服务出现/消失而启动/回滚
 
 ---
 
