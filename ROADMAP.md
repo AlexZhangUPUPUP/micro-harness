@@ -37,7 +37,7 @@
 | **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ✅ |
 | **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ✅ |
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ✅ |
-| **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ☐ |
+| **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ✅ |
 | **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ☐ |
 | **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ☐ |
 | **P8** | 互操作 | MCP client + ACP server | ☐ |
@@ -104,7 +104,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] loop 只发事件，不直接输出
 - [x] `Provider` 接口 + `openai-compatible` 适配器（DeepSeek 可用）
 - [x] 工具注册表 + JSON Schema + 路径沙箱 + **审批级别**（suggest/auto-edit/full-auto）
-- [ ] **流式** text/thinking delta → **移到 P5**（CLI 真正需要时再做）；[x] **并行工具调用**
+- [x] **流式** text/thinking delta（P2 延后，P5 完成）；[x] **并行工具调用**
 - [x] 会话 **JSONL** 追加写 + **replay**
 - [x] 取消（AbortSignal）+ 步数上限
 - [x] core 挂到内核插件（提供 `tools` / `providers` 服务）
@@ -152,12 +152,12 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P5 · CLI
 
-- [ ] TUI（ink 或自绘）：流式渲染、工具卡片、审批交互
-- [ ] 斜杠命令、prompt 模板、技能
-- [ ] **多 agent 树视图** + 每个 agent 的成本/状态
-- [ ] 权限模式（suggest / auto-edit / full-auto）
-- [ ] **无人值守驱动**：`micro-harness run --auto`（任务队列 + 循环 + 预算/超时护栏），对标 `scripts/auto-run.sh`
-- [ ] 验收：终端里完成一次多 agent 任务
+- [x] TUI（ink 或自绘）：流式渲染、工具卡片、审批交互
+- [x] 斜杠命令、prompt 模板、技能
+- [x] **多 agent 树视图** + 每个 agent 的成本/状态
+- [x] 权限模式（suggest / auto-edit / full-auto）
+- [x] **无人值守驱动**：`micro-harness run --auto`（任务队列 + 循环 + 预算/超时护栏），对标 `scripts/auto-run.sh`
+- [x] 验收：终端里完成一次多 agent 任务
 
 ## P6 · GUI
 
