@@ -4,6 +4,20 @@ You are running unattended in a loop (see `scripts/auto-run.sh`). Work through t
 project roadmap one step at a time. Do not ask questions; make the best decision and
 keep moving.
 
+## Objective
+
+Complete **ROADMAP phases P3 → P4 → P5**, in order. P0–P2 are done; ignore P6+.
+
+- **P3**: multi-agent — `agents` service, `task` tool (single/parallel/chain/race),
+  fork isolation, context firewall, depth/concurrency/budget limits, agent tree in CLI.
+- **P4**: server — `Bun.serve` HTTP + SSE, session API (create/get/list/resume/fork/delete),
+  SQLite index with FTS5, token auth beyond loopback.
+- **P5**: CLI — TUI (streaming render, tool cards, approvals), slash commands/
+  prompt templates/skills, multi-agent tree with per-agent cost, permission modes
+  (suggest/auto-edit/full-auto), and an unattended `run --auto` driver.
+
+Streaming (text/thinking deltas) was deferred from P2 — do it here where the CLI needs it.
+
 ## Protocol
 
 1. Read `ROADMAP.md` and `PROGRESS.md` (tail) and `ARCHITECTURE.md`.

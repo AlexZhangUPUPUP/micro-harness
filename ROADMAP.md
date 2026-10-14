@@ -34,7 +34,7 @@
 |---|---|---|---|
 | **P0** | 基座 | monorepo + Bun 工具链 + CI | ✅ |
 | **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ✅ |
-| **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ☐ |
+| **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ✅ |
 | **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ☐ |
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ☐ |
 | **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ☐ |
@@ -103,16 +103,16 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] **AgentEvent**（含 `agentId` / `parentId`）—— 唯一契约（`events.ts` + `EventHub`/`AgentLog`）
 - [x] loop 只发事件，不直接输出
 - [x] `Provider` 接口 + `openai-compatible` 适配器（DeepSeek 可用）
-- [~] 工具注册表 + JSON Schema + 路径沙箱（已有）；**审批级别（readonly/confirm/auto）待做**
-- [ ] **流式**文本（待做）；[x] **并行工具调用**
-- [ ] 会话 **JSONL** 追加写（事实来源）
-- [x] 取消（AbortSignal 已接入）+ **步数上限**
+- [x] 工具注册表 + JSON Schema + 路径沙箱 + **审批级别**（suggest/auto-edit/full-auto）
+- [ ] **流式** text/thinking delta → **移到 P5**（CLI 真正需要时再做）；[x] **并行工具调用**
+- [x] 会话 **JSONL** 追加写 + **replay**
+- [x] 取消（AbortSignal）+ 步数上限
+- [x] core 挂到内核插件（提供 `tools` / `providers` 服务）
 
 **验收**
-- [x] `bun test` 覆盖：事件序列、工具错误回灌、并行工具调用、agent 标记、maxSteps
-- [ ] 审批拒绝（待做）
-- [ ] 真机跑通：写文件 → 读回 → 正确作答（现有 CLI 已能）
-- [ ] 生成的 JSONL 可被 replay 出同一事件序列（待做）
+- [x] `bun test` 覆盖：事件序列、工具错误回灌、并行工具、审批拒绝、会话 replay、agent 标记
+- [ ] 真机跑通：写文件 → 读回 → 正确作答（CLI 已可）
+- [x] 生成的 JSONL 可被 replay 出同一事件序列
 
 ---
 
