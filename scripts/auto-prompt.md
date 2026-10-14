@@ -44,6 +44,9 @@ Streaming (text/thinking deltas) was deferred from P2 — do it here where the C
 
 End your final message with exactly one of these lines:
 
-- `AUTO-RUN: DONE` — everything in the roadmap is complete
+- `AUTO-RUN: DONE` — the objective (P3, P4 and P5 all complete) is done
 - `AUTO-RUN: BLOCKED` — cannot make progress without a human
 - `AUTO-RUN: CONTINUE` — made progress; there is more to do
+
+When (and only when) every checkbox in P3, P4 and P5 of `ROADMAP.md` is ticked,
+print `AUTO-RUN: DONE` so the driver stops and notifies the human.

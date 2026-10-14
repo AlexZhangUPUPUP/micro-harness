@@ -34,6 +34,10 @@ export interface HarnessOptions {
   agentId?: string
   parentId?: string | null
   tools?: Tool[]
+  /** Nesting depth of this agent (root = 0). Sub-agents get depth + 1. */
+  depth?: number
+  /** USD per 1M tokens, used to stamp `usage` events with a `cost`. */
+  pricing?: { input: number; output: number }
 }
 
 export type ApprovalMode = 'suggest' | 'auto-edit' | 'full-auto'
@@ -64,12 +68,19 @@ export class Harness {
   readonly #parallelTools: boolean
   readonly #approval: ApprovalMode
   readonly #confirm?: ConfirmFn
+  readonly #pricing?: { input: number; output: number }
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
     this.model = opts.model
     this.#tools = opts.tools ?? makeTools()
-    this.#toolCtx = { cwd: opts.cwd, allowBash: !!opts.allowBash }
+    this.#pricing = opts.pricing
+    this.#toolCtx = {
+      cwd: opts.cwd,
+      allowBash: !!opts.allowBash,
+      agentId: opts.agentId ?? 'main',
+      depth: opts.depth ?? 0,
+    }
     this.#maxSteps = opts.maxSteps ?? 24
     this.#maxContextTokens = opts.maxContextTokens ?? 24_000
     this.#parallelTools = opts.parallelTools ?? true
@@ -85,6 +96,7 @@ export class Harness {
 
   /** Run one user turn to completion; returns the final assistant text. */
   async send(prompt: string, signal?: AbortSignal): Promise<string> {
+    this.#toolCtx.signal = signal
     this.messages.push({ role: 'user', content: prompt })
 
     for (let step = 1; step <= this.#maxSteps; step++) {
@@ -109,10 +121,13 @@ export class Harness {
       })
       this.messages.push(message)
       if (usage) {
+        const input = usage.prompt_tokens ?? 0
+        const output = usage.completion_tokens ?? 0
         this.log.emit({
           type: 'usage',
-          input: usage.prompt_tokens ?? 0,
-          output: usage.completion_tokens ?? 0,
+          input,
+          output,
+          cost: this.#pricing ? (input / 1e6) * this.#pricing.input + (output / 1e6) * this.#pricing.output : undefined,
         })
       }
       if (message.content) this.log.emit({ type: 'text.delta', text: String(message.content) })

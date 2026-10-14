@@ -5,3 +5,5 @@ traces/
 .DS_Store
 
 .auto-run.log
+
+.auto-run.status
