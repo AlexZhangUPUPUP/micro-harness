@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * CLI: `micro-harness [options] "one shot prompt"` or run with no prompt for an
  * interactive REPL that keeps the conversation (and context) between turns.
