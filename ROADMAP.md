@@ -146,7 +146,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 - [ ] `Bun.serve`：HTTP + **SSE** 事件流
 - [ ] 会话 API：list / get / create / resume / fork / delete
-- [ ] SQLite 索引（`bun:sqlite`）：会话元数据 + **FTS5** 全文 + 用量/运行历史（可删可重建）
+- [x] SQLite 索引（`bun:sqlite`）：会话元数据 + **FTS5** 全文 + 用量/运行历史（可删可重建）
 - [ ] 鉴权 token（非 loopback 必填）
 - [ ] 验收：`curl` 能起会话、流式收事件、全文搜索命中
 

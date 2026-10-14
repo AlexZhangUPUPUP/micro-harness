@@ -91,13 +91,14 @@ export class Harness {
 
     const system = (opts.systemPrompt ?? DEFAULT_SYSTEM).replace('{{cwd}}', opts.cwd)
     this.messages = [{ role: 'system', content: system }]
-    this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd })
+    this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd, parentId: opts.parentId ?? null })
   }
 
   /** Run one user turn to completion; returns the final assistant text. */
   async send(prompt: string, signal?: AbortSignal): Promise<string> {
     this.#toolCtx.signal = signal
     this.messages.push({ role: 'user', content: prompt })
+    this.log.emit({ type: 'user.message', text: prompt })
 
     for (let step = 1; step <= this.#maxSteps; step++) {
       this.log.emit({ type: 'turn.start', turn: step })

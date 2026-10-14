@@ -24,11 +24,24 @@
       "name": "@micro-harness/kernel",
       "version": "0.1.0",
     },
+    "packages/server": {
+      "name": "@micro-harness/server",
+      "version": "0.1.0",
+      "bin": {
+        "micro-harness-server": "./src/main.ts",
+      },
+      "dependencies": {
+        "@micro-harness/core": "workspace:*",
+        "@micro-harness/kernel": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@micro-harness/core": ["@micro-harness/core@workspace:packages/core"],
 
     "@micro-harness/kernel": ["@micro-harness/kernel@workspace:packages/kernel"],
+
+    "@micro-harness/server": ["@micro-harness/server@workspace:packages/server"],
 
     "@types/bun": ["@types/bun@1.4.3", "", { "dependencies": { "bun-types": "1.4.3" } }, "sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw=="],
 
