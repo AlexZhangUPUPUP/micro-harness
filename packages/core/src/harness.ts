@@ -26,11 +26,26 @@ export interface HarnessOptions {
   systemPrompt?: string
   /** Run the tool calls of one assistant message concurrently (default true). */
   parallelTools?: boolean
+  /** When tools need approval: suggest = any mutating, auto-edit = bash only, full-auto = never. */
+  approval?: ApprovalMode
+  /** Asked when a tool call needs approval; failing/absent means deny. */
+  confirm?: ConfirmFn
   hub?: EventHub
   agentId?: string
   parentId?: string | null
   tools?: Tool[]
 }
+
+export type ApprovalMode = 'suggest' | 'auto-edit' | 'full-auto'
+
+export interface ApprovalRequest {
+  id: string
+  tool: string
+  args: unknown
+  agentId: string
+}
+
+export type ConfirmFn = (req: ApprovalRequest) => boolean | Promise<boolean>
 
 const DEFAULT_SYSTEM = `You are a careful coding agent working inside the directory {{cwd}}.
 Use the provided tools to inspect and modify files; prefer reading a file before writing it.
@@ -47,6 +62,8 @@ export class Harness {
   readonly #maxSteps: number
   readonly #maxContextTokens: number
   readonly #parallelTools: boolean
+  readonly #approval: ApprovalMode
+  readonly #confirm?: ConfirmFn
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
@@ -56,6 +73,8 @@ export class Harness {
     this.#maxSteps = opts.maxSteps ?? 24
     this.#maxContextTokens = opts.maxContextTokens ?? 24_000
     this.#parallelTools = opts.parallelTools ?? true
+    this.#approval = opts.approval ?? 'full-auto'
+    this.#confirm = opts.confirm
     this.hub = opts.hub ?? new EventHub()
     this.log = new AgentLog(this.hub, opts.agentId ?? 'main', opts.parentId ?? null)
 
@@ -113,6 +132,18 @@ export class Harness {
     return text
   }
 
+  #needsApproval(name: string): boolean {
+    const tool = this.#tools.find((t) => t.name === name)
+    switch (this.#approval) {
+      case 'full-auto':
+        return false
+      case 'auto-edit':
+        return name === 'bash'
+      case 'suggest':
+        return !!tool?.mutating
+    }
+  }
+
   async #runTools(calls: ToolCall[]): Promise<void> {
     const runOne = async (call: ToolCall): Promise<{ call: ToolCall; result: ToolResult }> => {
       const name = call.function?.name ?? ''
@@ -123,6 +154,31 @@ export class Harness {
         /* keep the raw string in the event */
       }
       this.log.emit({ type: 'tool.call', id: call.id, name, args })
+
+      if (this.#needsApproval(name)) {
+        const id = `perm:${call.id}`
+        this.log.emit({ type: 'permission.request', id, tool: name, args })
+        let decision: 'allow' | 'deny' = 'deny'
+        try {
+          if (this.#confirm && (await this.#confirm({ id, tool: name, args, agentId: this.log.agentId }))) {
+            decision = 'allow'
+          }
+        } catch {
+          decision = 'deny'
+        }
+        this.log.emit({ type: 'permission.result', id, decision })
+        if (decision === 'deny') {
+          this.log.emit({
+            type: 'tool.result',
+            id: call.id,
+            name,
+            ok: false,
+            output: `denied by approval policy: ${name}`,
+            ms: 0,
+          })
+          return { call, result: { output: `denied by approval policy: ${name}`, isError: true } }
+        }
+      }
 
       const started = Date.now()
       const result = await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)

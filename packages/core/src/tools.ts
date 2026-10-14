@@ -25,6 +25,8 @@ export interface Tool {
   name: string
   description: string
   parameters: Record<string, unknown>
+  /** True when the tool can change the workspace (needs approval in `suggest` mode). */
+  mutating?: boolean
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>
 }
 
@@ -91,6 +93,7 @@ export function makeTools(): Tool[] {
     {
       name: 'write_file',
       description: 'Create or overwrite a file with the given content (creates parent directories).',
+      mutating: true,
       parameters: {
         type: 'object',
         properties: {
@@ -125,6 +128,7 @@ export function makeTools(): Tool[] {
     {
       name: 'bash',
       description: 'Run a shell command in the working directory. Disabled unless the harness is started with --allow-bash.',
+      mutating: true,
       parameters: {
         type: 'object',
         properties: { command: { type: 'string', description: 'the command to run' } },

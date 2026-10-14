@@ -16,6 +16,9 @@
       "bin": {
         "micro-harness": "./src/cli.ts",
       },
+      "dependencies": {
+        "@micro-harness/kernel": "workspace:*",
+      },
     },
     "packages/kernel": {
       "name": "@micro-harness/kernel",
