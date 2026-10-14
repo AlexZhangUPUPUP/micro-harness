@@ -8,7 +8,8 @@
  */
 
 export type AgentEvent =
-  | { type: 'session.start'; model: string; cwd: string }
+  | { type: 'session.start'; model: string; cwd: string; parentId?: string | null }
+  | { type: 'user.message'; text: string }
   | { type: 'turn.start'; turn: number }
   | { type: 'text.delta'; text: string }
   | { type: 'thinking.delta'; text: string }
@@ -69,6 +70,27 @@ export class EventHub {
     const out: TaggedEvent[] = []
     this.on((e) => out.push(e))
     return out
+  }
+}
+
+/** Extract the human/LLM-readable text of an event, for full-text indexing. */
+export function eventText(event: AgentEvent): string | null {
+  switch (event.type) {
+    case 'user.message':
+      return event.text
+    case 'text.delta':
+    case 'thinking.delta':
+      return event.text
+    case 'turn.end':
+      return event.text
+    case 'tool.call':
+      return `${event.name} ${JSON.stringify(event.args)}`
+    case 'tool.result':
+      return event.output
+    case 'error':
+      return event.message
+    default:
+      return null
   }
 }
 

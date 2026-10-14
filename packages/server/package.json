@@ -1,0 +1,16 @@
+{
+  "name": "@micro-harness/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "micro-harness-server": "./src/main.ts"
+  },
+  "dependencies": {
+    "@micro-harness/core": "workspace:*",
+    "@micro-harness/kernel": "workspace:*"
+  }
+}
