@@ -89,7 +89,8 @@ a multi-agent **orchestration and observability** layer built *on top of* a
 harness like this one.
 
 See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the design of the full harness
-platform this seed grows into — plugin kernel, composition, server, GUI, MCP/ACP.
+platform this seed grows into — plugin kernel, composition, server, GUI, MCP/ACP —
+and **[ROADMAP.md](ROADMAP.md)** for the long-term plan.
 
 ## License
 
