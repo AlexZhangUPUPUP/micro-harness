@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import { estimateTokens, trimMessages } from '../src/context.ts'
 import type { ChatMessage } from '../src/model.ts'

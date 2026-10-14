@@ -2,20 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, platform]
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: ${{ matrix.node }}
-      # No install step: the harness and its tests run on Node built-ins alone.
-      - run: node --test "test/*.test.ts"
+          bun-version: latest
+      - run: bun install
+      - run: bun test
+      - run: bun run typecheck
