@@ -16,19 +16,23 @@ PER_TIMEOUT="${PER_TIMEOUT:-1800}" # seconds per iteration (30 min)
 LOG="${LOG:-.auto-run.log}"
 PROMPT_FILE="${PROMPT_FILE:-scripts/auto-prompt.md}"
 ITER_ARGS="${ITER_ARGS:-}"
+# SESSION_FLAG: "-c" keeps one growing session; "--no-session" makes each
+# iteration stateless (the repo's ROADMAP/PROGRESS carry the memory). For long
+# unattended runs the stateless mode is usually the more robust choice.
+SESSION_FLAG="${SESSION_FLAG:--c}"
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "not a git repo"; exit 1; }
 git checkout "$BRANCH" >/dev/null 2>&1 || { echo "cannot checkout $BRANCH"; exit 1; }
 
 PROMPT="$(cat "$PROMPT_FILE")"
-echo "auto-run: branch=$BRANCH max=$MAX_ITERS timeout=${PER_TIMEOUT}s log=$LOG" | tee -a "$LOG"
+echo "auto-run: branch=$BRANCH max=$MAX_ITERS timeout=${PER_TIMEOUT}s session=${SESSION_FLAG} log=$LOG" | tee -a "$LOG"
 
 for i in $(seq 1 "$MAX_ITERS"); do
   echo "=== iteration $i · $(date '+%Y-%m-%d %H:%M:%S') ===" | tee -a "$LOG"
 
   iterlog="$(mktemp)"
   # shellcheck disable=SC2086
-  pi -c -p $ITER_ARGS "$PROMPT" >"$iterlog" 2>&1 &
+  pi $SESSION_FLAG -p $ITER_ARGS "$PROMPT" >"$iterlog" 2>&1 &
   pid=$!
   # portable watchdog (macOS has no `timeout`)
   ( sleep "$PER_TIMEOUT"; kill -0 "$pid" 2>/dev/null && kill -TERM "$pid" 2>/dev/null ) &
