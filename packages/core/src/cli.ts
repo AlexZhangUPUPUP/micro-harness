@@ -12,7 +12,9 @@
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import path from 'node:path'
-import { Harness, type HarnessEvent } from './harness.ts'
+import { Harness } from './harness.ts'
+import { openaiProvider } from './provider.ts'
+import { EventHub, type TaggedEvent } from './events.ts'
 import { Trace } from './trace.ts'
 
 function flag(name: string): boolean {
@@ -29,6 +31,7 @@ function opt(name: string, fallback?: string): string | undefined {
 
 const quiet = flag('quiet')
 const allowBash = flag('allow-bash')
+const traceOn = flag('trace')
 const cwd = path.resolve(opt('dir', process.cwd())!)
 const maxSteps = Number(opt('max-steps', '24')) || 24
 const maxContextTokens = Number(opt('max-context', '24000')) || 24_000
@@ -47,31 +50,36 @@ if (!apiKey) {
   process.exit(1)
 }
 
-const trace = flag('trace') ? new Trace(path.join(cwd, 'traces')) : null
-
-function onEvent(e: HarnessEvent): void {
+const trace = traceOn ? new Trace(path.join(cwd, 'traces')) : null
+const hub = new EventHub()
+hub.on((e: TaggedEvent) => {
   trace?.write(e)
   if (quiet) return
-  switch (e.type) {
-    case 'tool_call':
-      console.log(`  → ${e.name} ${JSON.stringify(e.args).slice(0, 160)}`)
+  const ev = e.event
+  switch (ev.type) {
+    case 'tool.call':
+      console.log(`  → ${ev.name} ${JSON.stringify(ev.args).slice(0, 160)}`)
       break
-    case 'tool_result':
-      console.log(`  ${e.isError ? '✗' : '✓'} ${e.name}: ${String(e.output).replace(/\n/g, ' ⏎ ').slice(0, 180)}`)
+    case 'tool.result':
+      console.log(`  ${ev.ok ? '✓' : '✗'} ${ev.name}: ${ev.output.replace(/\n/g, ' ⏎ ').slice(0, 180)}`)
       break
-    case 'trim':
-      console.log(`  … context trimmed: dropped ${e.dropped} messages (≈${e.tokens} tokens)`)
+    case 'context.trim':
+      console.log(`  … context trimmed: dropped ${ev.dropped} messages (≈${ev.tokens} tokens)`)
+      break
+    case 'error':
+      console.log(`  ! ${ev.message}`)
       break
   }
-}
+})
 
 const harness = new Harness({
-  model: { baseUrl, apiKey, model },
+  provider: openaiProvider({ baseUrl, apiKey }),
+  model,
   cwd,
   allowBash,
   maxSteps,
   maxContextTokens,
-  onEvent,
+  hub,
 })
 
 if (!quiet) {
