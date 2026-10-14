@@ -3,3 +3,5 @@ node_modules/
 traces/
 *.log
 .DS_Store
+
+.auto-run.log
