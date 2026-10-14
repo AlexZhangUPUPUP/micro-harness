@@ -1,0 +1,219 @@
+# ROADMAP
+
+> **micro-harness**：一个完整的、插件化的开源 coding-agent harness 平台——自己的 agent loop、多 agent 编排、Server + CLI + GUI，支持 MCP / ACP。
+>
+> 本文是长期规划。设计细节见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+> 执行纪律见本文末尾"自主执行协议"。
+
+---
+
+## 北极星
+
+**一个能长期自己跑、能指挥一群 agent 干活、能接入任意模型与工具、能看得见每一步的开源 harness。**
+
+三条不可妥协：
+1. **loop 是自己的**（不是编排别人的 harness）。
+2. **多 agent 是一等公民**（不是事后补的外挂）。
+3. **一切可观测**（事件 → trace → replay）。
+
+---
+
+## 原则
+
+- 内核小而稳，能力全外挂（"一切皆插件"）。
+- 事件是唯一契约；前端只消费事件。
+- 共享"能力"，隔离"状态"。
+- 每个里程碑都要有**可自动验证的验收标准**（测试/命令），否则不算完成。
+- 小步提交：一个可工作的增量 = 一次 commit + push。
+
+---
+
+## 阶段总览
+
+| 阶段 | 名称 | 关键交付 | 状态 |
+|---|---|---|---|
+| **P0** | 基座 | monorepo + Bun 工具链 + CI | ☐ |
+| **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ☐ |
+| **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ☐ |
+| **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ☐ |
+| **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ☐ |
+| **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ☐ |
+| **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ☐ |
+| **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ☐ |
+| **P8** | 互操作 | MCP client + ACP server | ☐ |
+| **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ☐ |
+| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ☐ |
+
+**第一晚目标：P0 → P1 → P2 → P3（最小可用多 agent）。**
+
+---
+
+## P0 · 基座
+
+**目标**：把现有最小实现重组成 monorepo，工具链换成 Bun，CI 绿。
+
+**交付**
+- [ ] monorepo：`packages/kernel` `packages/core` `packages/providers` `packages/server` `packages/cli` `packages/gui`（后三个先占位）
+- [ ] 现有 `src/*` 迁进 `packages/core/src/*`，`test/*` 跟着迁
+- [ ] Bun 工具链：`bun test`、`bun run typecheck`（tsc）、workspace 脚本
+- [ ] `tsconfig` 项目引用 / paths
+- [ ] CI：`bun install && bun test && bun run typecheck`
+- [ ] `main` 保持"最小 harness"可运行；平台开发在 `platform` 分支
+
+**验收**
+```bash
+bun install && bun test          # 7/7 通过
+bun run typecheck                # 0 错误
+bun packages/cli/src/cli.ts "hi" # 仍能跑（mock provider 或真模型）
+```
+
+---
+
+## P1 · 内核（自研，~500 行）
+
+**目标**：实现 ARCHITECTURE 第 3 节的 Context/DI/生命周期/作用域/事件。
+
+**交付**
+- [ ] `createContext()`：`provide/get/inject/on/emit/effect/fork/isolate`
+- [ ] 插件契约：`{ name, inject?, Config?, apply(ctx, config) }`
+- [ ] 生命周期状态机：`registered→loading→active`，`waiting`（缺依赖）、`failed`（隔离）
+- [ ] **依赖就绪才激活**；服务出现/消失触发**重绑定**
+- [ ] **销毁反序 + 异步 dispose 必须 await**
+- [ ] 作用域：`fork()`（复制 context）、`isolate(name, value)`（本作用域覆盖）
+- [ ] 事件总线（类型安全）
+- [ ] Config schema 校验（zod 薄封装）+ 错误定位到插件行
+- [ ] 错误隔离：单插件 `failed` 不崩整棵树
+
+**验收（必须有测试）**
+- [ ] 依赖 B 的 A 在 B 注册后才 `active`
+- [ ] B 注销 → A 回滚/重新 `waiting`
+- [ ] `provide` 同名 → 报错
+- [ ] 销毁顺序 = 激活反序；异步 dispose 被 await
+- [ ] 一个插件抛错 → 其他插件正常，诊断里标记 `failed`
+- [ ] `fork()` 后修改子 context 的服务不影响父
+- [ ] `isolate()` 的值不外泄
+
+---
+
+## P2 · core（事件化 loop）
+
+**目标**：把最小 loop 升级为"事件驱动 + Provider 抽象 + 工具审批"。
+
+**交付**
+- [ ] **AgentEvent**（含 `agentId` / `parentId`）—— 唯一契约
+- [ ] loop 只发事件，不直接输出
+- [ ] `Provider` 接口 + `openai-compatible` 适配器（DeepSeek 可用）
+- [ ] 工具注册表 + **JSON Schema** + **审批级别**（readonly / confirm / auto）+ 路径沙箱
+- [ ] **流式**文本 + **并行工具调用**
+- [ ] 会话 **JSONL** 追加写（事实来源）
+- [ ] 取消（AbortSignal）+ 步数上限
+
+**验收**
+- [ ] `bun test` 覆盖：事件序列、工具错误回灌、并行工具调用、审批拒绝
+- [ ] 真机跑通：写文件 → 读回 → 正确作答
+- [ ] 生成的 JSONL 可被 replay 出同一事件序列
+
+---
+
+## P3 · 多 agent ⭐（必做，提前）
+
+**目标**：`agents` 服务 + `task` 工具，进程内 fork 隔离，最小可用。
+
+**交付**
+- [ ] `agents` 服务：角色注册表 `{name, model?, systemPrompt?, tools?, maxSteps?, isolation?}`
+- [ ] `task` 工具：**single / parallel / chain / race**
+- [ ] 子 agent 用 `ctx.fork()`：**全新 messages**、继承 providers/store
+- [ ] **上下文防火墙**：父只收子 agent 的**摘要/结果**（不回注 transcript）
+- [ ] 限制：`maxDepth`、并发信号量、每子 agent **独立预算**（tokens/cost）、超时
+- [ ] 事件带 `agentId`/`parentId` → 可重建 agent 树
+- [ ] CLI 打印 agent 树 + 每个 agent 的成本
+- [ ] 角色定义以**配置文件/插件**加载（如 `agents/*.md`）
+
+**验收**
+- [ ] orchestrator 一次委派 2 个子 agent（parallel），各自返回结果
+- [ ] 子 agent 上下文与父**不串**（断言 messages 不泄漏）
+- [ ] 超过 maxDepth 被拒；并发被信号量限制
+- [ ] 每个子 agent 的成本单独可见
+- [ ] chain 模式 `{previous}` 正确传递
+- [ ] race 模式返回全部结果并标出"胜者"（按成本/时长）
+
+**不做（留给 P7）**：并行改文件的 worktree 隔离与合并。
+
+---
+
+## P4 · Server
+
+- [ ] `Bun.serve`：HTTP + **SSE** 事件流
+- [ ] 会话 API：list / get / create / resume / fork / delete
+- [ ] SQLite 索引（`bun:sqlite`）：会话元数据 + **FTS5** 全文 + 用量/运行历史（可删可重建）
+- [ ] 鉴权 token（非 loopback 必填）
+- [ ] 验收：`curl` 能起会话、流式收事件、全文搜索命中
+
+## P5 · CLI
+
+- [ ] TUI（ink 或自绘）：流式渲染、工具卡片、审批交互
+- [ ] 斜杠命令、prompt 模板、技能
+- [ ] **多 agent 树视图** + 每个 agent 的成本/状态
+- [ ] 权限模式（suggest / auto-edit / full-auto）
+- [ ] 验收：终端里完成一次多 agent 任务
+
+## P6 · GUI
+
+- [ ] 迁移 PiStudio React → `packages/gui`，对接新 server
+- [ ] trace / inspector / replay
+- [ ] diff 审阅 + 多 agent 面板
+- [ ] 验收：GUI 能对话、看 trace、看多 agent 树
+
+## P7 · 隔离与合并
+
+- [ ] git worktree：每个 agent 一个工作区（改文件时自动启用）
+- [ ] 差异预览 + **合并队列**（自动合干净的 + 冲突汇总）
+- [ ] 端口自 PiStudio 已验证的实现
+- [ ] 验收：2 个 agent 并行改不同文件 → 一键合并；改同一文件 → 冲突面板
+
+## P8 · 互操作
+
+- [ ] **MCP client**：接入 stdio / streamable-http，工具自动注册
+- [ ] **ACP server**：Zed / DSH 等可驱动我们
+- [ ] 验收：接入一个真实 MCP server；Zed 里能对话
+
+## P9 · 上下文与经济性
+
+- [ ] 压缩策略插件：`window` / `summarize` / `structured-state`
+- [ ] **缓存前缀保全**（稳定前缀 + 检查点式压缩）
+- [ ] 成本/缓存命中计量 + 预算熔断
+- [ ] 验收：长会话不爆窗口；报告 cache 命中率
+
+## P10 · 评测与发布
+
+- [ ] `evals/`：任务集 + runner + 报告
+- [ ] `bun build --compile` 出单文件二进制（macOS/Linux）
+- [ ] npm/bun 发布 + 文档站
+- [ ] 验收：`micro-harness` 一条命令装好、跑通评测
+
+---
+
+## 自主执行协议
+
+在无人值守的长跑中，每个增量必须满足：
+
+1. **先写测试，或至少写可运行的验收命令**；不通过不算完成。
+2. **小步提交**：`feat|fix|test|docs(scope): ...`，一次 commit 只做一件事。
+3. **提交前必过**：`bun run typecheck && bun test`。
+4. **只前进不破坏**：`main` 保持可用；平台工作在 `platform` 分支。
+5. **阻塞就记档**：遇到外部阻塞（缺密钥、缺网络、平台限制），写进 `NOTES.md` 并跳到下一个任务，不空转。
+6. **进度可查**：本文件勾选框 + `PROGRESS.md` 追加日志（时间、做了什么、验证结果）。
+7. **不碰密钥**：不从 `~/.pi/agent/auth.json` 复制密钥进代码/仓库；测试用环境变量。
+8. **不做危险操作**：不 `push --force`、不删远端分支、不改用户全局配置。
+
+---
+
+## 风险
+
+| 风险 | 缓解 |
+|---|---|
+| 内核生命周期边界情况多 | P1 用测试把边界钉死 |
+| 多 agent 上下文/成本爆炸 | 防火墙 + 深度/并发/预算限制 |
+| 并行改文件冲突 | 只读优先，改文件走 P7 worktree |
+| 范围蔓延 | 严格按阶段验收，不通过不进下一阶段 |
+| 长跑中断 | 每步 commit + push；PROGRESS.md 可续跑 |
