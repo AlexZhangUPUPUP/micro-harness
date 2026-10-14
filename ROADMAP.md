@@ -155,6 +155,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [ ] 斜杠命令、prompt 模板、技能
 - [ ] **多 agent 树视图** + 每个 agent 的成本/状态
 - [ ] 权限模式（suggest / auto-edit / full-auto）
+- [ ] **无人值守驱动**：`micro-harness run --auto`（任务队列 + 循环 + 预算/超时护栏），对标 `scripts/auto-run.sh`
 - [ ] 验收：终端里完成一次多 agent 任务
 
 ## P6 · GUI
