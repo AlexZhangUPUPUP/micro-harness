@@ -107,6 +107,7 @@ export class Harness {
 
     for (let step = 1; step <= this.#maxSteps; step++) {
       this.log.emit({ type: 'turn.start', turn: step })
+      let streamedText = false
 
       const { messages, dropped } = trimMessages(this.messages, this.#maxContextTokens)
       if (dropped > 0) {
@@ -124,6 +125,14 @@ export class Harness {
         messages: this.messages,
         tools: toolDefs(this.#tools),
         signal,
+        onDelta: (delta) => {
+          if (delta.type === 'text') {
+            streamedText = true
+            this.log.emit({ type: 'text.delta', text: delta.text })
+          } else {
+            this.log.emit({ type: 'thinking.delta', text: delta.text })
+          }
+        },
       })
       this.messages.push(message)
       if (usage) {
@@ -136,7 +145,7 @@ export class Harness {
           cost: this.#pricing ? (input / 1e6) * this.#pricing.input + (output / 1e6) * this.#pricing.output : undefined,
         })
       }
-      if (message.content) this.log.emit({ type: 'text.delta', text: String(message.content) })
+      if (message.content && !streamedText) this.log.emit({ type: 'text.delta', text: String(message.content) })
 
       const calls = message.tool_calls ?? []
       if (calls.length === 0) {
