@@ -100,18 +100,19 @@ bun packages/core/src/cli.ts "hi" # 能跑
 **目标**：把最小 loop 升级为"事件驱动 + Provider 抽象 + 工具审批"。
 
 **交付**
-- [ ] **AgentEvent**（含 `agentId` / `parentId`）—— 唯一契约
-- [ ] loop 只发事件，不直接输出
-- [ ] `Provider` 接口 + `openai-compatible` 适配器（DeepSeek 可用）
-- [ ] 工具注册表 + **JSON Schema** + **审批级别**（readonly / confirm / auto）+ 路径沙箱
-- [ ] **流式**文本 + **并行工具调用**
+- [x] **AgentEvent**（含 `agentId` / `parentId`）—— 唯一契约（`events.ts` + `EventHub`/`AgentLog`）
+- [x] loop 只发事件，不直接输出
+- [x] `Provider` 接口 + `openai-compatible` 适配器（DeepSeek 可用）
+- [~] 工具注册表 + JSON Schema + 路径沙箱（已有）；**审批级别（readonly/confirm/auto）待做**
+- [ ] **流式**文本（待做）；[x] **并行工具调用**
 - [ ] 会话 **JSONL** 追加写（事实来源）
-- [ ] 取消（AbortSignal）+ 步数上限
+- [x] 取消（AbortSignal 已接入）+ **步数上限**
 
 **验收**
-- [ ] `bun test` 覆盖：事件序列、工具错误回灌、并行工具调用、审批拒绝
-- [ ] 真机跑通：写文件 → 读回 → 正确作答
-- [ ] 生成的 JSONL 可被 replay 出同一事件序列
+- [x] `bun test` 覆盖：事件序列、工具错误回灌、并行工具调用、agent 标记、maxSteps
+- [ ] 审批拒绝（待做）
+- [ ] 真机跑通：写文件 → 读回 → 正确作答（现有 CLI 已能）
+- [ ] 生成的 JSONL 可被 replay 出同一事件序列（待做）
 
 ---
 
