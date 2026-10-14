@@ -36,7 +36,7 @@
 | **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ✅ |
 | **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ✅ |
 | **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ✅ |
-| **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ☐ |
+| **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ✅ |
 | **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ☐ |
 | **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ☐ |
 | **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ☐ |
@@ -144,11 +144,11 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P4 · Server
 
-- [ ] `Bun.serve`：HTTP + **SSE** 事件流
-- [ ] 会话 API：list / get / create / resume / fork / delete
+- [x] `Bun.serve`：HTTP + **SSE** 事件流
+- [x] 会话 API：list / get / create / resume / fork / delete
 - [x] SQLite 索引（`bun:sqlite`）：会话元数据 + **FTS5** 全文 + 用量/运行历史（可删可重建）
-- [ ] 鉴权 token（非 loopback 必填）
-- [ ] 验收：`curl` 能起会话、流式收事件、全文搜索命中
+- [x] 鉴权 token（非 loopback 必填）
+- [x] 验收：`curl` 能起会话、流式收事件、全文搜索命中
 
 ## P5 · CLI
 

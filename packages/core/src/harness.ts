@@ -55,6 +55,11 @@ const DEFAULT_SYSTEM = `You are a careful coding agent working inside the direct
 Use the provided tools to inspect and modify files; prefer reading a file before writing it.
 Work autonomously — do not ask for confirmation. When the task is complete, reply with a short summary of what you did.`
 
+/** Resolve the default system prompt for a working directory. */
+export function defaultSystemPrompt(cwd: string): string {
+  return DEFAULT_SYSTEM.replace('{{cwd}}', cwd)
+}
+
 export class Harness {
   readonly messages: ChatMessage[]
   readonly hub: EventHub
@@ -89,7 +94,7 @@ export class Harness {
     this.hub = opts.hub ?? new EventHub()
     this.log = new AgentLog(this.hub, opts.agentId ?? 'main', opts.parentId ?? null)
 
-    const system = (opts.systemPrompt ?? DEFAULT_SYSTEM).replace('{{cwd}}', opts.cwd)
+    const system = opts.systemPrompt ?? defaultSystemPrompt(opts.cwd)
     this.messages = [{ role: 'system', content: system }]
     this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd, parentId: opts.parentId ?? null })
   }
