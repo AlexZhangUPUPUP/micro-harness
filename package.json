@@ -1,0 +1,23 @@
+{
+  "name": "micro-harness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A minimal, dependency-free agent harness: the agent loop, tool dispatch and context windowing, in a few hundred lines of TypeScript.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "micro-harness": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "node src/cli.ts",
+    "test": "node --test 'test/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
