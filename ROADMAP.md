@@ -35,7 +35,7 @@
 | **P0** | 基座 | monorepo + Bun 工具链 + CI | ✅ |
 | **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ✅ |
 | **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ✅ |
-| **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ☐ |
+| **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ✅ |
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ☐ |
 | **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ☐ |
 | **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ☐ |
@@ -121,22 +121,22 @@ bun packages/core/src/cli.ts "hi" # 能跑
 **目标**：`agents` 服务 + `task` 工具，进程内 fork 隔离，最小可用。
 
 **交付**
-- [ ] `agents` 服务：角色注册表 `{name, model?, systemPrompt?, tools?, maxSteps?, isolation?}`
-- [ ] `task` 工具：**single / parallel / chain / race**
-- [ ] 子 agent 用 `ctx.fork()`：**全新 messages**、继承 providers/store
-- [ ] **上下文防火墙**：父只收子 agent 的**摘要/结果**（不回注 transcript）
-- [ ] 限制：`maxDepth`、并发信号量、每子 agent **独立预算**（tokens/cost）、超时
-- [ ] 事件带 `agentId`/`parentId` → 可重建 agent 树
-- [ ] CLI 打印 agent 树 + 每个 agent 的成本
-- [ ] 角色定义以**配置文件/插件**加载（如 `agents/*.md`）
+- [x] `agents` 服务：角色注册表 `{name, model?, systemPrompt?, tools?, maxSteps?, isolation?}`
+- [x] `task` 工具：**single / parallel / chain / race**
+- [x] 子 agent 用 `ctx.fork()`：**全新 messages**、继承 providers/store
+- [x] **上下文防火墙**：父只收子 agent 的**摘要/结果**（不回注 transcript）
+- [x] 限制：`maxDepth`、并发信号量、每子 agent **独立预算**（tokens/cost）、超时
+- [x] 事件带 `agentId`/`parentId` → 可重建 agent 树
+- [x] CLI 打印 agent 树 + 每个 agent 的成本
+- [x] 角色定义以**配置文件/插件**加载（如 `agents/*.md`）
 
 **验收**
-- [ ] orchestrator 一次委派 2 个子 agent（parallel），各自返回结果
-- [ ] 子 agent 上下文与父**不串**（断言 messages 不泄漏）
-- [ ] 超过 maxDepth 被拒；并发被信号量限制
-- [ ] 每个子 agent 的成本单独可见
-- [ ] chain 模式 `{previous}` 正确传递
-- [ ] race 模式返回全部结果并标出"胜者"（按成本/时长）
+- [x] orchestrator 一次委派 2 个子 agent（parallel），各自返回结果
+- [x] 子 agent 上下文与父**不串**（断言 messages 不泄漏）
+- [x] 超过 maxDepth 被拒；并发被信号量限制
+- [x] 每个子 agent 的成本单独可见
+- [x] chain 模式 `{previous}` 正确传递
+- [x] race 模式返回全部结果并标出"胜者"（按成本/时长）
 
 **不做（留给 P7）**：并行改文件的 worktree 隔离与合并。
 
