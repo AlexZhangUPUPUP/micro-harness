@@ -31,6 +31,7 @@ import { Renderer } from './tui.ts'
 import { expandTemplate, loadPromptTemplates, loadSkills, skillsToPrompt, type PromptTemplate, type Skill } from './commands.ts'
 import { parseTaskFile, runAuto } from './autorun.ts'
 import { connectMcpServers, loadMcpServers, mcpInfos, mcpTools, type McpConnection } from './mcp.ts'
+import { runAcpServer } from './acp.ts'
 
 // ------------------------------------------------------------------- argv
 
@@ -38,7 +39,7 @@ const VALUE_FLAGS = new Set([
   'dir', 'model', 'max-steps', 'max-context', 'base-url', 'approval', 'max-depth', 'max-concurrency',
   'agent-timeout', 'agent-max-tokens', 'agent-max-cost', 'price-input', 'price-output', 'price-input-cached',
   'max-tool-output', 'session',
-  'tasks', 'max-iterations', 'max-cost', 'max-tokens', 'timeout', 'role', 'system',
+  'tasks', 'max-iterations', 'max-cost', 'max-tokens', 'timeout', 'role', 'system', 'compact',
 ])
 
 const argv = process.argv.slice(2)
@@ -65,7 +66,7 @@ function opt(name: string, fallback?: string): string | undefined {
   return fallback
 }
 
-const sub = positionals[0] === 'run' ? 'run' : 'chat'
+const sub: 'run' | 'chat' | 'acp' = positionals[0] === 'run' ? 'run' : positionals[0] === 'acp' ? 'acp' : 'chat'
 const args = sub === 'run' ? positionals.slice(1) : positionals
 
 const quiet = flag('quiet')
@@ -87,6 +88,10 @@ const pricing = {
   inputCached: Number(opt('price-input-cached', process.env.MICRO_PRICE_INPUT_CACHED || '0')) || 0,
 }
 const maxToolOutput = Number(opt('max-tool-output', process.env.MICRO_MAX_TOOL_OUTPUT || '0')) || undefined
+const compact = (opt('compact', process.env.MICRO_COMPACT || 'drop-middle') === 'summarize' ? 'summarize' : 'drop-middle') as
+  | 'drop-middle'
+  | 'summarize'
+const maxCost = Number(opt('max-cost', process.env.MICRO_MAX_COST || '0')) || undefined
 
 if (!apiKey) {
   console.error('missing API key: set MICRO_API_KEY (or OPENAI_API_KEY)')
@@ -207,6 +212,23 @@ function reportWorktrees(): void {
   for (const [id, w] of wts) console.error(`  ${id} → ${w.branch}`)
 }
 
+// ACP mode: an editor drives us over stdio. Nothing else in the CLI runs.
+if (sub === 'acp') {
+  await runAcpServer({
+    provider,
+    model,
+    cwd,
+    allowBash,
+    approval,
+    maxSteps,
+    pricing,
+    tools: allTools,
+    systemPrompt,
+    version: '0.1.0',
+  })
+  process.exit(0)
+}
+
 const harness = new Harness({
   provider,
   model,
@@ -218,6 +240,8 @@ const harness = new Harness({
   hub,
   pricing,
   maxToolOutput,
+  compact,
+  maxCost,
   approval,
   confirm,
   tools: [...allTools, makeTaskTool(runner)],

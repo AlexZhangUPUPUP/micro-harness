@@ -54,6 +54,12 @@ export function truncateToolOutput(text: string, max: number = DEFAULT_TOOL_OUTP
   return { text: text.slice(0, head) + marker + (tail ? text.slice(text.length - tail) : ''), elided }
 }
 
+/** A model-backed compaction strategy: turn the dropped middle into a short recap. */
+export type Summarizer = (dropped: ChatMessage[]) => Promise<string>
+
+/** Prefix every recap message with this so callers and models can tell it apart. */
+export const COMPACT_RECAP_PREFIX = '[earlier context, compacted]'
+
 export interface CompactOptions {
   maxTokens: number
   /**
@@ -69,7 +75,9 @@ export interface TrimResult {
   dropped: number
   /** Estimated tokens after compaction. */
   tokens: number
-  strategy: 'none' | 'keep-head+tail' | 'tail'
+  strategy: 'none' | 'keep-head+tail' | 'tail' | 'summarize'
+  /** How many messages were folded into a recap message (summarize strategy only). */
+  summarized?: number
 }
 
 /** Group messages into units: each user message starts a new one. */
@@ -82,12 +90,18 @@ function groupUnits(messages: ChatMessage[]): ChatMessage[][] {
   return units
 }
 
-/** Trim a conversation to a token budget, dropping the middle when possible. */
-export function compactMessages(messages: ChatMessage[], options: CompactOptions): TrimResult {
-  const { maxTokens } = options
-  const estimated = estimateTokens(messages)
-  if (estimated <= maxTokens) return { messages, dropped: 0, tokens: estimated, strategy: 'none' }
+interface CompactPlan {
+  system: ChatMessage[]
+  head: ChatMessage[]
+  tail: ChatMessage[]
+  /** Messages removed from the middle (the part a summarizer would fold). */
+  dropped: ChatMessage[]
+  strategy: 'none' | 'keep-head+tail' | 'tail'
+}
 
+/** Compute the deterministic drop-middle plan without mutating anything. */
+function compactPlan(messages: ChatMessage[], options: CompactOptions): CompactPlan {
+  const { maxTokens } = options
   const system = messages.filter((m) => m.role === 'system')
   const rest = messages.filter((m) => m.role !== 'system')
   const units = groupUnits(rest)
@@ -107,13 +121,68 @@ export function compactMessages(messages: ChatMessage[], options: CompactOptions
     }
   }
 
-  const flat = [...head, ...kept.flat()]
-  const compacted = [...system, ...flat]
+  const tail = kept.flat()
+  const dropped = tailUnits.slice(0, tailUnits.length - kept.length).flat()
+  return { system, head, tail, dropped, strategy: headCount ? 'keep-head+tail' : 'tail' }
+}
+
+/** Trim a conversation to a token budget, dropping the middle when possible. */
+export function compactMessages(messages: ChatMessage[], options: CompactOptions): TrimResult {
+  const { maxTokens } = options
+  const estimated = estimateTokens(messages)
+  if (estimated <= maxTokens) return { messages, dropped: 0, tokens: estimated, strategy: 'none' }
+
+  const plan = compactPlan(messages, options)
+  const flat = [...plan.head, ...plan.tail]
+  const compacted = [...plan.system, ...flat]
   return {
     messages: compacted,
-    dropped: rest.length - flat.length,
+    dropped: plan.dropped.length,
     tokens: estimateTokens(compacted),
-    strategy: headCount ? 'keep-head+tail' : 'tail',
+    strategy: plan.strategy,
+  }
+}
+
+/** Make sure a recap carries the standard prefix without doubling it. */
+function ensureRecapPrefix(text: string): string {
+  return text.startsWith(COMPACT_RECAP_PREFIX) ? text : `${COMPACT_RECAP_PREFIX}\n${text}`
+}
+
+/**
+ * Async strategy seam. Computes the deterministic drop-middle plan; when a
+ * `summarizer` is provided and something would be dropped, fold the dropped
+ * messages into a single recap message instead. Falls back to the deterministic
+ * result if the summarizer throws.
+ */
+export async function compactMessagesAsync(
+  messages: ChatMessage[],
+  options: CompactOptions & { summarizer?: Summarizer },
+): Promise<TrimResult> {
+  const base = compactMessages(messages, options)
+  const { summarizer } = options
+
+  // Nothing to drop, or no model to summarise with: identical to the sync path.
+  if (!summarizer || base.dropped === 0) return base
+
+  const plan = compactPlan(messages, options)
+  if (plan.dropped.length === 0) return base
+
+  let recap: string
+  try {
+    recap = await summarizer(plan.dropped)
+  } catch {
+    return base
+  }
+
+  const recapMessage: ChatMessage = { role: 'user', content: ensureRecapPrefix(recap) }
+  const compacted = [...plan.system, ...plan.head, recapMessage, ...plan.tail]
+  return {
+    messages: compacted,
+    // The recap is one kept message, so it does not count as dropped.
+    dropped: plan.dropped.length - 1,
+    tokens: estimateTokens(compacted),
+    strategy: 'summarize',
+    summarized: plan.dropped.length,
   }
 }
 
