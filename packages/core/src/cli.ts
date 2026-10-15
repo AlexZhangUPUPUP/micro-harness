@@ -95,6 +95,49 @@ const compact = (compactArg === 'summarize' || compactArg === 'tail' ? compactAr
   | 'summarize'
 const maxCost = Number(opt('max-cost', process.env.MICRO_MAX_COST || '0')) || undefined
 
+const VERSION = '0.1.0'
+
+const USAGE = `micro-harness ${VERSION} — a coding-agent harness (own loop · multi-agent · server · GUI · MCP/ACP)
+
+Usage:
+  micro-harness [options] "one-shot prompt"
+  micro-harness                      interactive REPL (/help for commands)
+  micro-harness run "task" …          queued run
+  micro-harness run --auto --tasks f  unattended driver (budget/timeout)
+  micro-harness acp                    ACP server over stdio (editor-driven)
+
+Options:
+  --model <id>            model id (env MICRO_MODEL, default deepseek-chat)
+  --base-url <url>        OpenAI-compatible base URL (env MICRO_BASE_URL)
+  --dir <path>            working directory (default: cwd)
+  --approval <mode>       suggest | auto-edit | full-auto (default full-auto)
+  --allow-bash            enable the bash tool
+  --max-steps <n>         model loop step budget (default 24)
+  --max-context <n>       context token budget (default 24000)
+  --max-tool-output <n>   truncate tool output to n tokens
+  --compact <mode>        drop-middle | tail | summarize (default drop-middle)
+  --max-cost <usd>        stop when cost exceeds this
+  --isolate               run sub-agents in git worktrees
+  --trace                 write event traces to ./traces
+  --thinking              show model thinking
+  --quiet                 suppress banner/progress
+  --yes                   auto-approve approval prompts
+  --system <text>         override the system prompt
+  -h, --help              show this help
+  -v, --version           show the version
+
+Env:
+  MICRO_API_KEY / OPENAI_API_KEY   required to run (not for --help/--version)`
+
+if (argv.includes('-h') || argv.includes('--help')) {
+  console.log(USAGE)
+  process.exit(0)
+}
+if (argv.includes('-v') || argv.includes('--version')) {
+  console.log(VERSION)
+  process.exit(0)
+}
+
 if (!apiKey) {
   console.error('missing API key: set MICRO_API_KEY (or OPENAI_API_KEY)')
   process.exit(1)
@@ -226,7 +269,7 @@ if (sub === 'acp') {
     pricing,
     tools: allTools,
     systemPrompt,
-    version: '0.1.0',
+    version: VERSION,
   })
   process.exit(0)
 }
