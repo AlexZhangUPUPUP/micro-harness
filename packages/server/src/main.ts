@@ -47,6 +47,10 @@ if (!apiKey) console.error('warning: MICRO_API_KEY is not set — model calls wi
 const agentsDir = process.env.MICRO_AGENTS_DIR
 const roles = agentsDir ? loadAgentRoles(path.resolve(agentsDir)) : []
 
+// Working directory for the agent's tools and MCP config. dev.sh/microh pass the
+// folder you launched from, so `cd somewhere && microh` works there.
+const cwd = process.env.MICRO_CWD ? path.resolve(process.env.MICRO_CWD) : process.cwd()
+
 // Single-process mode: when the GUI is built, serve it from this same server so
 // `bun packages/server/src/main.ts` (or `bun run ui`) is the whole app. Set
 // MICRO_SERVE_GUI=0 for an API-only deployment, MICRO_GUI_DIR to point elsewhere.
@@ -63,9 +67,9 @@ const guiDir: string | false =
 // MCP: read the config once at boot, connect, merge the tools. Nothing below this
 // line knows MCP exists — they are just more `Tool`s. A failing server is reported
 // and skipped instead of taking the server down.
-const mcpConfig = loadMcpServers(process.cwd())
+const mcpConfig = loadMcpServers(cwd)
 const mcpConns: McpConnection[] = mcpConfig.servers.length
-  ? await connectMcpServers(mcpConfig.servers, { cwd: process.cwd() })
+  ? await connectMcpServers(mcpConfig.servers, { cwd })
   : []
 const mcpServers = mcpInfos(mcpConns)
 if (mcpServers.length) {
@@ -88,7 +92,7 @@ const server = createServer({
   mcpServers,
   model,
   models,
-  cwd: process.cwd(),
+  cwd,
   hostname,
   port,
   token,
@@ -111,8 +115,20 @@ console.log(`micro-harness server · ${server.url} · data ${dataDir}${guiDir ? 
 
 const shutdown = (): void => {
   console.log('\nshutting down…')
-  server.stop(true)
-  void Promise.all(mcpConns.map((c) => c.close())).finally(() => process.exit(0))
+  // Hard exit. `Bun.serve().stop(true)` can block on live SSE streams (the GUI
+  // keeps one open), and a hanging MCP close would keep us alive too; neither is
+  // worth stalling a dev launcher over. The OS reclaims the socket on exit.
+  process.exit(0)
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
+
+// When launched by dev.sh/microh, die with it — so closing the terminal (or the
+// launcher dying for any reason) doesn't leave an orphaned server behind.
+// Reparenting to launchd (pid 1) changes process.ppid, which we poll for.
+if (process.env.MICRO_EXIT_WITH_PARENT === '1') {
+  const parentPid = process.ppid
+  setInterval(() => {
+    if (process.ppid !== parentPid) process.exit(0)
+  }, 1000)
+}

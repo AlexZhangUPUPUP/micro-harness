@@ -142,6 +142,8 @@ bun run dev                      # 两进程（server + Vite preview）→ http:
 
 两者都会自动开浏览器（`scripts/dev.sh --no-open` 可关）；`MICRO_ISOLATE=1` 让每个子 agent 各用一个 git worktree。
 
+在**任意目录**都能启动：agent 就在你启动的那个目录里干活，端口自动挑一个空的（多个终端可各跑一个），**关掉终端就全部结束**。`microh` 是从任意位置做同样的事（由 `scripts/install.sh` 安装）。
+
 <details>
 <summary>全部 CLI 参数与环境变量</summary>
 

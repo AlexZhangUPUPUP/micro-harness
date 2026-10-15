@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
-# One-command dev stack: micro-harness server + the React GUI.
+# Run the micro-harness stack in this terminal, for the folder you launch from.
 #
-#   scripts/dev.sh                     # http://127.0.0.1:5273
-#   MICRO_MODEL=deepseek-reasoner scripts/dev.sh
-#   MICRO_MODELS=deepseek-chat,deepseek-reasoner scripts/dev.sh   # GUI model picker
-#   MICRO_PRICE_INPUT=0.27 MICRO_PRICE_INPUT_CACHED=0.027 MICRO_PRICE_OUTPUT=1.10 scripts/dev.sh
-#   MICRO_PORT=8787 MICRO_GUI_PORT=5273 scripts/dev.sh
+#   microh                       # one process (server + GUI), free port, opens a browser
+#   scripts/dev.sh               # two processes (server + Vite preview), for development
+#   scripts/dev.sh --no-open     # don't open a browser
+#   scripts/dev.sh --restart     # stop whatever holds the base port first
+#   MICRO_MODEL=… MICRO_ISOLATE=1 scripts/dev.sh
 #
-# API key resolution order: MICRO_API_KEY → DEEPSEEK_API_KEY → OPENAI_API_KEY →
-# ~/.pi/agent/auth.json (deepseek.key). Ctrl-C stops everything.
+# The agent works in the directory you launch from (override with MICRO_CWD).
+# Several folders/terminals can each run their own instance — a free port is
+# picked automatically (pin one with MICRO_PORT). Closing this terminal, or
+# Ctrl-C, stops everything.
+#
+# API key resolution: MICRO_API_KEY → DEEPSEEK_API_KEY → OPENAI_API_KEY →
+# ~/.pi/agent/auth.json (deepseek.key).
 set -euo pipefail
+
+CALLER_PWD="$PWD"
 cd "$(dirname "$0")/.."
 
-# --single : serve the built GUI from the server (one process, one port)
-# --no-open: do not open a browser
+# --single   : serve the built GUI from the server (one process, one port)
+# --no-open  : do not open a browser
+# --restart  : stop whatever holds the base port, then start
 SINGLE=0
 OPEN=1
 RESTART=0
@@ -28,11 +36,38 @@ done
 
 SERVER_PORT="${MICRO_PORT:-8787}"
 GUI_PORT="${MICRO_GUI_PORT:-5273}"
-[ "$SINGLE" = 1 ] && GUI_PORT="$SERVER_PORT"
 MODEL="${MICRO_MODEL:-deepseek-chat}"
 ISOLATE="${MICRO_ISOLATE:-0}"
 MODELS="${MICRO_MODELS:-}"
 DATA_DIR="${MICRO_DATA_DIR:-$HOME/.micro-harness}"
+CWD="${MICRO_CWD:-$CALLER_PWD}"
+
+free_port() { # $1 = first candidate
+  local p="$1" n=0
+  while [ "$n" -lt 200 ]; do
+    lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || { echo "$p"; return; }
+    p=$((p + 1)); n=$((n + 1))
+  done
+  echo "$1"
+}
+
+if [ "$RESTART" = 1 ]; then
+  oldpid="$(lsof -ti tcp:"$SERVER_PORT" 2>/dev/null | head -1)"
+  if [ -n "$oldpid" ]; then
+    echo "• --restart: stopping pid $oldpid on port $SERVER_PORT" >&2
+    kill "$oldpid" 2>/dev/null || true
+    sleep 1
+  fi
+fi
+
+# A fresh instance per launch, so any folder can have its own. Pin with MICRO_PORT.
+SERVER_PORT="$(free_port "$SERVER_PORT")"
+if [ "$SINGLE" = 1 ]; then
+  GUI_PORT="$SERVER_PORT"
+else
+  GUI_PORT="$(free_port "$GUI_PORT")"
+  [ "$GUI_PORT" = "$SERVER_PORT" ] && GUI_PORT="$(free_port $((GUI_PORT + 1)))"
+fi
 
 AUTH_KEY=""
 if [ -f "$HOME/.pi/agent/auth.json" ]; then
@@ -61,53 +96,27 @@ if [ ! -f packages/gui/dist/index.html ]; then
   (cd packages/gui && bun run build >/dev/null)
 fi
 
+LOG_DIR="${TMPDIR:-/tmp}"
 SRV=""; GUI=""
 cleanup() {
   [ -n "$GUI" ] && kill "$GUI" 2>/dev/null || true
   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM
+# HUP: closing the terminal stops everything. INT/TERM: Ctrl-C / kill.
+trap cleanup EXIT INT TERM HUP
 
-# If something already serves on this port, don't silently connect to it (the
-# classic "why is my GUI the old one" trap) and don't just fail: with --restart
-# stop it, otherwise open the running GUI and exit.
-if curl -sf "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1; then
-  if [ "$RESTART" = 1 ]; then
-    echo "• --restart: stopping the server on port $SERVER_PORT…" >&2
-    oldpid="$(lsof -ti tcp:"$SERVER_PORT" 2>/dev/null | head -1)"
-    [ -n "$oldpid" ] && kill "$oldpid" 2>/dev/null || true
-    sleep 1
-  else
-    ctype="$(curl -s -o /dev/null -w '%{content_type}' "http://127.0.0.1:$SERVER_PORT/" 2>/dev/null || true)"
-    if printf '%s' "$ctype" | grep -qi 'text/html'; then
-      echo "• micro-harness is already running — http://127.0.0.1:$SERVER_PORT/" >&2
-      if [ "$OPEN" = 1 ]; then
-        if command -v open >/dev/null 2>&1; then
-          open "http://127.0.0.1:$SERVER_PORT/" >/dev/null 2>&1 || true
-        elif command -v xdg-open >/dev/null 2>&1; then
-          xdg-open "http://127.0.0.1:$SERVER_PORT/" >/dev/null 2>&1 || true
-        fi
-      fi
-      exit 0
-    fi
-    echo "✗ port $SERVER_PORT is held by a micro-harness server with no GUI (API-only or an older build)." >&2
-    echo "  restart it:  $0 --restart --single" >&2
-    exit 1
-  fi
-fi
-
-MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" \
+MICRO_PORT="$SERVER_PORT" MICRO_CWD="$CWD" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" MICRO_EXIT_WITH_PARENT=1 \
 MICRO_PRICE_INPUT="${MICRO_PRICE_INPUT:-}" MICRO_PRICE_OUTPUT="${MICRO_PRICE_OUTPUT:-}" \
 MICRO_PRICE_INPUT_CACHED="${MICRO_PRICE_INPUT_CACHED:-}" MICRO_MAX_TOOL_OUTPUT="${MICRO_MAX_TOOL_OUTPUT:-}" \
-  bun packages/server/src/main.ts >/tmp/micro-harness-server.log 2>&1 &
+  bun packages/server/src/main.ts >"$LOG_DIR/micro-harness-server.log" 2>&1 &
 SRV=$!
 
-# If the port was taken by a non-HTTP service, Bun.serve throws and our process
-# dies. `kill -0` succeeds for an unreaped zombie, so check the process state too.
+# If the port was somehow taken, Bun.serve throws and our process dies. `kill -0`
+# succeeds for an unreaped zombie, so check the process state too.
 sleep 0.5
 if ! kill -0 "$SRV" 2>/dev/null || [ "$(ps -o state= -p "$SRV" 2>/dev/null | tr -d ' ')" = "Z" ]; then
   echo "✗ server did not start on port $SERVER_PORT." >&2
-  [ -f /tmp/micro-harness-server.log ] && sed 's/^/  | /' /tmp/micro-harness-server.log >&2 || true
+  [ -f "$LOG_DIR/micro-harness-server.log" ] && sed 's/^/  | /' "$LOG_DIR/micro-harness-server.log" >&2 || true
   exit 1
 fi
 
@@ -117,7 +126,7 @@ for _ in $(seq 1 60); do
 done
 
 if [ "$SINGLE" = 0 ]; then
-  (cd packages/gui && MICRO_SERVER="http://127.0.0.1:$SERVER_PORT" MICRO_GUI_PORT="$GUI_PORT" bun run preview >/tmp/micro-harness-gui.log 2>&1) &
+  (cd packages/gui && MICRO_SERVER="http://127.0.0.1:$SERVER_PORT" MICRO_GUI_PORT="$GUI_PORT" bun run preview >"$LOG_DIR/micro-harness-gui.log" 2>&1) &
   GUI=$!
 
   # wait for the GUI to answer
@@ -129,17 +138,18 @@ fi
 
 cat <<EOF
 
-  micro-harness is running$([ "$SINGLE" = 1 ] && echo ' (single process)')
+  micro-harness is running in this terminal$([ "$SINGLE" = 1 ] && echo ' (single process)')
 
     GUI     http://127.0.0.1:$GUI_PORT      ← open this
     API     http://127.0.0.1:$SERVER_PORT
+    cwd     $CWD
     model   $MODEL
     key     ${KEY:0:11}… (from $KEY_SRC)
     isolation $([ "$ISOLATE" = 1 ] && echo 'worktree (each agent gets its own git worktree)' || echo 'off (set MICRO_ISOLATE=1 to enable)')
     data    $DATA_DIR
-    logs    /tmp/micro-harness-{server,gui}.log
+    logs    $LOG_DIR/micro-harness-{server,gui}.log
 
-  Type a task in the GUI and press Enter. Ctrl-C stops everything.
+  Type a task in the GUI and press Enter. Ctrl-C, or closing this terminal, stops everything.
 
 EOF
 
