@@ -20,7 +20,7 @@
 
 ## 原则
 
-- 内核小而稳，能力全外挂（"一切皆插件"）。
+- 能力走**编译期接缝**，不走运行时容器（"要接缝，不要容器"）。
 - 事件是唯一契约；前端只消费事件。
 - 共享"能力"，隔离"状态"。
 - 每个里程碑都要有**可自动验证的验收标准**（测试/命令），否则不算完成。
@@ -42,7 +42,7 @@
 | **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ✅ |
 | **P8** | 互操作 | MCP client + ACP server | ✅ |
 | **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ✅ |
-| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ◐ evals + 二进制 ✅；发布未做 |
+| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ◐ 基本完成：evals + 二进制 ✅；剩文档站（npm 发布已决定跳过） |
 
 **第一晚目标：P0 → P1 → P2 → P3（最小可用多 agent）。**
 
@@ -118,7 +118,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] loop 只发事件，不直接输出
 - [x] `Provider` 接口 + `openai-compatible` 适配器（DeepSeek 可用）
 - [x] 工具注册表 + JSON Schema + 路径沙箱 + **审批级别**（suggest/auto-edit/full-auto）
-- [x] **流式** text/thinking delta（P2 延后，P5 完成）；[x] **并行工具调用**
+- [x] **流式** text/thinking delta（原计划 P2，P5 交付）；[x] **并行工具调用**
 - [x] 会话 **JSONL** 追加写 + **replay**
 - [x] 取消（AbortSignal）+ 步数上限
 - [x] core 挂到内核插件（提供 `tools` / `providers` 服务）
