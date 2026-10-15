@@ -36,6 +36,7 @@ Feature lists make every harness look the same. These five questions separate de
 | **History** | Prefix-preserving compaction (drop the *middle*), replay from any event slice | Append-only session event log | Summarize-based compaction (`/compact`), session **tree** (`/tree`, `/fork`, `/clone`) | Four-layer memory, five-level compaction | Repository as source of truth |
 | **Isolation** | Git worktree per sub-agent | Sandbox providers (Local FS / E2B / Remote) behind a seam | Via extensions (SSH, sandboxes) | Sub-agent isolation | Worktree isolation |
 | **Applying results** | **Hunk-level accept/reject**; a drifted hunk is reported, never mis-applied | — | `git` | `git` | `git` |
+| **Being integrated** | **ACP server** — an editor drives the harness (`micro-harness acp`); approvals route to the editor's UI, and its filesystem is used as a `FileSystem` provider | — | Extension territory (pi runs inside an editor as a CLI) | Native (it *is* the editor's agent) | IDE integration |
 | **Multi-agent** | **First-class**: `single`/`parallel`/`chain`/`race`, context firewall, depth/concurrency/token/cost limits | A plugin | **Deliberately absent** — "ships with powerful defaults but skips features like sub agents"; you add them in an extension | Sub-agents | — |
 | **Cost & cache accounting** | Cache reads normalized across providers, priced at the cached rate, surfaced as a hit rate | Telemetry seam | — | Usage display | — |
 
@@ -175,7 +176,7 @@ We would rather write down what we are unsure about than imply we are not.
 | Question | What would settle it |
 |---|---|
 | Do compile-time seams satisfy a real third party who wants to add a capability without forking? | ~~The MCP round.~~ **Answered: yes, for our case.** MCP landed as read-config-at-boot: `connectMcpServers()` in `main.ts`, tools merged into the existing array, **zero changes** to the loop, the tool registry, the event contract or the GUI. Verified against the official reference server (13 tools discovered, the model called `everything__get-sum` and answered `42`). A container is only needed if servers must hot-plug into a running process and withdraw their tools on disconnect — which is now the documented trigger rather than a guess. |
-| Is "drop the middle deterministically" better than "summarize the old turns"? | An eval suite. Ours is testable and cache-friendly; summarization may preserve more meaning at the cost of a model call and a non-deterministic transcript. We cannot claim a winner without measuring. |
+| Is "drop the middle deterministically" better than "summarize the old turns"? | **Now a flag, not a bet:** `--compact=drop-middle` (default) vs `--compact=summarize`. The eval suite (`bun run eval`) exists to measure it; we still have no numbers that favour either. |
 | Does a frozen seed keep its value as the platform grows? | Can a newcomer still read `seed-v1` in one sitting *and* recognise the platform in it? If those drift apart, the tag becomes archaeology. |
 | Is hunk-level review worth the surface area versus "just review the diff in git"? | Usage. It is the feature we are least sure is worth its weight. |
 

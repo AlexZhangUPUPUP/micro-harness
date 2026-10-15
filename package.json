@@ -5,13 +5,17 @@
   "type": "module",
   "description": "A complete, plugin-based coding-agent harness: own agent loop, multi-agent orchestration, server + CLI + GUI, MCP/ACP.",
   "license": "MIT",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "start": "bun packages/core/src/cli.ts",
     "test": "bun test",
     "verify": "bun scripts/verify-features.ts",
     "typecheck": "tsc --noEmit",
-    "build:bin": "bun build --compile --outfile dist/micro-harness packages/core/src/cli.ts"
+    "build:bin": "bun build --compile --outfile dist/micro-harness packages/core/src/cli.ts",
+    "eval": "bun scripts/evals/run.ts",
+    "eval:mock": "bun scripts/evals/run.ts --mock"
   },
   "engines": {
     "bun": ">=1.1"

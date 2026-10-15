@@ -21,3 +21,7 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 
 - 2026-10-16 · P8（部分）· **MCP client**：stdio + streamable HTTP（手写 JSON-RPC，不引 SDK）、`mcp.json` 启动时读取、`<server>__<tool>` 命名空间、`GET /api/mcp`、CLI 与 server 双端接线 · `bun test` 120/120；已对官方参考 server 端到端验证（13 工具 → 模型调用 `everything__get-sum` → 42），循环/注册表/事件/GUI 零改动
 
+- 2026-10-16 · P8（完）· **ACP server**：协议 v1（JSON-RPC/NDJSON）；入 initialize/session/new/session/prompt/session/cancel，出 session/update（文本/工具/用量）+ session/request_permission + fs/*；`micro-harness acp`。审批接到编辑器 UI；客户端声明 fs 时文件系统换成 editor-backed provider · `bun test` 136/136；真机：真 CLI 子进程 + 真模型，单回合 101 条 update，文件落盘 "hello from acp"
+- 2026-10-16 · P9（完）· 压缩策略接缝（`compactMessagesAsync` + `makeSummarizer`，失败退回丢弃）+ 预算熔断（`--max-cost`）+ `--compact=summarize` · 新增 6 个测试
+- 2026-10-16 · P10（部分）· **评测套件** `scripts/evals/`：8 个任务、确定性判分、mock 模式（CI 无网络）、逐任务 token/成本/缓存/耗时、Markdown+JSON 报告；系统提示词取自 pi（仅改名字，保证可比） · mock 16/16；真模型 exact-file + read-and-write 均 pass（$0.0009, cache 3712）
+
