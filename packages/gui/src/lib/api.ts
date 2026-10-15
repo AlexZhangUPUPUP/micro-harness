@@ -125,6 +125,16 @@ export const api = {
       `/api/sessions/${id}/agents/${encodeURIComponent(agentId)}/promote`,
       { method: 'POST' },
     ),
+  /**
+   * Apply only the selected hunks of an agent's diff (indices from
+   * `splitDiffHunks`) to the shared workspace. Reuses the integrate/apply path, so
+   * backups and conflict reporting come for free.
+   */
+  applyHunks: (id: string, agentId: string, hunks: number[]) =>
+    j<{ applied: string[]; conflicted: number[]; backup?: string }>(
+      `/api/sessions/${id}/agents/${encodeURIComponent(agentId)}/apply`,
+      { method: 'POST', body: JSON.stringify({ hunks }) },
+    ),
   integrate: (id: string) => j<{ base?: string; files: IntegrateFile[] }>(`/api/sessions/${id}/integrate`),
   integrateApply: (id: string, files: Array<{ path: string; content?: string; delete?: boolean; takeTheirs?: boolean; agentId?: string }>) =>
     j<{ applied: string[]; backup?: string }>(`/api/sessions/${id}/integrate`, {

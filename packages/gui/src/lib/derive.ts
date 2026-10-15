@@ -308,7 +308,8 @@ export function annotateDiff(text: string): DiffLine[] {
               : 'ctx'
     if (kind === 'add') out.push({ kind, new: newNo++, text: line.slice(1) })
     else if (kind === 'del') out.push({ kind, old: oldNo++, text: line.slice(1) })
-    else if (kind === 'ctx') out.push({ kind, old: oldNo++, new: newNo++, text: line })
+    // strip the leading marker space too, so every DiffLine.text is pure content
+    else if (kind === 'ctx') out.push({ kind, old: oldNo++, new: newNo++, text: line.slice(1) })
     else out.push({ kind, text: line })
   }
   return out
@@ -337,4 +338,43 @@ export function toMarkdown(items: ChatItem[], meta: { title?: string; id?: strin
     }
   }
   return lines.join('\n')
+}
+
+export interface DiffHunk {
+  /** Global index across the diff — the same numbering `applyHunkSelection` uses. */
+  index: number
+  header: string
+  file: string
+  /** This hunk's lines, with the original +/-/space markers restored. */
+  text: string
+  lines: DiffLine[]
+}
+
+const SIGN: Record<string, string> = { add: '+', del: '-', ctx: ' ' }
+
+/**
+ * Split a unified diff into individually-selectable hunks. Hunks are numbered by
+ * the order `@@` appears, which is exactly how the server numbers them.
+ */
+export function splitDiffHunks(diff: string): DiffHunk[] {
+  const out: DiffHunk[] = []
+  let file = ''
+  let current: DiffHunk | null = null
+  for (const line of annotateDiff(diff)) {
+    if (line.kind === 'meta' && line.text.startsWith('+++ ')) {
+      const target = line.text.slice(4).trim()
+      if (target !== '/dev/null') file = target.replace(/^\w\//, '')
+      continue
+    }
+    if (line.kind === 'hunk') {
+      current = { index: out.length, header: line.text, file, text: line.text, lines: [] }
+      out.push(current)
+      continue
+    }
+    if (!current) continue
+    if (line.kind === 'file' || line.kind === 'meta') continue
+    current.lines.push(line)
+    current.text += '\n' + (SIGN[line.kind] ?? ' ') + line.text
+  }
+  return out
 }

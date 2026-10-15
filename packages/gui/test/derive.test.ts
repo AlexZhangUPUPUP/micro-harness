@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, toMarkdown, truncate } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, splitDiffHunks, toMarkdown, truncate } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -165,4 +165,32 @@ test('toMarkdown serializes a transcript', () => {
   expect(md).toContain('### tool · `read_file`')
   expect(md).toContain('```ts\nx\n```') // assistant markdown passes through verbatim
   expect(md).toContain('deepseek-chat')
+})
+
+test('splitDiffHunks numbers hunks globally and restores markers', () => {
+  const diff = [
+    'diff --git a/a.txt b/a.txt',
+    'index 1..2 100644',
+    '--- a/a.txt',
+    '+++ b/a.txt',
+    '@@ -1,3 +1,3 @@',
+    ' keep',
+    '-old',
+    '+new',
+    '@@ -20,2 +20,3 @@',
+    ' tail',
+    '+extra',
+  ].join('\n')
+  const hunks = splitDiffHunks(diff)
+  expect(hunks.map((h) => h.index)).toEqual([0, 1])
+  expect(hunks.every((h) => h.file === 'a.txt')).toBe(true)
+  expect(hunks[0]!.text.split('\n')).toEqual(['@@ -1,3 +1,3 @@', ' keep', '-old', '+new'])
+  expect(hunks[1]!.text.split('\n')).toEqual(['@@ -20,2 +20,3 @@', ' tail', '+extra'])
+})
+
+test('splitDiffHunks handles several files', () => {
+  const diff = ['+++ b/one.txt', '@@ -1 +1 @@', '-a', '+b', '+++ b/two.txt', '@@ -5 +5 @@', '-c', '+d'].join('\n')
+  const hunks = splitDiffHunks(diff)
+  expect(hunks.map((h) => h.file)).toEqual(['one.txt', 'two.txt'])
+  expect(hunks.map((h) => h.index)).toEqual([0, 1])
 })

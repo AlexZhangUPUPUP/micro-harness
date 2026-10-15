@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type AgentWorktree, type AgentDiff, type IntegrateFile } from '../lib/api.ts'
 import { useT } from '../lib/i18n.tsx'
 import { DiffView } from './DiffView.tsx'
+import { splitDiffHunks } from '../lib/derive.ts'
 
 /** Worktree isolation: per-agent diffs, promote, and the merge queue. */
 export function ChangesPanel({ sessionId }: { sessionId: string }) {
@@ -9,8 +10,10 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
   const [agents, setAgents] = useState<AgentWorktree[]>([])
   const [diff, setDiff] = useState<AgentDiff | null>(null)
   const [plan, setPlan] = useState<IntegrateFile[] | null>(null)
-  const [msg, setMsg] = useState('')
+  const [msg, setMsg] = useState<ReactNode>('')
   const [busy, setBusy] = useState(false)
+  const [accepted, setAccepted] = useState<Set<number>>(new Set())
+  const [applying, setApplying] = useState(false)
 
   const reload = useCallback(() => {
     api
@@ -19,6 +22,49 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
       .catch(() => setAgents([]))
   }, [sessionId])
   useEffect(() => reload(), [reload])
+
+  const hunks = useMemo(() => (diff ? splitDiffHunks(diff.diff) : []), [diff])
+
+  // Reset to "all accepted" whenever a new diff loads.
+  useEffect(() => {
+    setAccepted(new Set(hunks.map((h) => h.index)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diff])
+
+  const toggleHunk = (index: number): void => {
+    setAccepted((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  const selectAllHunks = (): void => setAccepted(new Set(hunks.map((h) => h.index)))
+  const selectNoHunks = (): void => setAccepted(new Set())
+
+  const applySelected = async (): Promise<void> => {
+    if (!diff || accepted.size === 0 || applying) return
+    setApplying(true)
+    setMsg('')
+    try {
+      const res = await api.applyHunks(sessionId, diff.agentId, [...accepted].sort((a, b) => a - b))
+      setMsg(
+        <>
+          {t('changes.applied', { n: res.applied.length })}
+          {res.conflicted.length > 0 && (
+            <span className="text-destructive"> {t('changes.conflicted', { n: res.conflicted.length })}</span>
+          )}
+        </>,
+      )
+      // Re-run the preview load so the panel shows the diff after applying.
+      setDiff(await api.agentDiff(sessionId, diff.agentId))
+    } catch (err) {
+      setMsg(String((err as Error).message))
+    } finally {
+      setApplying(false)
+    }
+  }
 
   const showDiff = async (agentId: string): Promise<void> => {
     setMsg('')
@@ -145,7 +191,45 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
                 </div>
               ))}
             </div>
-            <DiffView text={diff.diff.slice(0, 100000)} className="max-h-72" />
+            <div className="flex items-center gap-2 border-b border-border/50 px-2.5 py-1.5 text-[11px]">
+              <span className="text-muted-foreground">
+                {hunks.length} {t('changes.hunks')}
+              </span>
+              <button onClick={selectAllHunks} className="rounded px-1 text-muted-foreground transition hover:text-foreground">
+                {t('changes.selectAll')}
+              </button>
+              <button onClick={selectNoHunks} className="rounded px-1 text-muted-foreground transition hover:text-foreground">
+                {t('changes.selectNone')}
+              </button>
+              <button
+                onClick={() => void applySelected()}
+                disabled={accepted.size === 0 || applying}
+                className="ml-auto rounded-md px-1.5 py-0.5 font-medium text-teal transition hover:bg-teal/10 disabled:opacity-40"
+              >
+                {t('changes.applySelected', { n: accepted.size })}
+              </button>
+            </div>
+            {hunks.map((h, i) => {
+              const showFile = i === 0 || h.file !== hunks[i - 1].file
+              return (
+                <div key={h.index} className={`border-b border-border/40 ${accepted.has(h.index) ? '' : 'opacity-50'}`}>
+                  <div className="flex items-center gap-2 px-2.5 py-1 font-mono text-[10px]">
+                    <input
+                      type="checkbox"
+                      checked={accepted.has(h.index)}
+                      onChange={() => toggleHunk(h.index)}
+                      className="h-3 w-3 shrink-0 accent-teal"
+                      aria-label={`${h.file} ${h.header}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground" title={showFile ? h.file : undefined}>
+                      {showFile ? h.file : ''}
+                    </span>
+                    <span className="shrink-0 text-gold/90">{h.header}</span>
+                  </div>
+                  <DiffView text={h.text.slice(h.text.indexOf('\n') + 1)} />
+                </div>
+              )
+            })}
           </div>
         )}
         {plan && (
