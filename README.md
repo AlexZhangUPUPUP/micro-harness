@@ -98,11 +98,16 @@ the conversation from a slice of the event stream.
 ![GUI](docs/gui.png)
 
 ```bash
-# terminal 1 — the server
-MICRO_API_KEY=… bun packages/server/src/main.ts
-# terminal 2 — the GUI (proxies /api to the server)
-cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev
+# one command — starts the server and the GUI, and picks up an API key
+scripts/dev.sh                 # → http://127.0.0.1:5273
+
+# or run the two halves yourself:
+MICRO_API_KEY=… bun packages/server/src/main.ts          # terminal 1
+cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev   # terminal 2
 ```
+
+The server reads `MICRO_MODEL` (use the provider's real model id, e.g.
+`deepseek-chat`), `MICRO_BASE_URL`, `MICRO_API_KEY` and `MICRO_DATA_DIR`.
 
 Everything the GUI renders is derived from the event stream by pure functions in
 `packages/gui/src/lib/derive.ts` (unit-tested).
