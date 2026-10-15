@@ -194,11 +194,13 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P8 · 互操作
 
+- [x] **MCP client**：stdio + streamable HTTP 两种传输（不引官方 SDK）；`mcp.json` 启动时读取；工具按 `<server>__<tool>` 命名空间合并进注册表；`GET /api/mcp` 报告状态。已对官方参考 server 端到端验证（13 工具 → 模型调用 → 42）
+- [ ] ACP server（让编辑器驱动）
+- [x] 关键结论：MCP 用"启动时读配置"就够了，**不需要容器**——见 docs/design-comparison.zh-CN.md
 - [ ] **MCP client**：接入 stdio / streamable-http，工具自动注册
 - [ ] **ACP server**：Zed / DSH 等可驱动我们
 - [ ] 验收：接入一个真实 MCP server；Zed 里能对话
-
-## P9 · 上下文与经济性
+ · 上下文与经济性
 
 - [x] **缓存前缀保全**：工具输出在*写入时*截断（前缀不再被事后重写）+ 压缩保留头部而非砍头——实测真 DeepSeek 命中 69–78%
 - [x] **成本/缓存命中计量**：DeepSeek/OpenAI/Anthropic 三种方言归一化成 `usage.cacheRead`，按缓存折扣计价，GUI 显示命中率

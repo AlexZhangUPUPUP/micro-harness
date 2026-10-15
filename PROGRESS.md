@@ -19,3 +19,5 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-16 · 架构 · **删除自研插件内核（P1 回退）** + 文件系统变成能力接缝（`FileSystem` 接口 → `localFs` provider；worktree 子 agent 变成一次 provider 替换）· `bun test` 112/112、typecheck 干净；新测试证明真工具可跑在内存文件系统上
 - 2026-10-16 · 文档 · 新增中英双语 `docs/design-comparison.{md,zh-CN.md}`：与 DeepSeek Harness / pi / Claude Code / Codex 的五轴对比、抄了什么、拒绝了什么、以及我们的不确定项
 
+- 2026-10-16 · P8（部分）· **MCP client**：stdio + streamable HTTP（手写 JSON-RPC，不引 SDK）、`mcp.json` 启动时读取、`<server>__<tool>` 命名空间、`GET /api/mcp`、CLI 与 server 双端接线 · `bun test` 120/120；已对官方参考 server 端到端验证（13 工具 → 模型调用 `everything__get-sum` → 42），循环/注册表/事件/GUI 零改动
+

@@ -11,7 +11,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-112_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-120_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -29,6 +29,7 @@
 - [🚀 快速开始](#-快速开始)
 - [🧩 架构](#-架构)
 - [🤖 多 agent](#-多-agent)
+- [🔌 MCP](#-mcp)
 - [🖥 GUI](#-gui)
 - [📐 设计原则](#-设计原则)
 - [📁 仓库结构](#-仓库结构)
@@ -229,6 +230,35 @@ flowchart LR
 
 ---
 
+## 🔌 MCP
+
+MCP server 是**启动时从配置读进来**的，工具合并进注册表。整个集成就这么多：没有容器、
+没有生命周期管理器，循环、事件契约、GUI 都不知道 MCP 的存在——一个 MCP 工具就只是一个
+`Tool`。
+
+```json
+// .micro-harness/mcp.json（也可以是 .mcp.json、~/.micro-harness/mcp.json 或 $MICRO_MCP_CONFIG）
+{
+  "mcpServers": {
+    "everything": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] },
+    "remote":     { "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer …" } }
+  }
+}
+```
+
+两种传输都没有引官方 SDK：**stdio**（拉起子进程，换行分隔的 JSON-RPC）与 **streamable
+HTTP**（JSON 或一次性 SSE 回复）；工具按 `<server>__<tool>` 加命名空间，两个 server 可以
+同时暴露 `search`。`GET /api/mcp` 报告连上了什么；启动失败的 server 会被报告并跳过，而
+不是把整个会话拖垮。
+
+已对着官方参考 server 做过端到端验证：发现 13 个工具，模型连同内置 5 个一起拿到它们，
+调用了 `everything__get-sum {a:17,b:25}`，并回答 `42`。
+
+**它刻意不做的事：** 把 server 热插拔进运行中的进程，或者掉线时撤回它的工具。如果哪天这
+成了需求，那正是我们写下的"把插件容器请回来"的触发条件——见[对比文档](docs/design-comparison.zh-CN.md)。
+
+---
+
 ## 🖥 GUI
 
 | 区域 | 它能做什么 |
@@ -304,7 +334,7 @@ micro-harness/
 
 ```bash
 bun install
-bun test              # 112 个测试，18 个文件
+bun test              # 120 个测试，19 个文件
 bun run typecheck     # tsc --noEmit，干净
 bun run verify        # 脚本化功能自检（不走网络）
 ```

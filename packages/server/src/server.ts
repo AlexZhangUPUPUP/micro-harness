@@ -7,6 +7,7 @@
  *   GET    /api/sessions                 list sessions
  *   POST   /api/sessions                 create + start a session  { prompt, model?, cwd? }
  *   GET    /api/models                   list model ids (default + optional list)
+ *   GET    /api/mcp                      connected MCP servers + their tools
  *   GET    /api/sessions/:id             session header + recorded events
  *   PATCH  /api/sessions/:id             rename a session          { title }
  *   DELETE /api/sessions/:id             delete a session
@@ -39,6 +40,7 @@ import {
   type Provider,
   type TaggedEvent,
   type Tool,
+  type McpServerInfo,
 } from '@micro-harness/core'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
@@ -52,6 +54,8 @@ export interface ServerOptions {
   model: string
   /** Model ids advertised by GET /api/models; defaults to [model]. */
   models?: string[]
+  /** Connected MCP servers, for reporting (the tools themselves arrive in `tools`). */
+  mcpServers?: McpServerInfo[]
   /** Working directory for the agent's tools. */
   cwd: string
   tools?: Tool[]
@@ -494,6 +498,12 @@ export function createServer(options: ServerOptions): HarnessServer {
       if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
       const models = options.models && options.models.length ? options.models : [model]
       return json({ models, default: model })
+    }
+
+    // /api/mcp
+    if (parts[0] === 'api' && parts[1] === 'mcp') {
+      if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
+      return json({ servers: options.mcpServers ?? [] })
     }
 
     // /api/search?q=…
