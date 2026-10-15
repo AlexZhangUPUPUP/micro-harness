@@ -30,6 +30,41 @@ export interface SessionMeta {
   cost: number
 }
 
+export interface AgentWorktree {
+  agentId: string
+  path: string
+  branch: string
+  base: string
+}
+
+export interface AgentDiff {
+  agentId: string
+  worktree: AgentWorktree
+  files: Array<{ path: string; add: number; del: number; status: string }>
+  diff: string
+}
+
+export interface IntegrateBlock {
+  type: 'text' | 'conflict'
+  text?: string
+  ours?: string
+  base?: string
+  theirs?: string
+}
+
+export interface IntegrateFile {
+  path: string
+  status: string
+  clean: boolean
+  content?: string
+  blocks?: IntegrateBlock[]
+  agents: string[]
+  pending: string[]
+  binary?: boolean
+  skipped?: boolean
+  delete?: boolean
+}
+
 const TOKEN = new URLSearchParams(location.search).get('token') ?? localStorage.getItem('micro-token') ?? ''
 
 export function withToken(path: string): string {
@@ -58,6 +93,22 @@ export const api = {
   fork: (id: string) => j<{ session: SessionMeta }>(`/api/sessions/${id}/fork`, { method: 'POST' }).then((d) => d.session),
   remove: (id: string) => j<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
   search: (q: string) => j<{ hits: unknown[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+
+  // --- workspace isolation + merge queue (P7) ---
+  agents: (id: string) => j<{ agents: AgentWorktree[] }>(`/api/sessions/${id}/agents`).then((d) => d.agents),
+  agentDiff: (id: string, agentId: string) =>
+    j<AgentDiff>(`/api/sessions/${id}/agents/${encodeURIComponent(agentId)}/diff`),
+  promoteAgent: (id: string, agentId: string) =>
+    j<{ ok: boolean; applied: string[]; conflicts: string[]; error?: string }>(
+      `/api/sessions/${id}/agents/${encodeURIComponent(agentId)}/promote`,
+      { method: 'POST' },
+    ),
+  integrate: (id: string) => j<{ base?: string; files: IntegrateFile[] }>(`/api/sessions/${id}/integrate`),
+  integrateApply: (id: string, files: Array<{ path: string; content?: string; delete?: boolean; takeTheirs?: boolean; agentId?: string }>) =>
+    j<{ applied: string[]; backup?: string }>(`/api/sessions/${id}/integrate`, {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    }),
   /**
    * Subscribe to a session's event stream. Returns an unsubscribe function.
    *

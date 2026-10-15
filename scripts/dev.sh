@@ -13,6 +13,7 @@ cd "$(dirname "$0")/.."
 SERVER_PORT="${MICRO_PORT:-8787}"
 GUI_PORT="${MICRO_GUI_PORT:-5273}"
 MODEL="${MICRO_MODEL:-deepseek-chat}"
+ISOLATE="${MICRO_ISOLATE:-0}"
 DATA_DIR="${MICRO_DATA_DIR:-$HOME/.micro-harness}"
 
 KEY="${MICRO_API_KEY:-${DEEPSEEK_API_KEY:-${OPENAI_API_KEY:-}}}"
@@ -36,7 +37,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_API_KEY="$KEY" \
+MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" \
   bun packages/server/src/main.ts >/tmp/micro-harness-server.log 2>&1 &
 SRV=$!
 
@@ -61,6 +62,7 @@ cat <<EOF
     GUI     http://127.0.0.1:$GUI_PORT      ← open this
     API     http://127.0.0.1:$SERVER_PORT
     model   $MODEL
+    isolation $([ "$ISOLATE" = 1 ] && echo 'worktree (each agent gets its own git worktree)' || echo 'off (set MICRO_ISOLATE=1 to enable)')
     data    $DATA_DIR
     logs    /tmp/micro-harness-{server,gui}.log
 

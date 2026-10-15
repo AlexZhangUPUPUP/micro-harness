@@ -123,6 +123,8 @@ export interface AgentNode {
   depth: number
   children: AgentNode[]
   lastAt: number
+  /** Set when the agent ran in its own git worktree. */
+  worktree?: { path: string; branch: string; base: string } | null
 }
 
 export interface AgentTree {
@@ -169,6 +171,8 @@ export function deriveAgents(events: TaggedEvent[]): AgentTree {
       if (ev.ok === false) node.errors += 1
     } else if (ev.type === 'turn.end') {
       node.status = 'done'
+    } else if (ev.type === 'agent.worktree') {
+      node.worktree = { path: String(ev.path ?? ''), branch: String(ev.branch ?? ''), base: String(ev.base ?? '') }
     } else if (ev.type === 'error') {
       node.status = 'error'
       node.errors += 1
