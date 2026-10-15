@@ -136,18 +136,43 @@ category chips, a text filter and a replay scrubber:
 Everything the GUI renders is derived from the event stream by pure functions in
 `packages/gui/src/lib/derive.ts` (unit-tested).
 
-## Scope
+The details that make it feel like a real coding tool: live usage is a **rolling
+number next to an inline sparkline** of tokens per model call; the agent tree draws
+real connectors and shows a detail card on hover; the changes panel renders a
+**colored diff with an old/new line-number gutter**; sessions are grouped into
+**Today / Yesterday / Earlier** with hover-to-delete; the transcript only auto-follows
+while you are parked at the bottom (scroll up and it freezes, surfacing a "back to
+bottom" pill); and scrubbing the trace desaturates the whole view into **REPLAY** mode.
 
-This is deliberately a *minimal* harness — a teaching/reference implementation
-you can read end to end. It does not do streaming, parallel tool calls,
-sub-agents, permissions or checkpointing. Those live in the larger project it was
-extracted from, [PiStudio](https://github.com/AlexZhangUPUPUP/PiStudio), which is
-a multi-agent **orchestration and observability** layer built *on top of* a
-harness like this one.
+### Keyboard
+
+| key | action |
+|---|---|
+| `⌘K` / `Ctrl K` | command palette — app actions + full-text session search |
+| `⌘/` | keyboard cheat sheet |
+| `↑` `↓` | move through the sidebar or the palette |
+| `Enter` | send the prompt |
+| `⇧ Enter` | newline in the prompt |
+| `Esc` | close any dialog |
+
+The palette also exports the current session as Markdown and copies the raw trace as
+JSON. A desktop notification fires when a run finishes while the tab is hidden.
+
+## Two layers in one repo
+
+`main` is the **minimal seed**: everything under `src/` is a dependency-free harness
+you can read end to end — the loop, tool dispatch, context windowing and model I/O —
+run directly by Node ≥ 22.18.
+
+This **`platform`** branch grows that seed into a full **agent platform** under
+`packages/`: a plugin kernel, an event-driven core with streaming and parallel tool
+calls, first-class multi-agent orchestration, a server with SSE + a SQLite/FTS index,
+a CLI, and the web GUI above. The seed in `src/` is left intact as the readable
+reference — the platform was built on the same design rather than forking it.
 
 See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the design of the full harness
-platform this seed grows into — plugin kernel, composition, server, GUI, MCP/ACP —
-and **[ROADMAP.md](ROADMAP.md)** for the long-term plan.
+platform — plugin kernel, composition, server, GUI, MCP/ACP — and
+**[ROADMAP.md](ROADMAP.md)** for the long-term plan.
 
 ## License
 
