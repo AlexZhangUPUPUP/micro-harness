@@ -10,3 +10,6 @@ traces/
 
 # project-local MCP config
 .micro-harness/
+
+# compiled single-file binary (goes in releases, not in git)
+dist/
