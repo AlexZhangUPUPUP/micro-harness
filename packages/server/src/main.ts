@@ -27,7 +27,7 @@ import {
   openaiProvider,
   type McpConnection,
 } from '@micro-harness/core'
-import { createServer } from './server.ts'
+import { createServer, PERMISSIONS, type PermissionPreset } from './server.ts'
 import { SessionStore } from './store.ts'
 
 const port = Number(process.env.MICRO_PORT ?? 8787)
@@ -97,12 +97,12 @@ const server = createServer({
   port,
   token,
   guiDir,
+  permission:
+    process.env.MICRO_PERMISSION && process.env.MICRO_PERMISSION in PERMISSIONS
+      ? (process.env.MICRO_PERMISSION as PermissionPreset)
+      : undefined,
   roles,
-  allowBash: process.env.MICRO_ALLOW_BASH === '1',
   isolation: process.env.MICRO_ISOLATE === '1' ? 'worktree' : 'none',
-  approval: (['suggest', 'auto-edit', 'full-auto'].includes(process.env.MICRO_APPROVAL ?? '')
-    ? process.env.MICRO_APPROVAL
-    : 'full-auto') as 'suggest' | 'auto-edit' | 'full-auto',
   pricing: {
     input: Number(process.env.MICRO_PRICE_INPUT ?? 0),
     output: Number(process.env.MICRO_PRICE_OUTPUT ?? 0),

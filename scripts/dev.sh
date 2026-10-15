@@ -41,6 +41,10 @@ ISOLATE="${MICRO_ISOLATE:-0}"
 MODELS="${MICRO_MODELS:-}"
 DATA_DIR="${MICRO_DATA_DIR:-$HOME/.micro-harness}"
 CWD="${MICRO_CWD:-$CALLER_PWD}"
+# Permission preset for new sessions: read-only | workspace | full | auto-review.
+# `full` (shell + network) is the useful default for a coding agent; the GUI can
+# switch it per session, and the riskier presets require a confirmation there.
+PERMISSION="${MICRO_PERMISSION:-full}"
 
 free_port() { # $1 = first candidate
   local p="$1" n=0
@@ -105,7 +109,7 @@ cleanup() {
 # HUP: closing the terminal stops everything. INT/TERM: Ctrl-C / kill.
 trap cleanup EXIT INT TERM HUP
 
-MICRO_PORT="$SERVER_PORT" MICRO_CWD="$CWD" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" MICRO_EXIT_WITH_PARENT=1 \
+MICRO_PORT="$SERVER_PORT" MICRO_CWD="$CWD" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_PERMISSION="$PERMISSION" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" MICRO_EXIT_WITH_PARENT=1 \
 MICRO_PRICE_INPUT="${MICRO_PRICE_INPUT:-}" MICRO_PRICE_OUTPUT="${MICRO_PRICE_OUTPUT:-}" \
 MICRO_PRICE_INPUT_CACHED="${MICRO_PRICE_INPUT_CACHED:-}" MICRO_MAX_TOOL_OUTPUT="${MICRO_MAX_TOOL_OUTPUT:-}" \
   bun packages/server/src/main.ts >"$LOG_DIR/micro-harness-server.log" 2>&1 &
@@ -146,6 +150,7 @@ cat <<EOF
     model   $MODEL
     key     ${KEY:0:11}… (from $KEY_SRC)
     isolation $([ "$ISOLATE" = 1 ] && echo 'worktree (each agent gets its own git worktree)' || echo 'off (set MICRO_ISOLATE=1 to enable)')
+    permission $PERMISSION
     data    $DATA_DIR
     logs    $LOG_DIR/micro-harness-{server,gui}.log
 
