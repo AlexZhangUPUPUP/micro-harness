@@ -18,13 +18,26 @@ ISOLATE="${MICRO_ISOLATE:-0}"
 MODELS="${MICRO_MODELS:-}"
 DATA_DIR="${MICRO_DATA_DIR:-$HOME/.micro-harness}"
 
-KEY="${MICRO_API_KEY:-${DEEPSEEK_API_KEY:-${OPENAI_API_KEY:-}}}"
-if [ -z "$KEY" ] && [ -f "$HOME/.pi/agent/auth.json" ]; then
-  KEY="$(bun -e "try{console.log(require(process.env.HOME+'/.pi/agent/auth.json').deepseek?.key||'')}catch{console.log('')}" 2>/dev/null || true)"
+AUTH_KEY=""
+if [ -f "$HOME/.pi/agent/auth.json" ]; then
+  AUTH_KEY="$(bun -e "try{console.log(require(process.env.HOME+'/.pi/agent/auth.json').deepseek?.key||'')}catch{console.log('')}" 2>/dev/null || true)"
+fi
+
+KEY=""; KEY_SRC=""
+if [ -n "${MICRO_API_KEY:-}" ]; then KEY="$MICRO_API_KEY"; KEY_SRC="MICRO_API_KEY (env)"
+elif [ -n "${DEEPSEEK_API_KEY:-}" ]; then KEY="$DEEPSEEK_API_KEY"; KEY_SRC="DEEPSEEK_API_KEY (env)"
+elif [ -n "${OPENAI_API_KEY:-}" ]; then KEY="$OPENAI_API_KEY"; KEY_SRC="OPENAI_API_KEY (env)"
+elif [ -n "$AUTH_KEY" ]; then KEY="$AUTH_KEY"; KEY_SRC="~/.pi/agent/auth.json"
 fi
 if [ -z "$KEY" ]; then
   echo "no API key found — set MICRO_API_KEY (or DEEPSEEK_API_KEY), or add one to ~/.pi/agent/auth.json" >&2
   exit 1
+fi
+# An exported key silently shadowing a different one in auth.json is the classic
+# "why is my balance zero" trap: make it loud instead of debugging a 402 later.
+if [ -n "$AUTH_KEY" ] && [ "$KEY" != "$AUTH_KEY" ]; then
+  echo "warning: the key from $KEY_SRC (${KEY:0:11}…) differs from ~/.pi/agent/auth.json (${AUTH_KEY:0:11}…)." >&2
+  echo "         Using the former. If it is stale, run: env -u DEEPSEEK_API_KEY scripts/dev.sh" >&2
 fi
 
 if [ ! -f packages/gui/dist/index.html ]; then
@@ -64,6 +77,7 @@ cat <<EOF
     GUI     http://127.0.0.1:$GUI_PORT      ← open this
     API     http://127.0.0.1:$SERVER_PORT
     model   $MODEL
+    key     ${KEY:0:11}… (from $KEY_SRC)
     isolation $([ "$ISOLATE" = 1 ] && echo 'worktree (each agent gets its own git worktree)' || echo 'off (set MICRO_ISOLATE=1 to enable)')
     data    $DATA_DIR
     logs    /tmp/micro-harness-{server,gui}.log
