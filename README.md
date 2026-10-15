@@ -104,6 +104,11 @@ never overwrite each other:
 
 ![merge queue](docs/gui-changes.png)
 
+The UI is bilingual — **English / 简体中文** — switched in place with the `中 / EN`
+button (it follows the browser language on first visit):
+
+![GUI in Simplified Chinese](docs/gui-zh.png)
+
 ```bash
 # one command — starts the server and the GUI, and picks up an API key
 scripts/dev.sh                 # → http://127.0.0.1:5273

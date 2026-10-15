@@ -67,9 +67,14 @@ export function createAgentRegistry(roles: AgentRole[] = []): AgentRegistry {
   }
 }
 
-const DEFAULT_AGENT_PROMPT = `You are a focused sub-agent working inside the directory {{cwd}}.
-Complete the task you were given, using the available tools when needed. You cannot
-see the parent conversation, so restate anything important in your final answer.`
+const DEFAULT_AGENT_PROMPT = `You are a focused sub-agent. You only see the task below — not the parent
+conversation — so treat it as complete and self-contained.
+
+- Do the work yourself with the available tools; you cannot delegate further.
+- Don't ask questions: make the best decision and proceed.
+- Inspect before you change, and keep edits targeted.
+- Finish with a concise, self-contained answer: the result, plus any file paths you
+  changed. The parent sees only this message, so include what matters.`
 
 /** The always-available fallback role. */
 export const DEFAULT_ROLE: AgentRole = {
