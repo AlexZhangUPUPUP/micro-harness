@@ -75,9 +75,37 @@ Plus a tiny `src/trace.ts` (JSONL transcripts) and `src/cli.ts` (one-shot + REPL
 ## Tests
 
 ```bash
-node --test test/          # no install needed
-npm run typecheck          # optional: npm install first (typescript, @types/node)
+bun install
+bun test          # unit suite: kernel, core, server, gui derivation
+bun run verify    # P3/P4/P5 feature checks (scripted provider, no network)
+bun run typecheck
 ```
+
+## Packages
+
+- `packages/kernel` — plugin kernel: services/DI, lifecycle, scopes, events
+- `packages/core` — agent loop, tools, context, providers, multi-agent, sessions, CLI
+- `packages/server` — HTTP + SSE + SQLite/FTS index
+- `packages/gui` — React web UI
+
+## GUI
+
+A React 19 + Vite + Tailwind front end (design tokens shared with PiStudio): a
+session list, a streaming transcript with tool cards, a **multi-agent tree** with
+per-agent tokens/cost, and a **trace panel with a replay scrubber** that rebuilds
+the conversation from a slice of the event stream.
+
+![GUI](docs/gui.png)
+
+```bash
+# terminal 1 — the server
+MICRO_API_KEY=… bun packages/server/src/main.ts
+# terminal 2 — the GUI (proxies /api to the server)
+cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev
+```
+
+Everything the GUI renders is derived from the event stream by pure functions in
+`packages/gui/src/lib/derive.ts` (unit-tested).
 
 ## Scope
 
