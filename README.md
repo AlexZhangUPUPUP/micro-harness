@@ -1,55 +1,142 @@
-# micro-harness
+<h1 align="center">micro-harness</h1>
 
-**A plugin-based coding-agent platform** — its own agent loop, multi-agent
-orchestration, server, CLI and web GUI — grown from a minimal, readable harness.
+<p align="center">
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/EN-English-blue?style=flat-square"></a>
+  <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/ZH-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
+</p>
 
-**English** · [简体中文](README.zh-CN.md)
+<p align="center"><strong>A plugin-based coding-agent platform — its own agent loop, multi-agent orchestration, an HTTP/SSE server, a CLI and a web GUI.</strong></p>
 
-> **Where is the minimal seed?** The original seed — six files under `src/`, no
-dependencies, no build step, run directly by Node ≥ 22.18 — is frozen at the
-[`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag. Read
-that one end to end to understand how an agent harness works; this branch is the
-platform built on the same design. The platform's P0 moved the seed into
-`packages/core`, which is why there is no `src/` here.
+<p align="center">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
+  <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="tests" src="https://img.shields.io/badge/tests-111_passing-brightgreen?style=flat-square">
+  <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
+  <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
+  <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
+</p>
 
-> An **agent harness** is the runtime that wraps an LLM and turns it into an
-> agent: it runs the loop, executes tools, manages the context window and talks to
-> the model.
+> 🌱 The original **minimal seed** — six files, zero dependencies, no build step, run directly by Node ≥ 22.18 — is frozen at the [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag. Read that one end to end to understand the core; this branch is the platform grown from it.
 
+---
+
+## 📑 Table of Contents
+
+- [✨ What is this](#-what-is-this)
+- [📸 Preview](#-preview)
+- [🚀 Quick start](#-quick-start)
+- [🧩 How it is built](#-how-it-is-built)
+- [🤖 Multi-agent](#-multi-agent)
+- [🖥 The GUI](#-the-gui)
+- [📐 Design principles](#-design-principles)
+- [📁 Repository layout](#-repository-layout)
+- [🗺 Roadmap](#-roadmap)
+- [🧪 Development](#-development)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+
+---
+
+## ✨ What is this
+
+An **agent harness** is the runtime that turns an LLM into an agent: it runs the loop, executes tools, manages the context window and talks to the model. Most of the behaviour people attribute to "the model" actually lives here.
+
+This repository is one, grown into a platform — and it stays readable while doing it:
+
+```mermaid
+flowchart LR
+  U(["user prompt"]) --> L{{"agent loop"}}
+  L --> M["model.chat()"]
+  M -- "tool_calls" --> T["tool dispatch"]
+  T -- "results appended" --> L
+  M -- "final text" --> A(["answer"])
+  L -. "context budget full" .-> C["context.trim()"]
+  C --> L
+  M -. "every payload recorded" .-> I["Inspector"]
 ```
-        ┌──────────────────────────────────────────────────────┐
-        │                      harness                         │
-        │                                                      │
- user ──┼──▶ messages ──▶ model.chat() ──▶ tool_calls? ──┐     │
-        │                     ▲                          │     │
-        │                     │                          ▼     │
-        │              append tool result ◀── tool dispatch ───┼──▶ read_file / write_file / list_dir / bash
-        │                     │                                │
-        │              context.trim() when the window fills    │
-        └──────────────────────────────────────────────────────┘
-```
 
-## Run it
+| | |
+|---|---|
+| **Events are the single contract** | The loop emits one tagged event stream. The session log, the server's SSE, the CLI, the trace panel, replay, the agent tree and the Inspector are all just consumers — no side channels. |
+| **Everything is a plugin** | A self-built, ~500-line kernel: `provide`/`get`/`inject`, lifecycle `waiting → active → failed`, scopes, `fork()`/`isolate()`. Deliberately Cordis-shaped so a migration stays possible. |
+| **Multi-agent is first-class** | A `task` tool with `single`/`parallel`/`chain`/`race` modes, real context isolation, and depth/concurrency/token/cost limits. Not bolted on. |
+| **Isolation with a review step** | Each sub-agent gets its own git worktree, so parallel agents can't overwrite each other — and you apply the result **hunk by hunk**. |
+| **Observable by default** | Rolling token/cost, an agent tree, a replay scrubber, and an Inspector that shows the exact payload sent to the model. |
+
+---
+
+## 📸 Preview
+
+### 💬 Chat — streaming, Markdown, live usage
+
+> Assistant messages render as Markdown with syntax-highlighted code and a copy button. Live usage rolls up next to a sparkline, sessions are grouped by day, and `⌘K` opens a command palette that also full-text searches every saved session.
+
+![Chat](docs/gui.png)
+
+![Command palette](docs/gui-palette.png)
+
+### 🌏 Bilingual
+
+> English and 简体中文, switched in place with the `中 / EN` button (it follows the browser language on first visit).
+
+![Simplified Chinese](docs/gui-zh.png)
+
+### 🤝 Isolation and hunk-level review
+
+> With `MICRO_ISOLATE=1` every sub-agent works in its own git worktree, so parallel agents never collide. When a diff comes back you review it hunk by hunk and apply exactly the parts you want; a hunk whose context has drifted is reported instead of silently mis-applied.
+
+![Merge queue](docs/gui-changes.png)
+
+![Hunk-level review](docs/gui-hunks.png)
+
+### 🔍 Trace, replay and the Inspector
+
+> The raw event stream with category filters and a replay scrubber that rebuilds the conversation from any slice — and the Inspector, which shows the exact system prompt, tool schemas and messages that went out on each turn.
+
+![Trace panel](docs/gui-trace.png)
+
+![Inspector](docs/gui-inspector.png)
+
+---
+
+## 🚀 Quick start
+
+**Requirements:** [Bun](https://bun.sh) ≥ 1.1 (the platform), or just Node ≥ 22.18 (the [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag). Any OpenAI-compatible endpoint works.
 
 ```bash
+git clone https://github.com/AlexZhangUPUPUP/micro-harness.git
+cd micro-harness
 bun install
 
-# the CLI — the seed's cli.ts, grown up, now at packages/core/src/cli.ts
-bun start "Create hello.txt with 'hi', then read it back and print the contents"
-bun start                       # interactive REPL (/help, prompt templates, skills)
-bun start --allow-bash "Find the 3 largest files and summarise them"
-bun start --isolate --tree "…"  # a git worktree per sub-agent + print the agent tree
-bun start -- run --auto --tasks tasks.txt   # unattended driver (budget + timeout)
-
-# the whole stack: server (SSE + SQLite/FTS) and the GUI
-scripts/dev.sh                  # → http://127.0.0.1:5273
+export MICRO_BASE_URL=https://api.deepseek.com   # any OpenAI-compatible endpoint
+export MICRO_API_KEY=sk-...
+export MICRO_MODEL=deepseek-chat                 # the provider's real model id
 ```
+
+**Run the agent** (the CLI lives at `packages/core/src/cli.ts`):
+
+```bash
+bun start "Create hello.txt with 'hi', then read it back and print the contents"
+bun start --allow-bash "Find the 3 largest files and summarise them"
+bun start --isolate --tree "…"   # a git worktree per sub-agent, then print the agent tree
+bun start                        # interactive REPL: /help, prompt templates, skills
+```
+
+**Run the whole stack** — server, GUI and a key picked up automatically:
+
+```bash
+scripts/dev.sh                   # → http://127.0.0.1:5273
+```
+
+<details>
+<summary>All CLI flags and environment variables</summary>
 
 | flag | meaning |
 |---|---|
 | `--dir <path>` | working directory the tools are sandboxed to (default `.`) |
-| `--model <id>` / `--base-url <url>` | override the env config |
-| `--approval <mode>` | `suggest` / `auto-edit` / `full-auto` (default `full-auto`) |
+| `--model <id>` / `--base-url <url>` | override the environment config |
+| `--approval <mode>` | `suggest` / `auto-edit` / `full-auto` (default) |
 | `--allow-bash` | enable the `bash` tool (off by default) |
 | `--isolate` | give every sub-agent its own git worktree |
 | `--tree` | print the agent tree when the run finishes |
@@ -57,164 +144,192 @@ scripts/dev.sh                  # → http://127.0.0.1:5273
 | `--trace` | append every event to a JSONL transcript |
 | `--quiet` | don't print tool activity |
 
-## The four pieces
-
-Still the heart of the project — the seed's four files now live in
-`packages/core/src/`, and everything else is built around them:
-
-| file | what it is |
+| variable | meaning |
 |---|---|
-| `packages/core/src/harness.ts` | **the loop** — model → tools → feed results back → repeat, with a step limit, parallel tool calls and approval modes |
-| `packages/core/src/tools.ts` | **tool registry + dispatch** — `read_file`, `write_file`, `list_dir`, `bash`; path-sandboxed; tool errors become messages the model can recover from |
-| `packages/core/src/context.ts` | **context windowing** — token estimate + trimming that keeps the system prompt and whole turns, never orphaning a tool result from its call |
-| `packages/core/src/model.ts` | **model I/O** — an OpenAI-compatible `chat/completions` call with streaming and retries on 429/5xx |
+| `MICRO_MODEL` / `MICRO_BASE_URL` / `MICRO_API_KEY` | model provider |
+| `MICRO_MODELS` | comma-separated ids advertised by `GET /api/models` (the GUI model picker) |
+| `MICRO_DATA_DIR` | session + index directory (default `~/.micro-harness`) |
+| `MICRO_ISOLATE` | `1` → each sub-agent gets a git worktree |
+| `MICRO_PORT` / `MICRO_HOST` / `MICRO_SERVER_TOKEN` | server bind + auth |
+| `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` | USD per 1M tokens, for cost tracking |
+| `MICRO_ALLOW_BASH` | `1` → enable `bash` on the server too |
 
-## Design notes
+`dev.sh` prints which key it picked up — `key sk-41cdf912… (from ~/.pi/agent/auth.json)` — and warns when an exported key silently shadows a different one in `auth.json`, which otherwise shows up much later as a confusing `402 Insufficient Balance`.
 
-- **The seed is dependency-free; the platform is not.** `main`'s `src/` uses only
-  Node built-ins. This branch is a Bun monorepo — Bun for the toolchain,
-  `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root
-  `package.json` still declares no runtime dependencies.
-- **Errors are data.** A failed tool returns `{ output, isError: true }` which is
-  appended as a normal `tool` message — the model sees the failure and can retry,
-  which is what makes an agent loop robust.
-- **Sandboxing.** File tools resolve every path inside `--dir` and refuse
-  traversal; `bash` is opt-in.
-- **Trimming keeps turns intact.** A `tool` message is only ever kept together
-  with the assistant `tool_calls` that produced it.
-- **Events are the single contract.** The loop emits one tagged event stream; the
-  session JSONL, the server's SSE, the CLI, the GUI's trace/replay and the
-  Inspector are all just consumers of it.
-- **Share capabilities, isolate state.** Providers, tools and the store are
-  shared; messages, cwd and policy are per session and per sub-agent.
+</details>
 
-## Tests
+---
 
-```bash
-bun install
-bun test          # unit suite: kernel, core, server, gui derivation
-bun run verify    # P3/P4/P5 feature checks (scripted provider, no network)
-bun run typecheck
+## 🧩 How it is built
+
+Four packages, one direction of dependency. The kernel knows nothing about agents; the core knows nothing about HTTP; the GUI only reads the event stream.
+
+```mermaid
+flowchart TB
+  subgraph K["packages/kernel — plugin kernel"]
+    k1["provide / get / inject"]
+    k2["lifecycle waiting → active → failed"]
+    k3["scopes · fork() · isolate() · events"]
+  end
+
+  subgraph CO["packages/core — agent runtime"]
+    c1["harness loop · streaming · parallel tools"]
+    c2["providers · tools · context windowing"]
+    c3["multi-agent runner · sessions · CLI"]
+  end
+
+  subgraph SV["packages/server"]
+    s1["HTTP + SSE"]
+    s2["SQLite + FTS5 index"]
+  end
+
+  subgraph GU["packages/gui"]
+    g1["React 19 · Vite · Tailwind"]
+  end
+
+  K --> CO --> SV --> GU
 ```
 
-## Packages
+| package | what it is |
+|---|---|
+| `packages/kernel` | The plugin kernel: service container, lifecycle, scopes, event bus, config schema validation. Self-built, no dependencies. |
+| `packages/core` | The seed, grown up: the loop, tool dispatch, context windowing, providers, the multi-agent runner, sessions, and the CLI. |
+| `packages/server` | Bun HTTP + SSE. Sessions, streaming, the FTS5 search index, worktree isolation endpoints and the merge queue. |
+| `packages/gui` | React 19 + Vite + Tailwind. Every view is derived from the event stream by pure, unit-tested functions in `lib/derive.ts`. |
 
-- `packages/kernel` — plugin kernel: services/DI, lifecycle, scopes, events
-- `packages/core` — agent loop, tools, context, providers, multi-agent, sessions, CLI
-- `packages/server` — HTTP + SSE + SQLite/FTS index
-- `packages/gui` — React web UI
+---
 
-## GUI
+## 🤖 Multi-agent
 
-A React 19 + Vite + Tailwind front end (design tokens shared with PiStudio): a
-session list, a streaming transcript with tool cards, a **multi-agent tree** with
-per-agent tokens/cost, a **trace panel with a replay scrubber** that rebuilds the
-conversation from a slice of the event stream, and a **changes panel** (per-agent
-diff / promote + an integrate-all **merge queue**) when the server runs with
-`MICRO_ISOLATE=1`.
+Sub-agents are isolated on purpose: a sub-agent starts with a fresh context, receives only the prompt you give it, and returns only its final answer. The parent never inherits its noise.
 
-![GUI](docs/gui.png)
-
-With isolation on, each sub-agent gets its own git worktree, so parallel agents
-never overwrite each other:
-
-![merge queue](docs/gui-changes.png)
-
-Because an agent's output is a diff, the changes panel lets you review it **hunk by
-hunk** and apply exactly the parts you want (`packages/core/src/patch.ts` parses the
-diff and replays only the accepted hunks; `POST …/agents/:id/apply` writes them
-through the same integrate/apply path, so backups and conflict reporting come for
-free). A hunk whose context has already drifted is reported, never mis-applied:
-
-![hunk-level review](docs/gui-hunks.png)
-
-The UI is bilingual — **English / 简体中文** — switched in place with the `中 / EN`
-button (it follows the browser language on first visit):
-
-![GUI in Simplified Chinese](docs/gui-zh.png)
-
-```bash
-# one command — starts the server and the GUI, and picks up an API key
-scripts/dev.sh                 # → http://127.0.0.1:5273
-
-# or run the two halves yourself:
-MICRO_API_KEY=… bun packages/server/src/main.ts          # terminal 1
-cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev   # terminal 2
+```mermaid
+flowchart LR
+  M["main agent"] -- "task tool" --> A["sub-agent A"]
+  M -- "task tool" --> B["sub-agent B"]
+  A --> WA[("worktree A")]
+  B --> WB[("worktree B")]
+  WA -- "review hunk by hunk" --> Q{"merge queue"}
+  WB -- "review hunk by hunk" --> Q
+  Q --> W["shared workspace"]
 ```
 
-The server reads `MICRO_MODEL` (use the provider's real model id, e.g.
-`deepseek-chat`), `MICRO_BASE_URL`, `MICRO_API_KEY`, `MICRO_DATA_DIR` and
-`MICRO_MODELS`. `dev.sh` prints which key it picked up — `key sk-41cdf912… (from
-~/.pi/agent/auth.json)` — and warns when an exported key silently shadows a different
-one in `auth.json`, which is otherwise a confusing "why is my balance zero" 402.
+| mode | behaviour |
+|---|---|
+| `single` | one sub-agent |
+| `parallel` | many at once, results joined |
+| `chain` | sequential, `{previous}` interpolates the last result |
+| `race` | many at once, first successful result wins |
 
-The transcript renders **Markdown with syntax-highlighted code** (a dependency-free
-renderer ported from PiStudio), and **⌘K** opens a command palette that also does
-full-text search across every saved session (`/api/search`, FTS5):
+Limits are enforced by the runner, not by convention: `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--agent-max-tokens`, `--agent-max-cost`.
 
-![command palette](docs/gui-palette.png)
+---
 
-The right panel has four views. **agents** draws the sub-agent tree with per-node
-usage (hover a node for its detail card); **trace** is the raw event stream with
-category chips, a text filter and a replay scrubber; **changes** reviews an agent's
-diff hunk by hunk; and **inspector** answers *"what exactly did we send to the
-model?"* — for every turn it shows the exact payload that went out: the system
-prompt, the tool schemas, and every message, taken straight from a `model.request`
-event:
+## 🖥 The GUI
 
-![inspector](docs/gui-inspector.png)
-
-![trace panel](docs/gui-trace.png)
-
-Everything the GUI renders is derived from the event stream by pure functions in
-`packages/gui/src/lib/derive.ts` (unit-tested).
-
-The details that make it feel like a real coding tool: live usage is a **rolling
-number next to an inline sparkline** of tokens per model call; the agent tree draws
-real connectors and shows a detail card on hover; the changes panel renders a
-**colored diff with an old/new line-number gutter**; sessions are grouped into
-**Today / Yesterday / Earlier** with hover-to-delete; the transcript only auto-follows
-while you are parked at the bottom (scroll up and it freezes, surfacing a "back to
-bottom" pill); and scrubbing the trace desaturates the whole view into **REPLAY** mode.
-
-### Keyboard
+| area | what it does |
+|---|---|
+| **Sessions** | grouped Today / Yesterday / Earlier, inline rename, two-step delete, live status dots |
+| **Transcript** | streaming Markdown + highlighted code with copy buttons; hover a user message to **edit & resend** (forks the session to that point, runs the edit, leaves the original untouched) |
+| **Agents** | the sub-agent tree with connectors, per-node tokens/cost/hover card, worktree badges |
+| **Trace** | the raw event stream with category chips, a text filter and a replay scrubber (REPLAY mode desaturates the view) |
+| **Changes** | per-agent diff, **hunk-level accept/reject**, promote, and an integrate-all merge queue |
+| **Inspector** | the exact payload of every model call: system prompt, tool schemas, messages, token estimate |
+| **Palette** | `⌘K` — app actions plus full-text search across every saved session |
+| **Composer** | model picker fed by `/api/models`, desktop notification when a run finishes in a background tab |
 
 | key | action |
 |---|---|
-| `⌘K` / `Ctrl K` | command palette — app actions + full-text session search |
+| `⌘K` / `Ctrl K` | command palette |
 | `⌘/` | keyboard cheat sheet |
 | `↑` `↓` | move through the sidebar or the palette |
-| `Enter` | send the prompt |
-| `⇧ Enter` | newline in the prompt |
+| `Enter` / `⇧ Enter` | send / newline |
 | `Esc` | close any dialog |
 
-The palette also exports the current session as Markdown and copies the raw trace as
-JSON. A desktop notification fires when a run finishes while the tab is hidden.
+---
 
-Sessions can be **renamed inline** (hover a row) or deleted, and the transcript is
-editable: hovering a user message offers **edit & resend**, which forks the session
-truncated to just before that message and runs the edited prompt in the fork — the
-original session is left untouched. The composer's **model picker** is fed by
-`GET /api/models`, so `MICRO_MODELS=model-a,model-b scripts/dev.sh` advertises
-several.
+## 📐 Design principles
 
-## The seed is a frozen tag
+- **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
+- **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
+- **Trimming keeps turns intact.** A `tool` message is never separated from the assistant `tool_calls` that produced it.
+- **Sandboxing.** File tools resolve every path inside `--dir` and refuse traversal; `bash` is opt-in.
+- **Share capabilities, isolate state.** Providers, tools and the store are shared; messages, cwd and policy are per session and per sub-agent.
+- **Small, testable pure functions.** Diff parsing, hunk selection, transcript derivation, session grouping and the usage series are pure and unit-tested — the UI just renders them.
 
-| ref | what it is |
-|---|---|
-| [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) | the **minimal seed** — `src/`, six files, zero dependencies, no build step, run by Node ≥ 22.18. Frozen: the reference implementation to read end to end, and it does not move. |
-| `main` (this branch) | the **platform** — `packages/{kernel,core,server,gui}`: plugin kernel, event-driven core, multi-agent orchestration, server, CLI and GUI, built on the seed's design. |
+---
 
-The seed was not duplicated — P0 *moved* those files into `packages/core` and grew
-the platform around them. Keeping the original as a tag instead of a second branch
-means there is exactly one line of development (no README to maintain twice, no two
-copies of the same file drifting apart) while the readable original stays browsable
-and immutable.
+## 📁 Repository layout
 
-See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the design of the full harness
-platform — plugin kernel, composition, server, GUI, MCP/ACP — and
-**[ROADMAP.md](ROADMAP.md)** for the long-term plan.
+```
+micro-harness/
+├── packages/
+│   ├── kernel/                  # plugin kernel: DI, lifecycle, scopes, event bus
+│   ├── core/                    # agent loop, tools, context, providers, multi-agent, CLI
+│   ├── server/                  # HTTP + SSE + SQLite/FTS5 index
+│   └── gui/                     # React 19 + Vite + Tailwind web UI
+├── scripts/
+│   ├── dev.sh                   # one command: server + GUI + key resolution
+│   ├── verify-features.ts       # scripted end-to-end feature checks (no network)
+│   └── auto-run.sh              # unattended driver
+├── docs/                        # screenshots used by this README
+├── ARCHITECTURE.md              # design baseline (zh)
+├── ROADMAP.md                   # P0–P10 plan (zh)
+└── PROGRESS.md                  # build log
+```
 
-## License
+---
 
-MIT
+## 🗺 Roadmap
+
+- [x] **P0 · Foundation** — monorepo, Bun toolchain, CI
+- [x] **P1 · Kernel** — services/DI, lifecycle, scopes, event bus (~500 lines, self-built)
+- [x] **P2 · Event-driven core** — `AgentEvent`, streaming, parallel tool calls, approval modes, sessions
+- [x] **P3 · Multi-agent** — runner, `task` tool, context firewall, limits
+- [x] **P4 · Server** — HTTP + SSE, session API, SQLite/FTS5 index
+- [x] **P5 · CLI** — one-shot, REPL, slash commands, prompt templates, skills
+- [x] **P6 · GUI** — sessions, transcript, agent tree, trace + replay, changes
+- [x] **P7 · Isolation** — git worktrees per agent, promote, merge queue
+- [ ] **P8 · Interop** — MCP client, ACP server
+- [ ] **P9 · Context economics** — compaction strategies, cache-prefix reuse, cost metering
+- [ ] **P10 · Evaluation & release** — eval suite, `bun build --compile`, publish
+
+---
+
+## 🧪 Development
+
+```bash
+bun install
+bun test              # 111 tests across 19 files
+bun run typecheck     # tsc --noEmit, clean
+bun run verify        # scripted feature checks (no network)
+```
+
+The suite covers the kernel's lifecycle and scoping, the loop and its streaming, approvals, session replay, the server's endpoints, worktree isolation, partial patch application against real `git diff` output, and every pure derivation the GUI renders.
+
+---
+
+## 🤝 Contributing
+
+Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's unfinished phases (**P8–P10**) and anything marked *good first issue* are good entry points.
+
+Two things that make a PR easy to accept:
+
+1. `bun test` and `bun run typecheck` pass.
+2. New behaviour comes with the test that would have caught it — the pure functions in `packages/core/src` and `packages/gui/src/lib/derive.ts` are where most logic lives, and they are cheap to test.
+
+---
+
+## 📄 License
+
+[MIT](LICENSE).
+
+The seed at the `seed-v1` tag grew out of [PiStudio](https://github.com/AlexZhangUPUPUP/PiStudio); the worktree and merge-queue ports in `packages/core/src` still carry that lineage.
+
+---
+
+## ⭐ Star history
+
+<a href="https://star-history.com/#AlexZhangUPUPUP/micro-harness&Date">
+  <img src="https://api.star-history.com/svg?repos=AlexZhangUPUPUP/micro-harness&type=Date" alt="Star history" width="640">
+</a>
