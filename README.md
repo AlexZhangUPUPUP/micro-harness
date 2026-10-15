@@ -4,6 +4,8 @@
 context windowing, in a few hundred lines of TypeScript. No SDK, no framework, no
 build step: Node ≥ 22.18 runs the `.ts` files directly.
 
+**English** · [简体中文](README.zh-CN.md)
+
 > An **agent harness** is the runtime that wraps an LLM and turns it into an
 > agent: it runs the loop, executes tools, manages the context window and talks to
 > the model. This repo is a clear, readable implementation of exactly those four
@@ -127,7 +129,10 @@ cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev   # terminal 2
 ```
 
 The server reads `MICRO_MODEL` (use the provider's real model id, e.g.
-`deepseek-chat`), `MICRO_BASE_URL`, `MICRO_API_KEY` and `MICRO_DATA_DIR`.
+`deepseek-chat`), `MICRO_BASE_URL`, `MICRO_API_KEY`, `MICRO_DATA_DIR` and
+`MICRO_MODELS`. `dev.sh` prints which key it picked up — `key sk-41cdf912… (from
+~/.pi/agent/auth.json)` — and warns when an exported key silently shadows a different
+one in `auth.json`, which is otherwise a confusing "why is my balance zero" 402.
 
 The transcript renders **Markdown with syntax-highlighted code** (a dependency-free
 renderer ported from PiStudio), and **⌘K** opens a command palette that also does
