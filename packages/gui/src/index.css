@@ -2,58 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens ported from PiStudio so both projects share one visual language. */
+/* Design tokens ported from PiStudio so both projects share one visual language.
+   Token NAMES are shared; this app tunes the values to a blue accent system. */
 @layer base {
   :root {
     --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
       'PingFang SC', 'Microsoft YaHei', sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 
-    --background: 210 20% 98%;
-    --foreground: 220 26% 14%;
+    --background: 214 32% 97%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 220 26% 14%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 26% 14%;
-    --primary: 220 26% 14%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 220 26% 14%;
-    --muted: 210 20% 94%;
-    --muted-foreground: 220 10% 40%;
-    --accent: 174 62% 56%;
-    --accent-foreground: 220 26% 14%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 222 47% 11%;
+    --primary-foreground: 214 32% 97%;
+    --secondary: 214 32% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 214 32% 93%;
+    --muted-foreground: 215 16% 42%;
+    --accent: 221 83% 53%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 210 20% 90%;
-    --input: 210 20% 90%;
-    --ring: 174 62% 56%;
+    --border: 214 25% 89%;
+    --input: 214 25% 86%;
+    --ring: 221 83% 53%;
     --radius: 0.75rem;
-    --coral: 355 70% 78%;
-    --teal: 174 62% 56%;
-    --gold: 48 93% 66%;
+    --coral: 355 70% 64%;
+    --teal: 221 83% 53%;
+    --gold: 43 96% 52%;
   }
 
   .dark {
-    --background: 220 20% 7%;
-    --foreground: 210 20% 96%;
-    --card: 220 18% 10%;
-    --card-foreground: 210 20% 96%;
-    --popover: 220 18% 10%;
-    --popover-foreground: 210 20% 96%;
-    --primary: 210 20% 96%;
-    --primary-foreground: 220 20% 7%;
-    --secondary: 220 16% 16%;
-    --secondary-foreground: 210 20% 96%;
-    --muted: 220 16% 16%;
-    --muted-foreground: 218 12% 62%;
-    --accent: 174 62% 50%;
-    --accent-foreground: 220 26% 10%;
-    --destructive: 0 62% 52%;
+    --background: 222 47% 6%;
+    --foreground: 213 31% 95%;
+    --card: 222 40% 10%;
+    --card-foreground: 213 31% 95%;
+    --popover: 222 40% 10%;
+    --popover-foreground: 213 31% 95%;
+    --primary: 213 31% 95%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 220 33% 15%;
+    --secondary-foreground: 213 31% 95%;
+    --muted: 220 33% 15%;
+    --muted-foreground: 217 15% 65%;
+    --accent: 217 91% 65%;
+    --accent-foreground: 222 47% 8%;
+    --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 16% 20%;
-    --input: 220 16% 20%;
-    --ring: 174 62% 50%;
+    --border: 220 26% 18%;
+    --input: 220 26% 22%;
+    --ring: 217 91% 65%;
+    --teal: 217 91% 65%;
+    --coral: 355 75% 70%;
+    --gold: 43 96% 60%;
   }
 
   * {
@@ -69,5 +73,140 @@
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Visible, consistent keyboard focus everywhere. */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.75);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Slim, theme-aware scrollbars for the long lists. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.55);
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes border-flow {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  /* Breathing dot for live / running status. */
+  .animate-pulse-soft {
+    animation: pulse-soft 1.6s ease-in-out infinite;
+  }
+  /* Terminal-style blinking block caret for streaming text. */
+  .animate-caret {
+    animation: caret-blink 1s steps(1) infinite;
+  }
+  /* New transcript items rise in gently. */
+  .animate-rise {
+    animation: rise-in 0.25s ease-out both;
+  }
+  /* Subtle dot grid behind the transcript — "mission control" texture. */
+  .bg-dots {
+    background-image: radial-gradient(hsl(var(--muted-foreground) / 0.14) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  /* Animated gradient frame shown around the composer while a run is busy. */
+  .busy-frame {
+    background: linear-gradient(
+      100deg,
+      hsl(var(--teal) / 0.25),
+      hsl(var(--teal) / 0.9),
+      hsl(var(--gold) / 0.7),
+      hsl(var(--teal) / 0.25)
+    );
+    background-size: 200% 100%;
+    animation: border-flow 1.6s linear infinite;
+  }
+  /* Replay scrubber. */
+  .scrubber {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: hsl(var(--muted));
+    cursor: pointer;
+  }
+  .scrubber::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px;
+    width: 14px;
+    border-radius: 999px;
+    background: hsl(var(--teal));
+    border: 2px solid hsl(var(--background));
+    box-shadow: 0 0 0 1px hsl(var(--teal) / 0.4);
+  }
+  .scrubber::-moz-range-thumb {
+    height: 14px;
+    width: 14px;
+    border-radius: 999px;
+    background: hsl(var(--teal));
+    border: 2px solid hsl(var(--background));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
