@@ -5,10 +5,10 @@ Web GUI，从一份极简可读的 harness 长出来。
 
 [English](README.md) · **简体中文**
 
-> **这是哪个分支？** 本 README 描述的是 **`platform`** 分支。
-> [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) 上是原始的
-> **极简种子**：`src/` 下六个文件，零依赖、无构建步骤，Node ≥ 22.18 直接运行。想理解
-> agent harness 怎么工作，就从那份从头读到尾；本分支是在同一套设计上长出来的平台。
+> **极简种子在哪？** 原始的种子——`src/` 下六个文件，零依赖、无构建步骤，Node ≥ 22.18
+> 直接运行——已经冻结在
+> [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) 这个 tag 上。
+> 想理解 agent harness 怎么工作，就从那份从头读到尾；本分支是在同一套设计上长出来的平台。
 > 平台的 P0 把种子移进了 `packages/core`，所以这里没有 `src/`。
 
 > 所谓 **agent harness**（agent 运行时），就是包在 LLM 外面、把它变成 agent 的那层：
@@ -175,15 +175,16 @@ token 迷你折线图**；agent 树画出真正的连线并在悬浮时给出详
 原样不动**。输入框里的**模型选择器**数据来自 `GET /api/models`，因此
 `MICRO_MODELS=model-a,model-b scripts/dev.sh` 就能列出多个模型。
 
-## 两个分支，一个项目
+## 种子是一个冻结的 tag
 
-| 分支 | 它是什么 |
+| ref | 它是什么 |
 |---|---|
-| [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) | **极简种子** —— `src/` 下六个文件，零依赖、无构建步骤，Node ≥ 22.18 直接运行。那份可以从头读到尾的参考实现。 |
-| `platform`（本分支） | **平台** —— `packages/{kernel,core,server,gui}`：插件内核、事件驱动核心、多 agent 编排、服务端、CLI 与 GUI，沿种子的设计长出来。它是 `main` 的直系后代，不是分叉。 |
+| [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) | **极简种子** —— `src/` 下六个文件，零依赖、无构建步骤，Node ≥ 22.18 直接运行。已冻结：那份可以从头读到尾的参考实现，不再变动。 |
+| `main`（当前分支） | **平台** —— `packages/{kernel,core,server,gui}`：插件内核、事件驱动核心、多 agent 编排、服务端、CLI 与 GUI，沿种子的设计长出来。 |
 
 种子没有被复制一份——P0 是**把那些文件搬进** `packages/core`，再在它们周围长出平台。
-所以本分支没有 `src/`，而 `main` 依然保有那份可读的原作。
+把原作保留成 tag 而不是第二条分支，意味着只有**一条开发主线**（不用把 README 维护两遍、
+不会有两份同名文件各自漂移），同时那份可读的原作依然可浏览、且不可变。
 
 平台整体设计（插件内核、组合方式、服务端、GUI、MCP/ACP）见
 **[ARCHITECTURE.md](ARCHITECTURE.md)**，长期规划见 **[ROADMAP.md](ROADMAP.md)**。
