@@ -5,13 +5,12 @@ orchestration, server, CLI and web GUI — grown from a minimal, readable harnes
 
 **English** · [简体中文](README.zh-CN.md)
 
-> **Which branch is this?** This README documents the **`platform`** branch.
-> [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) holds the
-> original **minimal seed**: six files under `src/`, no dependencies, no build step,
-> run directly by Node ≥ 22.18. Read that one end to end to understand how an agent
-> harness works — this branch is the platform built on the same design. The
-> platform's P0 moved the seed into `packages/core`, which is why there is no `src/`
-> here.
+> **Where is the minimal seed?** The original seed — six files under `src/`, no
+dependencies, no build step, run directly by Node ≥ 22.18 — is frozen at the
+[`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag. Read
+that one end to end to understand how an agent harness works; this branch is the
+platform built on the same design. The platform's P0 moved the seed into
+`packages/core`, which is why there is no `src/` here.
 
 > An **agent harness** is the runtime that wraps an LLM and turns it into an
 > agent: it runs the loop, executes tools, manages the context window and talks to
@@ -197,16 +196,18 @@ original session is left untouched. The composer's **model picker** is fed by
 `GET /api/models`, so `MICRO_MODELS=model-a,model-b scripts/dev.sh` advertises
 several.
 
-## Two branches, one project
+## The seed is a frozen tag
 
-| branch | what it is |
+| ref | what it is |
 |---|---|
-| [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) | the **minimal seed** — `src/`, six files, zero dependencies, no build step, run by Node ≥ 22.18. The reference implementation to read end to end. |
-| `platform` (this branch) | the **platform** — `packages/{kernel,core,server,gui}`: plugin kernel, event-driven core, multi-agent orchestration, server, CLI and GUI, built on the seed's design. It is a direct descendant of `main`, not a fork. |
+| [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) | the **minimal seed** — `src/`, six files, zero dependencies, no build step, run by Node ≥ 22.18. Frozen: the reference implementation to read end to end, and it does not move. |
+| `main` (this branch) | the **platform** — `packages/{kernel,core,server,gui}`: plugin kernel, event-driven core, multi-agent orchestration, server, CLI and GUI, built on the seed's design. |
 
 The seed was not duplicated — P0 *moved* those files into `packages/core` and grew
-the platform around them, which is why this branch has no `src/` and `main` still
-holds the readable original.
+the platform around them. Keeping the original as a tag instead of a second branch
+means there is exactly one line of development (no README to maintain twice, no two
+copies of the same file drifting apart) while the readable original stays browsable
+and immutable.
 
 See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the design of the full harness
 platform — plugin kernel, composition, server, GUI, MCP/ACP — and
