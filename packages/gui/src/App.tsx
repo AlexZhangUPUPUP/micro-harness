@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type SessionMeta, type TaggedEvent, type AgentWorktree, type AgentDiff, type IntegrateFile } from './lib/api.ts'
+import { useT } from './lib/i18n.tsx'
 import { deriveAgents, deriveChat, truncate, type AgentNode, type ChatItem } from './lib/derive.ts'
 
 const fmtTokens = (n: number): string => (n < 1000 ? String(n) : n < 1_000_000 ? (n / 1000).toFixed(1) + 'k' : (n / 1e6).toFixed(1) + 'M')
@@ -7,6 +8,7 @@ const fmtCost = (n: number): string => (n ? '$' + (n < 0.01 ? n.toFixed(4) : n.t
 const fmtTime = (t: number): string => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 export default function App() {
+  const { t, lang, setLang } = useT()
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [current, setCurrent] = useState<string | null>(null)
   const [events, setEvents] = useState<TaggedEvent[]>([])
@@ -106,10 +108,17 @@ export default function App() {
               onClick={() => setView(v)}
               className={`rounded px-2 py-0.5 text-[11px] ${view === v ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}
             >
-              {v}
+              {t(`tabs.${v}`)}
             </button>
           ))}
-          <button onClick={toggleTheme} className="rounded px-2 py-0.5 text-[11px] text-muted-foreground">
+          <button
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            title="English / 中文"
+            className="rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            {lang === 'zh' ? 'EN' : '中'}
+          </button>
+          <button onClick={toggleTheme} title={t('theme.toggle')} className="rounded px-2 py-0.5 text-[11px] text-muted-foreground">
             {dark ? '☀' : '☾'}
           </button>
         </div>
@@ -154,12 +163,13 @@ function Sidebar({
   onSelect: (id: string) => void
   onNew: () => void
 }) {
+  const { t } = useT()
   return (
     <aside className="flex w-[260px] shrink-0 flex-col border-r border-border">
       <div className="flex items-center justify-between border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-        <span>sessions · {sessions.length}</span>
+        <span>{t('sessions.title', { n: sessions.length })}</span>
         <button onClick={onNew} className="rounded px-1.5 hover:bg-muted">
-          + new
+          {t('sessions.new')}
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -175,7 +185,7 @@ function Sidebar({
             </div>
           </button>
         ))}
-        {sessions.length === 0 && <div className="px-3 py-4 text-[11px] text-muted-foreground">no sessions yet</div>}
+        {sessions.length === 0 && <div className="px-3 py-4 text-[11px] text-muted-foreground">{t('sessions.empty')}</div>}
       </div>
     </aside>
   )
@@ -184,7 +194,8 @@ function Sidebar({
 /* ------------------------------------------------------------ transcript */
 
 function Transcript({ items }: { items: ChatItem[] }) {
-  if (items.length === 0) return <div className="pt-10 text-center text-[12px] text-muted-foreground">Send a task to start.</div>
+  const { t } = useT()
+  if (items.length === 0) return <div className="pt-10 text-center text-[12px] text-muted-foreground">{t('chat.empty')}</div>
   return (
     <div className="space-y-2">
       {items.map((item) => (
@@ -234,6 +245,7 @@ function TranscriptItem({ item }: { item: ChatItem }) {
 /* ---------------------------------------------------------------- composer */
 
 function Composer({ value, setValue, onSend, busy }: { value: string; setValue: (v: string) => void; onSend: () => void; busy: boolean }) {
+  const { t } = useT()
   return (
     <div className="border-t border-border p-3">
       <textarea
@@ -246,17 +258,17 @@ function Composer({ value, setValue, onSend, busy }: { value: string; setValue: 
           }
         }}
         rows={2}
-        placeholder="Ask the agent…  Enter sends · Shift+Enter newline"
+        placeholder={t('composer.placeholder')}
         className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-[13px] outline-none"
       />
       <div className="mt-2 flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">{busy ? 'running…' : ''}</span>
+        <span className="text-[11px] text-muted-foreground">{busy ? t('composer.running') : ''}</span>
         <button
           onClick={onSend}
           disabled={busy || !value.trim()}
           className="ml-auto rounded-md bg-primary px-3 py-1 text-[12px] text-primary-foreground disabled:opacity-40"
         >
-          send
+          {t('composer.send')}
         </button>
       </div>
     </div>
@@ -266,13 +278,14 @@ function Composer({ value, setValue, onSend, busy }: { value: string; setValue: 
 /* ------------------------------------------------------------- agent tree */
 
 function AgentsPanel({ roots, total }: { roots: AgentNode[]; total: { input: number; output: number; cost: number } }) {
+  const { t } = useT()
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-        agents · {fmtTokens(total.input + total.output)} tok · {fmtCost(total.cost)}
+        {t('agents.title', { tok: fmtTokens(total.input + total.output), cost: fmtCost(total.cost) })}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {roots.length === 0 && <div className="p-2 text-[11px] text-muted-foreground">no agents yet</div>}
+        {roots.length === 0 && <div className="p-2 text-[11px] text-muted-foreground">{t('agents.empty')}</div>}
         {roots.map((n) => (
           <AgentRow key={n.agentId} node={n} />
         ))}
@@ -282,6 +295,7 @@ function AgentsPanel({ roots, total }: { roots: AgentNode[]; total: { input: num
 }
 
 function AgentRow({ node }: { node: AgentNode }) {
+  const { t } = useT()
   const label = node.agentId === 'main' ? 'main' : node.agentId.split('/').pop() || node.agentId
   return (
     <div>
@@ -300,8 +314,8 @@ function AgentRow({ node }: { node: AgentNode }) {
         </div>
         {node.tools > 0 && (
           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-            {node.tools} tool{node.tools > 1 ? 's' : ''}
-            {node.errors ? ` · ${node.errors} err` : ''}
+            {node.tools > 1 ? t('agents.tools', { n: node.tools }) : t('agents.tool', { n: node.tools })}
+            {node.errors ? ' · ' + t('agents.errors', { n: node.errors }) : ''}
           </div>
         )}
       </div>
@@ -323,16 +337,15 @@ function TracePanel({
   replayAt: number | null
   setReplayAt: (n: number | null) => void
 }) {
+  const { t } = useT()
   const at = replayAt ?? events.length
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2 text-[11px]">
         <div className="flex justify-between text-muted-foreground">
-          <span>
-            trace · {at}/{events.length}
-          </span>
+          <span>{t('trace.title', { at, total: events.length })}</span>
           <button onClick={() => setReplayAt(replayAt == null ? events.length : null)} className="hover:underline">
-            {replayAt == null ? 'replay' : 'live'}
+            {replayAt == null ? t('trace.replay') : t('trace.live')}
           </button>
         </div>
         <input
@@ -370,6 +383,7 @@ function summarize(e: TaggedEvent): string {
 /* ------------------------------------------------- isolation / merge queue */
 
 function ChangesPanel({ sessionId }: { sessionId: string }) {
+  const { t } = useT()
   const [agents, setAgents] = useState<AgentWorktree[]>([])
   const [diff, setDiff] = useState<AgentDiff | null>(null)
   const [plan, setPlan] = useState<IntegrateFile[] | null>(null)
@@ -400,8 +414,9 @@ function ChangesPanel({ sessionId }: { sessionId: string }) {
       const r = await api.promoteAgent(sessionId, agentId)
       setMsg(
         r.ok
-          ? `promoted ${r.applied.length} file(s)${r.conflicts.length ? ` · ${r.conflicts.length} conflict(s)` : ''}`
-          : `promote failed: ${r.error ?? 'conflicts'}`,
+          ? t('changes.promoted', { n: r.applied.length }) +
+              (r.conflicts.length ? t('changes.promotedConflicts', { n: r.conflicts.length }) : '')
+          : t('changes.failed', { error: r.error ?? 'conflicts' }),
       )
       reload()
     } catch (err) {
@@ -430,7 +445,7 @@ function ChangesPanel({ sessionId }: { sessionId: string }) {
     setMsg('')
     try {
       const r = await api.integrateApply(sessionId, files)
-      setMsg(`integrated ${r.applied.length} file(s)`)
+      setMsg(t('changes.integrated', { n: r.applied.length }))
       setPlan(null)
       reload()
     } catch (err) {
@@ -443,18 +458,15 @@ function ChangesPanel({ sessionId }: { sessionId: string }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-        <span>changes · {agents.length} isolated agent(s)</span>
+        <span>{t('changes.title', { n: agents.length })}</span>
         <button onClick={preview} disabled={busy || !agents.length} className="ml-auto rounded px-1.5 hover:bg-muted disabled:opacity-40">
-          integrate all
+          {t('changes.integrateAll')}
         </button>
       </div>
       {msg && <div className="border-b border-border px-3 py-1 text-[11px] text-muted-foreground">{msg}</div>}
       <div className="min-h-0 flex-1 overflow-y-auto p-2 text-[12px]">
         {agents.length === 0 && (
-          <div className="p-2 text-[11px] text-muted-foreground">
-            No isolated agents. Start the server with <span className="font-mono">MICRO_ISOLATE=1</span> and ask the agent to use the{' '}
-            <span className="font-mono">task</span> tool.
-          </div>
+          <div className="p-2 text-[11px] text-muted-foreground">{t('changes.empty')}</div>
         )}
         {agents.map((a) => (
           <div key={a.agentId} className="mb-1 flex items-center gap-2 rounded border border-border bg-card px-2 py-1">
@@ -463,10 +475,10 @@ function ChangesPanel({ sessionId }: { sessionId: string }) {
               {a.branch}
             </span>
             <button onClick={() => void showDiff(a.agentId)} className="ml-auto rounded px-1.5 hover:bg-muted">
-              diff
+              {t('changes.diff')}
             </button>
             <button onClick={() => void promote(a.agentId)} disabled={busy} className="rounded px-1.5 text-teal hover:bg-muted disabled:opacity-40">
-              promote
+              {t('changes.promote')}
             </button>
           </div>
         ))}
@@ -476,7 +488,7 @@ function ChangesPanel({ sessionId }: { sessionId: string }) {
               <span className="font-mono">{diff.agentId}</span>
               <span className="text-muted-foreground">{diff.files.length} file(s)</span>
               <button onClick={() => setDiff(null)} className="ml-auto hover:underline">
-                close
+                {t('changes.close')}
               </button>
             </div>
             <div className="whitespace-pre-wrap px-2 py-1 font-mono text-[10px] text-muted-foreground">
@@ -490,19 +502,19 @@ function ChangesPanel({ sessionId }: { sessionId: string }) {
         {plan && (
           <div className="mt-2 overflow-hidden rounded border border-border">
             <div className="flex items-center gap-2 border-b border-border px-2 py-1 text-[11px]">
-              <span>merge queue · {plan.length} file(s)</span>
+              <span>{t('changes.queue', { n: plan.length })}</span>
               <button onClick={() => void applyClean()} disabled={busy} className="ml-auto rounded px-1.5 text-teal hover:bg-muted disabled:opacity-40">
-                apply clean
+                {t('changes.applyClean')}
               </button>
               <button onClick={() => setPlan(null)} className="hover:underline">
-                close
+                {t('changes.close')}
               </button>
             </div>
             {plan.map((f) => (
               <div key={f.path} className="flex items-center gap-2 border-b border-border/50 px-2 py-0.5 font-mono text-[10px]">
-                <span className={f.clean ? 'text-teal' : 'text-destructive'}>{f.clean ? 'clean' : 'conflict'}</span>
+                <span className={f.clean ? 'text-teal' : 'text-destructive'}>{f.clean ? t('changes.clean') : t('changes.conflict')}</span>
                 <span className="min-w-0 truncate">{f.path}</span>
-                {f.pending.length > 0 && <span className="ml-auto text-muted-foreground">{f.pending.length} pending</span>}
+                {f.pending.length > 0 && <span className="ml-auto text-muted-foreground">{t('changes.pending', { n: f.pending.length })}</span>}
               </div>
             ))}
           </div>
