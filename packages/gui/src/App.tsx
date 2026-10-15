@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type SessionMeta, type TaggedEvent } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveUsageSeries, truncate } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
 import { Transcript } from './components/Transcript.tsx'
@@ -10,6 +10,7 @@ import { AgentsPanel } from './components/AgentsPanel.tsx'
 import { TracePanel } from './components/TracePanel.tsx'
 import { ChangesPanel } from './components/ChangesPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
+import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
 
 type View = 'chat' | 'trace' | 'changes'
 const VIEWS: View[] = ['chat', 'trace', 'changes']
@@ -27,6 +28,7 @@ export default function App() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [runTick, setRunTick] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(() => window.matchMedia('(min-width: 768px)').matches)
   const [showPanel, setShowPanel] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   const [atBottom, setAtBottom] = useState(true)
@@ -59,6 +61,10 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen((v) => !v)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault()
+        setHelpOpen((v) => !v)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -111,9 +117,38 @@ export default function App() {
     setAtBottom(true)
   }
 
+  // Notify when a run lands while the tab is in the background.
+  const prevBusy = useRef(false)
+  useEffect(() => {
+    if (
+      prevBusy.current &&
+      !busy &&
+      document.hidden &&
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'granted'
+    ) {
+      new Notification('micro-harness', { body: t('notify.done') })
+    }
+    prevBusy.current = busy
+  }, [busy, t])
+
+  const downloadMarkdown = (): void => {
+    const meta = sessions.find((s) => s.id === current)
+    const md = toMarkdown(chat, { id: current ?? undefined, title: meta?.title, model: meta?.model })
+    const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(meta?.title || current || 'session').slice(0, 40)}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const send = async (): Promise<void> => {
     const text = input.trim()
     if (!text || busy) return
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      void Notification.requestPermission()
+    }
     setBusy(true)
     setError('')
     setInput('')
@@ -151,9 +186,16 @@ export default function App() {
       { id: 'changes', label: t('tabs.changes'), run: () => setView('changes') },
       { id: 'theme', label: t('palette.theme'), run: toggleTheme },
       { id: 'lang', label: t('palette.lang'), run: () => setLang(lang === 'zh' ? 'en' : 'zh') },
+      { id: 'export', label: t('palette.exportMd'), run: downloadMarkdown },
+      {
+        id: 'trace-json',
+        label: t('palette.copyTrace'),
+        run: () => void navigator.clipboard?.writeText(JSON.stringify(events, null, 2)),
+      },
+      { id: 'help', label: t('palette.shortcuts'), run: () => setHelpOpen(true) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, lang, setLang],
+    [t, lang, setLang, chat, events, current, sessions],
   )
 
   return (
@@ -274,7 +316,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          <div id={`panel-${view}`} role="tabpanel" className="min-h-0 flex-1">
+          <div id={`panel-${view}`} role="tabpanel" key={view} className="animate-slide min-h-0 flex-1">
             {view === 'chat' ? (
               <AgentsPanel roots={tree.roots} total={tree.total} />
             ) : view === 'trace' ? (
@@ -285,6 +327,8 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <CommandPalette
         open={paletteOpen}

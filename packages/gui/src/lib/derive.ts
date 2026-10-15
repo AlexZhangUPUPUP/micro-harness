@@ -267,3 +267,72 @@ export function groupSessions<T extends { updatedAt: number }>(
     .filter((k) => buckets[k].length > 0)
     .map((key) => ({ key, items: buckets[key] }))
 }
+
+export interface DiffLine {
+  kind: 'file' | 'hunk' | 'meta' | 'add' | 'del' | 'ctx'
+  old?: number
+  new?: number
+  text: string
+}
+
+/** Split a unified diff into lines, tracking old/new line numbers per hunk. */
+export function annotateDiff(text: string): DiffLine[] {
+  const out: DiffLine[] = []
+  let oldNo = 0
+  let newNo = 0
+  for (const line of text.split('\n')) {
+    if (line.startsWith('@@')) {
+      const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line)
+      if (m) {
+        oldNo = Number(m[1])
+        newNo = Number(m[2])
+      }
+      out.push({ kind: 'hunk', text: line })
+      continue
+    }
+    const kind: DiffLine['kind'] =
+      line.startsWith('diff --git') ||
+      line.startsWith('index ') ||
+      line.startsWith('new file') ||
+      line.startsWith('deleted file') ||
+      line.startsWith('\\')
+        ? 'file'
+        : line.startsWith('+++') || line.startsWith('---')
+          ? 'meta'
+          : line.startsWith('+')
+            ? 'add'
+            : line.startsWith('-')
+              ? 'del'
+              : 'ctx'
+    if (kind === 'add') out.push({ kind, new: newNo++, text: line.slice(1) })
+    else if (kind === 'del') out.push({ kind, old: oldNo++, text: line.slice(1) })
+    else if (kind === 'ctx') out.push({ kind, old: oldNo++, new: newNo++, text: line })
+    else out.push({ kind, text: line })
+  }
+  return out
+}
+
+/** Serialize a transcript to Markdown (export / clipboard). */
+export function toMarkdown(items: ChatItem[], meta: { title?: string; id?: string; model?: string } = {}): string {
+  const lines: string[] = [`# ${meta.title?.trim() || meta.id || 'micro-harness session'}`, '']
+  const sub: string[] = []
+  if (meta.model) sub.push(`model: \`${meta.model}\``)
+  if (meta.id) sub.push(`session: \`${meta.id}\``)
+  lines.push(`> ${sub.join(' · ') || 'micro-harness'}`, '')
+  const fence = (body: string, lang = ''): string => {
+    const f = body.includes('```') ? '````' : '```'
+    return `${f}${lang}\n${body}\n${f}`
+  }
+  for (const it of items) {
+    if (it.kind === 'user') lines.push('## You', '', it.text, '')
+    else if (it.kind === 'assistant')
+      lines.push(`## Assistant${it.agentId === 'main' ? '' : ` (${it.agentId})`}`, '', it.text, '')
+    else if (it.kind === 'notice') lines.push(`> [!${it.level === 'error' ? 'ERROR' : 'NOTE'}] ${it.text}`, '')
+    else {
+      lines.push(`### tool · \`${it.name}\`${it.ok === false ? ' (failed)' : ''}`, '')
+      if (it.args !== undefined) lines.push(fence(JSON.stringify(it.args, null, 2), 'json'), '')
+      if (it.output) lines.push(fence(it.output.slice(0, 4000)), '')
+    }
+  }
+  return lines.join('\n')
+}

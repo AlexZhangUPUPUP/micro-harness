@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, truncate } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, toMarkdown, truncate } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -110,4 +110,47 @@ test('groupSessions buckets by day', () => {
   const groups = groupSessions(sessions, now)
   expect(groups.map((g) => g.key)).toEqual(['today', 'yesterday', 'earlier'])
   expect(groups[0]!.items.map((s) => s.id)).toEqual(['a'])
+})
+
+test('annotateDiff numbers old/new lines per hunk', () => {
+  const diff = [
+    'diff --git a/a.txt b/a.txt',
+    'index 1..2 100644',
+    '--- a/a.txt',
+    '+++ b/a.txt',
+    '@@ -10,3 +10,4 @@',
+    ' keep',
+    '-drop',
+    '+add one',
+    '+add two',
+    ' tail',
+  ].join('\n')
+  const lines = annotateDiff(diff)
+  const add = lines.filter((l) => l.kind === 'add')
+  const del = lines.filter((l) => l.kind === 'del')
+  const ctx = lines.filter((l) => l.kind === 'ctx')
+  expect(add.map((l) => l.new)).toEqual([11, 12])
+  expect(del.map((l) => l.old)).toEqual([11])
+  // hunk says -10,3 +10,4 → 3 old lines (keep/drop/tail), 4 new (keep/add one/add two/tail)
+  expect(ctx.map((l) => l.old)).toEqual([10, 12])
+  expect(ctx.map((l) => l.new)).toEqual([10, 13])
+  // hunk headers and file headers never get a line number
+  expect(lines.filter((l) => l.kind === 'hunk' || l.kind === 'meta').every((l) => l.old === undefined && l.new === undefined)).toBe(true)
+})
+
+test('toMarkdown serializes a transcript', () => {
+  const md = toMarkdown(
+    [
+      { kind: 'user', id: 'u1', t: 0, text: 'hi' },
+      { kind: 'assistant', id: 'a1', t: 0, agentId: 'main', text: '```ts\nx\n```', streaming: false, input: 1, output: 2 },
+      { kind: 'tool', id: 't1', t: 0, agentId: 'main', name: 'read_file', args: { path: 'a' }, output: 'ok', ok: true },
+    ],
+    { id: 's1', title: 'My session', model: 'deepseek-chat' },
+  )
+  expect(md.startsWith('# My session')).toBe(true)
+  expect(md).toContain('## You')
+  expect(md).toContain('## Assistant')
+  expect(md).toContain('### tool · `read_file`')
+  expect(md).toContain('```ts\nx\n```') // assistant markdown passes through verbatim
+  expect(md).toContain('deepseek-chat')
 })
