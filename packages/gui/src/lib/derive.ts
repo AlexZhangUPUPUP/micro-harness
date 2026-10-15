@@ -9,7 +9,7 @@ import type { TaggedEvent } from './api.ts'
 export type ChatItem =
   // `at` is the index of this event in the input `events` array (not its `seq`).
   // It is used to truncate a forked session when a user message is edited and resent.
-  | { kind: 'user'; id: string; t: number; text: string; at: number }
+  | { kind: 'user'; id: string; t: number; text: string; at: number; pending?: boolean }
   | {
       kind: 'assistant'
       id: string

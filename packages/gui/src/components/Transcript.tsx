@@ -111,7 +111,7 @@ function UserBubble({
       <div className="max-w-[70%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-teal to-teal/80 px-3.5 py-2 text-[13px] leading-relaxed text-white shadow-[0_2px_12px_hsl(var(--teal)/0.35)]">
         {item.text}
       </div>
-      {onEditResend && (
+      {onEditResend && !item.pending && (
         <button
           onClick={() => setEditing(true)}
           title={t('chat.editTitle')}

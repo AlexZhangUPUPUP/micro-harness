@@ -40,6 +40,9 @@ export default function App() {
   const [input, setInput] = useState('')
   const [images, setImages] = useState<ImageInput[]>([])
   const [pending, setPending] = useState<Record<string, boolean>>({})
+  // Locally echoed user messages, shown before the server's `user.message` event
+  // arrives so sending feels instant.
+  const [optimistic, setOptimistic] = useState<Array<{ id: string; text: string; t: number }>>([])
   const [error, setError] = useState('')
   const [view, setView] = useState<View>('chat')
   const [replayAt, setReplayAt] = useState<number | null>(null)
@@ -151,6 +154,20 @@ export default function App() {
       onEvent: (e) => {
         setError('')
         setEvents((prev) => (prev.some((x) => x.seq === e.seq && x.agentId === e.agentId) ? prev : [...prev, e]))
+        // The server echoed a user message: drop the local optimistic copy.
+        if (e.event.type === 'user.message') {
+          const ev = e.event as { content?: unknown; text?: unknown }
+          const text = String(ev.content ?? ev.text ?? '')
+          setOptimistic((prev) => {
+            const i = prev.findIndex((o) => o.text === text)
+            if (i === -1) return prev
+            const next = prev.slice()
+            next.splice(i, 1)
+            return next
+          })
+        } else if (e.event.type === 'error') {
+          setOptimistic([])
+        }
       },
       onError: () => setError('event stream disconnected'),
     })
@@ -163,6 +180,14 @@ export default function App() {
   const shown = useMemo(() => (replayAt == null ? events : truncate(events, replayAt)), [events, replayAt])
   const usageSeries = useMemo(() => deriveUsageSeries(shown), [shown])
   const chat = useMemo(() => deriveChat(shown), [shown])
+  // Chat + any not-yet-acknowledged local echoes.
+  const items = useMemo(
+    () => [
+      ...chat,
+      ...optimistic.map((o) => ({ kind: 'user' as const, id: o.id, t: o.t, text: o.text, at: -1, pending: true })),
+    ],
+    [chat, optimistic],
+  )
   const tree = useMemo(() => deriveAgents(shown), [shown])
   const requests = useMemo(() => deriveInspector(shown), [shown])
   const approvals = useMemo(() => pendingApprovals(events), [events])
@@ -173,7 +198,7 @@ export default function App() {
     if (!atBottom) return
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [chat.length, chat[chat.length - 1]?.kind, atBottom, current])
+  }, [items.length, items[items.length - 1]?.kind, atBottom, current])
 
   const onScroll = (): void => {
     const el = scrollRef.current
@@ -225,6 +250,8 @@ export default function App() {
     setImages([])
     const key = current ?? NEW_KEY
     setPending((p) => ({ ...p, [key]: true }))
+    const optId = `opt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    setOptimistic((prev) => [...prev, { id: optId, text, t: Date.now() }])
     try {
       if (current) {
         await api.resume(current, text, attached)
@@ -237,6 +264,7 @@ export default function App() {
       void refreshSessions()
     } catch (err) {
       setError(String((err as Error).message))
+      setOptimistic((prev) => prev.filter((o) => o.id !== optId))
     } finally {
       setPending((p) => {
         const next = { ...p }
@@ -335,7 +363,7 @@ export default function App() {
 
   const paletteActions: PaletteAction[] = useMemo(
     () => [
-      { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]) } },
+      { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]); setOptimistic([]) } },
       { id: 'chat', label: t('tabs.chat'), run: () => setView('chat') },
       { id: 'trace', label: t('tabs.trace'), run: () => setView('trace') },
       { id: 'changes', label: t('tabs.changes'), run: () => setView('changes') },
@@ -389,11 +417,13 @@ export default function App() {
               composing.current = false
               setCurrent(id)
               setReplayAt(null)
+              setOptimistic([])
             }}
             onNew={() => {
               composing.current = true
               setCurrent(null)
               setEvents([])
+              setOptimistic([])
             }}
             onRename={renameSession}
             onDelete={(id) => {
@@ -421,7 +451,7 @@ export default function App() {
             className={replayAt == null ? 'bg-dots min-h-0 flex-1 overflow-y-auto px-4 py-4' : 'min-h-0 flex-1 overflow-y-auto bg-gold/5 px-4 py-4'}
           >
             <Transcript
-              items={chat}
+              items={items}
               onEditResend={(at, text) => void editResend(at, text)}
               approvals={approvals}
               onDecide={(id, allow) => void onDecide(id, allow)}
