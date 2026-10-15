@@ -121,6 +121,12 @@ cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev   # terminal 2
 The server reads `MICRO_MODEL` (use the provider's real model id, e.g.
 `deepseek-chat`), `MICRO_BASE_URL`, `MICRO_API_KEY` and `MICRO_DATA_DIR`.
 
+The transcript renders **Markdown with syntax-highlighted code** (a dependency-free
+renderer ported from PiStudio), and **⌘K** opens a command palette that also does
+full-text search across every saved session (`/api/search`, FTS5):
+
+![command palette](docs/gui-palette.png)
+
 Everything the GUI renders is derived from the event stream by pure functions in
 `packages/gui/src/lib/derive.ts` (unit-tested).
 

@@ -30,6 +30,15 @@ export interface SessionMeta {
   cost: number
 }
 
+export interface SearchHit {
+  sessionId: string
+  agentId: string
+  type: string
+  content?: string
+  title?: string
+  model?: string
+}
+
 export interface AgentWorktree {
   agentId: string
   path: string
@@ -92,7 +101,7 @@ export const api = {
     ),
   fork: (id: string) => j<{ session: SessionMeta }>(`/api/sessions/${id}/fork`, { method: 'POST' }).then((d) => d.session),
   remove: (id: string) => j<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
-  search: (q: string) => j<{ hits: unknown[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+  search: (q: string) => j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
 
   // --- workspace isolation + merge queue (P7) ---
   agents: (id: string) => j<{ agents: AgentWorktree[] }>(`/api/sessions/${id}/agents`).then((d) => d.agents),
