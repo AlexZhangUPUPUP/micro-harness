@@ -85,3 +85,58 @@ the bulk in the window. The general rule:
 > your instructions without exercising the thing you are testing, your test measures
 > nothing — and it will pass.
 
+## The LLM judge
+
+Some work has no single right answer — is this refactor readable? is that error handling
+honest? A deterministic check can only test a few sample inputs, so `rubric` tasks add an
+**LLM judge**: a strict, rubric-bound reviewer that must answer with JSON
+(`{verdict, score, reasons, violations}`; anything unparseable is an **error**, never a
+pass).
+
+Guardrails, because "call a model and believe it" is not a grader:
+
+- the rubric is the only standard; the judge is told not to reward verbosity or flattery
+  and that a missing requirement is a `fail`;
+- the prompt **never names the harness, config or model** that produced the work, so it
+  cannot play favourites;
+- `judge model != agent model` is reported, because a model grading its own output is a
+  known bias;
+- **calibration is printed on every run**: for tasks that have both a deterministic check
+  and a rubric, the judge's verdict is compared against the check, and every disagreement
+  is listed. That is not a judge-accuracy number — it is a **disagreement detector**: when
+  the two disagree, one of them is wrong and you have to look.
+
+### It earned its keep immediately
+
+On the first real run (5 tasks, real DeepSeek, judge = `deepseek-reasoner`) the judge
+disagreed with the checks twice, and investigation showed **the judge was right**:
+
+`add-validation` asked the agent to make a config parser throw descriptive errors. The
+check verified `port=abc` and a missing `host` — and passed. The judge failed it (score
+2.0) and quoted the cause: a line without `=` still reached `value.trim()` and leaked a
+bare `TypeError`.
+
+Two rounds of "hardening" the check then failed to catch it, the second one instructively:
+it matched on the *error message*, and the message is **engine-specific** — V8 says
+`Cannot read properties of undefined (reading 'trim')`, Bun (JavaScriptCore) says
+`undefined is not an object (evaluating 'value.trim')`. A grader that matches on wording
+silently passes the bug on a different runtime.
+
+The final check asserts on **semantics** instead — a leaked `TypeError` is a failure — and
+now discriminates in both directions (half-fixed code fails, properly fixed code passes).
+Three iterations of a deterministic grader missed this defect; the judge found it by
+reading the code. That is the case for having one.
+
+### What it costs, honestly
+
+| | agent | judge |
+|---|---|---|
+| cost on that 5-task batch | $0.0103 | $0.0113 |
+| model | `deepseek-chat` | `deepseek-reasoner` |
+
+The judge roughly doubles the cost of a run, and it is **stricter** than the checks
+(score 2.0 on code the check called fine) — which is useful for finding weak graders but
+would be unfair as a sole gate without calibration. The calibration set is currently small
+(3 `both` tasks), there are no human labels, and `--judge-runs=N` exists to check
+self-consistency but is not free.
+

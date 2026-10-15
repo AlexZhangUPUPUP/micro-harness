@@ -28,3 +28,5 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-16 · P9 验收 · 真机长会话（31 次模型调用，带消融对照）：窗口峰值 4455/5000、0 次 API 报错；第 1 轮埋的不可猜约束在 `drop-middle` 与 `summarize` 下存活，在 `tail` 下丢失（证明是机制而非运气）；发现两条实测代价——反复压缩使缓存命中衰减到 ~66%，`summarize` 峰值更高
 - 2026-10-16 · 评测方法 · 修掉一个会让测试"假通过"的设计缺陷：刺激必须躲不掉（模型曾用 offset/limit=1 绕开 8KB bulk，导致压缩根本没触发）。教训写进 scripts/evals/README.md
 
+- 2026-10-16 · P10（完）· **LLM 裁判 + 任务集扩到 18 个**（8 原确定性 + 4 新确定性 + 6 rubric；`both` 任务同时喂确定性判分与校准）；mock 全绿（36/36，exit 0）；真机校准第一次就抓到确定性判分漏掉的真 bug（`value.trim()` 漏 TypeError）——而我两次"加固"都失败，第二次因为按引擎相关的错误措辞匹配（V8 vs Bun/JSC），最终改为断言语义并双向验证
+
