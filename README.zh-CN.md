@@ -136,8 +136,11 @@ micro-harness --version              # 0.1.0
 **跑整套**——服务端、GUI，并自动找到可用的 key：
 
 ```bash
-scripts/dev.sh                   # → http://127.0.0.1:5273
+bun run ui                       # 单进程：服务端顺便托管 GUI  → http://127.0.0.1:8787
+bun run dev                      # 两进程（server + Vite preview）→ http://127.0.0.1:5273
 ```
+
+两者都会自动开浏览器（`scripts/dev.sh --no-open` 可关）；`MICRO_ISOLATE=1` 让每个子 agent 各用一个 git worktree。
 
 <details>
 <summary>全部 CLI 参数与环境变量</summary>

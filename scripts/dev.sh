@@ -12,8 +12,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# --single : serve the built GUI from the server (one process, one port)
+# --no-open: do not open a browser
+SINGLE=0
+OPEN=1
+for arg in "$@"; do
+  case "$arg" in
+    --single|--static) SINGLE=1 ;;
+    --open) OPEN=1 ;;
+    --no-open) OPEN=0 ;;
+  esac
+done
+
 SERVER_PORT="${MICRO_PORT:-8787}"
 GUI_PORT="${MICRO_GUI_PORT:-5273}"
+[ "$SINGLE" = 1 ] && GUI_PORT="$SERVER_PORT"
 MODEL="${MICRO_MODEL:-deepseek-chat}"
 ISOLATE="${MICRO_ISOLATE:-0}"
 MODELS="${MICRO_MODELS:-}"
@@ -53,7 +66,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" \
+MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" \
 MICRO_PRICE_INPUT="${MICRO_PRICE_INPUT:-}" MICRO_PRICE_OUTPUT="${MICRO_PRICE_OUTPUT:-}" \
 MICRO_PRICE_INPUT_CACHED="${MICRO_PRICE_INPUT_CACHED:-}" MICRO_MAX_TOOL_OUTPUT="${MICRO_MAX_TOOL_OUTPUT:-}" \
   bun packages/server/src/main.ts >/tmp/micro-harness-server.log 2>&1 &
@@ -64,18 +77,20 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 
-(cd packages/gui && MICRO_SERVER="http://127.0.0.1:$SERVER_PORT" MICRO_GUI_PORT="$GUI_PORT" bun run preview >/tmp/micro-harness-gui.log 2>&1) &
-GUI=$!
+if [ "$SINGLE" = 0 ]; then
+  (cd packages/gui && MICRO_SERVER="http://127.0.0.1:$SERVER_PORT" MICRO_GUI_PORT="$GUI_PORT" bun run preview >/tmp/micro-harness-gui.log 2>&1) &
+  GUI=$!
 
-# wait for the GUI to answer
-for _ in $(seq 1 60); do
-  curl -sf "http://127.0.0.1:$GUI_PORT/" >/dev/null 2>&1 && break
-  sleep 0.25
-done
+  # wait for the GUI to answer
+  for _ in $(seq 1 60); do
+    curl -sf "http://127.0.0.1:$GUI_PORT/" >/dev/null 2>&1 && break
+    sleep 0.25
+  done
+fi
 
 cat <<EOF
 
-  micro-harness is running
+  micro-harness is running$([ "$SINGLE" = 1 ] && echo ' (single process)')
 
     GUI     http://127.0.0.1:$GUI_PORT      ← open this
     API     http://127.0.0.1:$SERVER_PORT
@@ -88,5 +103,13 @@ cat <<EOF
   Type a task in the GUI and press Enter. Ctrl-C stops everything.
 
 EOF
+
+if [ "$OPEN" = 1 ]; then
+  if command -v open >/dev/null 2>&1; then
+    open "http://127.0.0.1:$GUI_PORT/" >/dev/null 2>&1 || true
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "http://127.0.0.1:$GUI_PORT/" >/dev/null 2>&1 || true
+  fi
+fi
 
 wait

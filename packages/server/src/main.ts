@@ -16,6 +16,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 import {
   connectMcpServers,
   loadAgentRoles,
@@ -45,6 +46,19 @@ if (!apiKey) console.error('warning: MICRO_API_KEY is not set — model calls wi
 
 const agentsDir = process.env.MICRO_AGENTS_DIR
 const roles = agentsDir ? loadAgentRoles(path.resolve(agentsDir)) : []
+
+// Single-process mode: when the GUI is built, serve it from this same server so
+// `bun packages/server/src/main.ts` (or `bun run ui`) is the whole app. Set
+// MICRO_SERVE_GUI=0 for an API-only deployment, MICRO_GUI_DIR to point elsewhere.
+const defaultGuiDir = path.resolve(import.meta.dir, '../../gui/dist')
+const guiDir: string | false =
+  process.env.MICRO_SERVE_GUI === '0'
+    ? false
+    : process.env.MICRO_GUI_DIR
+      ? path.resolve(process.env.MICRO_GUI_DIR)
+      : existsSync(path.join(defaultGuiDir, 'index.html'))
+        ? defaultGuiDir
+        : false
 
 // MCP: read the config once at boot, connect, merge the tools. Nothing below this
 // line knows MCP exists — they are just more `Tool`s. A failing server is reported
@@ -78,6 +92,7 @@ const server = createServer({
   hostname,
   port,
   token,
+  guiDir,
   roles,
   allowBash: process.env.MICRO_ALLOW_BASH === '1',
   isolation: process.env.MICRO_ISOLATE === '1' ? 'worktree' : 'none',
@@ -92,7 +107,7 @@ const server = createServer({
   maxToolOutput: Number(process.env.MICRO_MAX_TOOL_OUTPUT ?? 0) || undefined,
 })
 
-console.log(`micro-harness server · ${server.url} · data ${dataDir}${token ? ' · auth on' : ''}`)
+console.log(`micro-harness server · ${server.url} · data ${dataDir}${guiDir ? ' · GUI on' : ''}${token ? ' · auth on' : ''}`)
 
 const shutdown = (): void => {
   console.log('\nshutting down…')
