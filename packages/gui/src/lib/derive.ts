@@ -378,3 +378,61 @@ export function splitDiffHunks(diff: string): DiffHunk[] {
   }
   return out
 }
+
+export interface RequestMessage {
+  role: string
+  content?: string | null
+  name?: string
+  tool_call_id?: string
+  tool_calls?: unknown
+}
+
+export interface ModelRequest {
+  agentId: string
+  t: number
+  model: string
+  system: string
+  tools: string[]
+  messages: RequestMessage[]
+  /** The harness's own estimate of the payload it sent. */
+  tokens: number
+}
+
+/** The exact payloads handed to the model, oldest first (the Inspector). */
+export function deriveInspector(events: TaggedEvent[]): ModelRequest[] {
+  const out: ModelRequest[] = []
+  for (const e of events) {
+    if (e.event.type !== 'model.request') continue
+    const ev = e.event as {
+      model?: string
+      system?: string
+      tools?: string[]
+      messages?: unknown[]
+      tokens?: number
+    }
+    out.push({
+      agentId: e.agentId,
+      t: e.t,
+      model: ev.model ?? '',
+      system: ev.system ?? '',
+      tools: ev.tools ?? [],
+      messages: (ev.messages ?? []) as RequestMessage[],
+      tokens: ev.tokens ?? 0,
+    })
+  }
+  return out
+}
+
+/** One-line summary of a message, for the inspector's list. */
+export function messagePreview(m: RequestMessage, max = 120): string {
+  const calls = m.tool_calls
+  if (Array.isArray(calls) && calls.length) {
+    const names = calls
+      .map((c) => (c as { function?: { name?: string } }).function?.name)
+      .filter((n): n is string => Boolean(n))
+    return `→ ${names.join(', ') || 'tool_call'}`
+  }
+  const body = String(m.content ?? '').replace(/\s+/g, ' ').trim()
+  if (m.role === 'tool') return `${m.name ?? 'tool'}: ${body.slice(0, max)}`
+  return body.slice(0, max)
+}

@@ -1,17 +1,22 @@
 # micro-harness
 
-**A minimal, dependency-free agent harness** — the agent loop, tool dispatch and
-context windowing, in a few hundred lines of TypeScript. No SDK, no framework, no
-build step: Node ≥ 22.18 runs the `.ts` files directly.
+**A plugin-based coding-agent platform** — its own agent loop, multi-agent
+orchestration, server, CLI and web GUI — grown from a minimal, readable harness.
 
 **English** · [简体中文](README.zh-CN.md)
 
+> **Which branch is this?** This README documents the **`platform`** branch.
+> [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) holds the
+> original **minimal seed**: six files under `src/`, no dependencies, no build step,
+> run directly by Node ≥ 22.18. Read that one end to end to understand how an agent
+> harness works — this branch is the platform built on the same design. The
+> platform's P0 moved the seed into `packages/core`, which is why there is no `src/`
+> here.
+
 > An **agent harness** is the runtime that wraps an LLM and turns it into an
 > agent: it runs the loop, executes tools, manages the context window and talks to
-> the model. This repo is a clear, readable implementation of exactly those four
-> pieces — nothing more.
+> the model.
 
-```
         ┌──────────────────────────────────────────────────────┐
         │                      harness                         │
         │                                                      │
@@ -22,47 +27,53 @@ build step: Node ≥ 22.18 runs the `.ts` files directly.
         │                     │                                │
         │              context.trim() when the window fills    │
         └──────────────────────────────────────────────────────┘
-```
 
 ## Run it
 
 ```bash
-export MICRO_BASE_URL=https://api.deepseek.com     # any OpenAI-compatible endpoint
-export MICRO_API_KEY=sk-...
-export MICRO_MODEL=deepseek-chat
+bun install
 
-node src/cli.ts "Create hello.txt with 'hi', then read it back and print the contents"
-node src/cli.ts               # interactive REPL (keeps context between turns)
-node src/cli.ts --allow-bash "Find the 3 largest files and summarise them"
-node src/cli.ts --trace "…"   # write a JSONL transcript to ./traces/
+# the CLI — the seed's cli.ts, grown up, now at packages/core/src/cli.ts
+bun start "Create hello.txt with 'hi', then read it back and print the contents"
+bun start                       # interactive REPL (/help, prompt templates, skills)
+bun start --allow-bash "Find the 3 largest files and summarise them"
+bun start --isolate --tree "…"  # a git worktree per sub-agent + print the agent tree
+bun start -- run --auto --tasks tasks.txt   # unattended driver (budget + timeout)
+
+# the whole stack: server (SSE + SQLite/FTS) and the GUI
+scripts/dev.sh                  # → http://127.0.0.1:5273
 ```
 
 | flag | meaning |
 |---|---|
 | `--dir <path>` | working directory the tools are sandboxed to (default `.`) |
 | `--model <id>` / `--base-url <url>` | override the env config |
+| `--approval <mode>` | `suggest` / `auto-edit` / `full-auto` (default `full-auto`) |
 | `--allow-bash` | enable the `bash` tool (off by default) |
-| `--max-steps <n>` | loop iterations before giving up (default 24) |
-| `--max-context <n>` | context budget in estimated tokens (default 24000) |
+| `--isolate` | give every sub-agent its own git worktree |
+| `--tree` | print the agent tree when the run finishes |
+| `--max-steps <n>` / `--max-context <n>` | loop iterations (24) / context budget (24000) |
 | `--trace` | append every event to a JSONL transcript |
 | `--quiet` | don't print tool activity |
 
 ## The four pieces
 
+Still the heart of the project — the seed's four files now live in
+`packages/core/src/`, and everything else is built around them:
+
 | file | what it is |
 |---|---|
-| `src/harness.ts` | **the loop** — model → tools → feed results back → repeat, with a step limit |
-| `src/tools.ts` | **tool registry + dispatch** — `read_file`, `write_file`, `list_dir`, `bash`; path-sandboxed; tool errors become messages the model can recover from |
-| `src/context.ts` | **context windowing** — token estimate + trimming that keeps the system prompt and whole turns, never orphaning a tool result from its call |
-| `src/model.ts` | **model I/O** — an OpenAI-compatible `chat/completions` call with retries on 429/5xx |
-
-Plus a tiny `src/trace.ts` (JSONL transcripts) and `src/cli.ts` (one-shot + REPL).
+| `packages/core/src/harness.ts` | **the loop** — model → tools → feed results back → repeat, with a step limit, parallel tool calls and approval modes |
+| `packages/core/src/tools.ts` | **tool registry + dispatch** — `read_file`, `write_file`, `list_dir`, `bash`; path-sandboxed; tool errors become messages the model can recover from |
+| `packages/core/src/context.ts` | **context windowing** — token estimate + trimming that keeps the system prompt and whole turns, never orphaning a tool result from its call |
+| `packages/core/src/model.ts` | **model I/O** — an OpenAI-compatible `chat/completions` call with streaming and retries on 429/5xx |
 
 ## Design notes
 
-- **Zero runtime dependencies.** Only Node built-ins (`node:child_process`,
-  `node:fs`, `fetch`). There is no `npm install` step to run it.
-- **No build step.** Node's type stripping runs the TypeScript directly.
+- **The seed is dependency-free; the platform is not.** `main`'s `src/` uses only
+  Node built-ins. This branch is a Bun monorepo — Bun for the toolchain,
+  `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root
+  `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` which is
   appended as a normal `tool` message — the model sees the failure and can retry,
   which is what makes an agent loop robust.
@@ -70,9 +81,11 @@ Plus a tiny `src/trace.ts` (JSONL transcripts) and `src/cli.ts` (one-shot + REPL
   traversal; `bash` is opt-in.
 - **Trimming keeps turns intact.** A `tool` message is only ever kept together
   with the assistant `tool_calls` that produced it.
-- **Observability is built in.** The loop emits structured events
-  (`step`, `tool_call`, `tool_result`, `trim`, `usage`); the CLI renders them and
-  `--trace` persists them.
+- **Events are the single contract.** The loop emits one tagged event stream; the
+  session JSONL, the server's SSE, the CLI, the GUI's trace/replay and the
+  Inspector are all just consumers of it.
+- **Share capabilities, isolate state.** Providers, tools and the store are
+  shared; messages, cwd and policy are per session and per sub-agent.
 
 ## Tests
 
@@ -140,9 +153,15 @@ full-text search across every saved session (`/api/search`, FTS5):
 
 ![command palette](docs/gui-palette.png)
 
-The right panel has three views. **agents** draws the sub-agent tree with per-node
-usage (hover a node for its detail card), and **trace** is the raw event stream with
-category chips, a text filter and a replay scrubber:
+The right panel has four views. **agents** draws the sub-agent tree with per-node
+usage (hover a node for its detail card); **trace** is the raw event stream with
+category chips, a text filter and a replay scrubber; **changes** reviews an agent's
+diff hunk by hunk; and **inspector** answers *"what exactly did we send to the
+model?"* — for every turn it shows the exact payload that went out: the system
+prompt, the tool schemas, and every message, taken straight from a `model.request`
+event:
+
+![inspector](docs/gui-inspector.png)
 
 ![trace panel](docs/gui-trace.png)
 
@@ -178,17 +197,16 @@ original session is left untouched. The composer's **model picker** is fed by
 `GET /api/models`, so `MICRO_MODELS=model-a,model-b scripts/dev.sh` advertises
 several.
 
-## Two layers in one repo
+## Two branches, one project
 
-`main` is the **minimal seed**: everything under `src/` is a dependency-free harness
-you can read end to end — the loop, tool dispatch, context windowing and model I/O —
-run directly by Node ≥ 22.18.
+| branch | what it is |
+|---|---|
+| [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) | the **minimal seed** — `src/`, six files, zero dependencies, no build step, run by Node ≥ 22.18. The reference implementation to read end to end. |
+| `platform` (this branch) | the **platform** — `packages/{kernel,core,server,gui}`: plugin kernel, event-driven core, multi-agent orchestration, server, CLI and GUI, built on the seed's design. It is a direct descendant of `main`, not a fork. |
 
-This **`platform`** branch grows that seed into a full **agent platform** under
-`packages/`: a plugin kernel, an event-driven core with streaming and parallel tool
-calls, first-class multi-agent orchestration, a server with SSE + a SQLite/FTS index,
-a CLI, and the web GUI above. The seed in `src/` is left intact as the readable
-reference — the platform was built on the same design rather than forking it.
+The seed was not duplicated — P0 *moved* those files into `packages/core` and grew
+the platform around them, which is why this branch has no `src/` and `main` still
+holds the readable original.
 
 See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the design of the full harness
 platform — plugin kernel, composition, server, GUI, MCP/ACP — and

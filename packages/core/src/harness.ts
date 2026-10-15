@@ -75,6 +75,7 @@ export class Harness {
   readonly model: string
   readonly #provider: Provider
   readonly #tools: Tool[]
+  readonly #system: string
   readonly #toolCtx: ToolContext
   readonly #maxSteps: number
   readonly #maxContextTokens: number
@@ -103,6 +104,7 @@ export class Harness {
     this.log = new AgentLog(this.hub, opts.agentId ?? 'main', opts.parentId ?? null)
 
     const system = opts.systemPrompt ?? defaultSystemPrompt(opts.cwd)
+    this.#system = system
     this.messages = [{ role: 'system', content: system }]
     this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd, parentId: opts.parentId ?? null })
   }
@@ -127,6 +129,17 @@ export class Harness {
           strategy: 'window',
         })
       }
+
+      // The Inspector: record exactly what this turn hands to the model, after
+      // trimming. Shallow-copy the array so a later push cannot rewrite history.
+      this.log.emit({
+        type: 'model.request',
+        model: this.model,
+        system: this.#system,
+        tools: this.#tools.map((t) => t.name),
+        messages: [...this.messages],
+        tokens: estimateTokens(this.messages),
+      })
 
       const { message, usage } = await this.#provider.chat({
         model: this.model,
