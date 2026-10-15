@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type SessionMeta, type TaggedEvent } from './lib/api.ts'
+import { api, type SessionMeta, type TaggedEvent, type AgentWorktree, type AgentDiff, type IntegrateFile } from './lib/api.ts'
 import { deriveAgents, deriveChat, truncate, type AgentNode, type ChatItem } from './lib/derive.ts'
 
 const fmtTokens = (n: number): string => (n < 1000 ? String(n) : n < 1_000_000 ? (n / 1000).toFixed(1) + 'k' : (n / 1e6).toFixed(1) + 'M')
@@ -13,7 +13,7 @@ export default function App() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [view, setView] = useState<'chat' | 'trace'>('chat')
+  const [view, setView] = useState<'chat' | 'trace' | 'changes'>('chat')
   const [replayAt, setReplayAt] = useState<number | null>(null)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [runTick, setRunTick] = useState(0)
@@ -100,7 +100,7 @@ export default function App() {
         <span className="font-semibold">micro-harness</span>
         <span className="truncate font-mono text-[11px] text-muted-foreground">{current ?? 'no session'}</span>
         <div className="ml-auto flex items-center gap-2">
-          {(['chat', 'trace'] as const).map((v) => (
+          {(['chat', 'trace', 'changes'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -130,9 +130,11 @@ export default function App() {
         <aside className="w-[320px] shrink-0 border-l border-border">
           {view === 'chat' ? (
             <AgentsPanel roots={tree.roots} total={tree.total} />
-          ) : (
+          ) : view === 'trace' ? (
             <TracePanel events={events} replayAt={replayAt} setReplayAt={setReplayAt} />
-          )}
+          ) : current ? (
+            <ChangesPanel sessionId={current} />
+          ) : null}
         </aside>
       </div>
     </div>
@@ -287,6 +289,11 @@ function AgentRow({ node }: { node: AgentNode }) {
         <div className="flex items-center gap-2">
           <span className={node.status === 'error' ? 'text-destructive' : node.status === 'active' ? 'text-gold' : 'text-teal'}>●</span>
           <span className="font-mono">{label}</span>
+          {node.worktree && (
+            <span className="rounded border border-teal/40 px-1 text-[9px] text-teal" title={node.worktree.branch}>
+              wt
+            </span>
+          )}
           <span className="ml-auto font-mono text-[10px] text-muted-foreground">
             {fmtTokens(node.input + node.output)} tok{node.cost ? ' · ' + fmtCost(node.cost) : ''}
           </span>
@@ -358,4 +365,149 @@ function summarize(e: TaggedEvent): string {
     if (typeof ev[key] === 'string') return String(ev[key]).replace(/\n/g, ' ').slice(0, 80)
   }
   return ''
+}
+
+/* ------------------------------------------------- isolation / merge queue */
+
+function ChangesPanel({ sessionId }: { sessionId: string }) {
+  const [agents, setAgents] = useState<AgentWorktree[]>([])
+  const [diff, setDiff] = useState<AgentDiff | null>(null)
+  const [plan, setPlan] = useState<IntegrateFile[] | null>(null)
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(() => {
+    api
+      .agents(sessionId)
+      .then(setAgents)
+      .catch(() => setAgents([]))
+  }, [sessionId])
+  useEffect(() => reload(), [reload])
+
+  const showDiff = async (agentId: string): Promise<void> => {
+    setMsg('')
+    try {
+      setDiff(await api.agentDiff(sessionId, agentId))
+    } catch (err) {
+      setMsg(String((err as Error).message))
+    }
+  }
+
+  const promote = async (agentId: string): Promise<void> => {
+    setBusy(true)
+    setMsg('')
+    try {
+      const r = await api.promoteAgent(sessionId, agentId)
+      setMsg(
+        r.ok
+          ? `promoted ${r.applied.length} file(s)${r.conflicts.length ? ` · ${r.conflicts.length} conflict(s)` : ''}`
+          : `promote failed: ${r.error ?? 'conflicts'}`,
+      )
+      reload()
+    } catch (err) {
+      setMsg(String((err as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const preview = async (): Promise<void> => {
+    setBusy(true)
+    setMsg('')
+    try {
+      setPlan((await api.integrate(sessionId)).files)
+    } catch (err) {
+      setMsg(String((err as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const applyClean = async (): Promise<void> => {
+    if (!plan) return
+    const files = plan.filter((f) => f.clean && !f.binary && !f.skipped).map((f) => ({ path: f.path, content: f.content ?? '' }))
+    setBusy(true)
+    setMsg('')
+    try {
+      const r = await api.integrateApply(sessionId, files)
+      setMsg(`integrated ${r.applied.length} file(s)`)
+      setPlan(null)
+      reload()
+    } catch (err) {
+      setMsg(String((err as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+        <span>changes · {agents.length} isolated agent(s)</span>
+        <button onClick={preview} disabled={busy || !agents.length} className="ml-auto rounded px-1.5 hover:bg-muted disabled:opacity-40">
+          integrate all
+        </button>
+      </div>
+      {msg && <div className="border-b border-border px-3 py-1 text-[11px] text-muted-foreground">{msg}</div>}
+      <div className="min-h-0 flex-1 overflow-y-auto p-2 text-[12px]">
+        {agents.length === 0 && (
+          <div className="p-2 text-[11px] text-muted-foreground">
+            No isolated agents. Start the server with <span className="font-mono">MICRO_ISOLATE=1</span> and ask the agent to use the{' '}
+            <span className="font-mono">task</span> tool.
+          </div>
+        )}
+        {agents.map((a) => (
+          <div key={a.agentId} className="mb-1 flex items-center gap-2 rounded border border-border bg-card px-2 py-1">
+            <span className="font-mono">{a.agentId.split('/').pop()}</span>
+            <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground" title={a.branch}>
+              {a.branch}
+            </span>
+            <button onClick={() => void showDiff(a.agentId)} className="ml-auto rounded px-1.5 hover:bg-muted">
+              diff
+            </button>
+            <button onClick={() => void promote(a.agentId)} disabled={busy} className="rounded px-1.5 text-teal hover:bg-muted disabled:opacity-40">
+              promote
+            </button>
+          </div>
+        ))}
+        {diff && (
+          <div className="mt-2 overflow-hidden rounded border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-2 py-1 text-[11px]">
+              <span className="font-mono">{diff.agentId}</span>
+              <span className="text-muted-foreground">{diff.files.length} file(s)</span>
+              <button onClick={() => setDiff(null)} className="ml-auto hover:underline">
+                close
+              </button>
+            </div>
+            <div className="whitespace-pre-wrap px-2 py-1 font-mono text-[10px] text-muted-foreground">
+              {diff.files.map((f) => `${f.status} ${f.path} +${f.add} -${f.del}`).join('\n')}
+            </div>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words px-2 py-1 font-mono text-[10px]">
+              {diff.diff.slice(0, 20000)}
+            </pre>
+          </div>
+        )}
+        {plan && (
+          <div className="mt-2 overflow-hidden rounded border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-2 py-1 text-[11px]">
+              <span>merge queue · {plan.length} file(s)</span>
+              <button onClick={() => void applyClean()} disabled={busy} className="ml-auto rounded px-1.5 text-teal hover:bg-muted disabled:opacity-40">
+                apply clean
+              </button>
+              <button onClick={() => setPlan(null)} className="hover:underline">
+                close
+              </button>
+            </div>
+            {plan.map((f) => (
+              <div key={f.path} className="flex items-center gap-2 border-b border-border/50 px-2 py-0.5 font-mono text-[10px]">
+                <span className={f.clean ? 'text-teal' : 'text-destructive'}>{f.clean ? 'clean' : 'conflict'}</span>
+                <span className="min-w-0 truncate">{f.path}</span>
+                {f.pending.length > 0 && <span className="ml-auto text-muted-foreground">{f.pending.length} pending</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
