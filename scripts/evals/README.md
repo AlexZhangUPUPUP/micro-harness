@@ -2,9 +2,11 @@
 
 A minimal but honest eval harness: **"did the agent actually do the task?"**
 
-Every task is a small, self-contained coding job with a *deterministic* grader —
-file contents/existence, a regex over the final answer, or the exit code of a shell
-command in the sandbox (e.g. `bun test`). Nothing is judged by another model.
+Every task is a small, self-contained coding job. Most tasks have a *deterministic*
+grader — file contents/existence, a regex over the final answer, or the exit code of a
+shell command in the sandbox (e.g. `bun test`). Some tasks also (or instead) carry a
+`rubric` for the LLM judge, for work whose quality has no single right answer; see
+"The LLM judge" below.
 
 ## Run it
 
@@ -50,17 +52,22 @@ cost, wall-clock `ms`, and the truncated final answer. Tasks run in a fresh
 name, tool list and docs section swapped (see `prompts/micro-harness.md`), so
 results are comparable across harnesses.
 
-The task set (8 tasks) covers: exact file content, fixing a failing test so
-`bun test` passes, renaming a symbol across two files, producing a JSON file with a
-specific shape, finding and changing one line, reading a file then writing its
-contents, appending without breaking existing content, and making `bun run` print
-the right thing. At least one task requires reading a file first; several require
-`bash`.
+The task set (26 tasks) covers: exact file content, fixing a failing test, renaming a
+symbol across files, producing a JSON file with a specific shape, surgical edits,
+reading-then-writing, deleting files, fixing package scripts, extracting a constant,
+fixing an off-by-one caught by a test, adding a test that must pass, making a script
+idempotent, refactoring/splitting code under a behaviour-preserving test, explaining
+a bug, designing a small API, documenting a module, adding validation, choosing an
+idiomatic approach, writing a commit message, and reviewing a diff for risks. Several
+tasks require reading a file first; several require `bash`.
 
 ## What it deliberately does *not*
 
-- **No LLM-as-judge.** Graders are deterministic predicates only.
-- **Tiny task set.** 8 tasks — enough to smoke-test a harness, not to rank models.
+- **No independent human labels.** The judge's golden labels (see "How much can we
+  trust the judge?") are maintainer-written, so they measure agreement with our own
+  documented standard — not ground truth.
+- **Modest task set.** 26 tasks — enough to smoke-test a harness and grade the judge,
+  not to rank models.
 - **No statistical power.** A few runs per task can show flakiness, not significance.
 - **No live-answer capture beyond one turn.** It grades the workspace, not style.
 - **No release/package steps** — that part of P10 is out of scope here.
@@ -136,7 +143,47 @@ reading the code. That is the case for having one.
 
 The judge roughly doubles the cost of a run, and it is **stricter** than the checks
 (score 2.0 on code the check called fine) — which is useful for finding weak graders but
-would be unfair as a sole gate without calibration. The calibration set is currently small
-(3 `both` tasks), there are no human labels, and `--judge-runs=N` exists to check
-self-consistency but is not free.
+would be unfair as a sole gate without calibration. The calibration set is now 6
+`both` tasks, and a 10-case golden set (`golden.ts`) drives `calibrate.ts` — see below.
+`--judge-runs=N` exists to check self-consistency but is not free.
+
+## How much can we trust the judge?
+
+`scripts/evals/calibrate.ts` measures the judge against `scripts/evals/golden.ts` — a
+labelled set of finished agent outputs (one clearly-good and one clearly-bad answer per
+covered task). Read the caveats before quoting the number:
+
+- **The labels are maintainer-written, not independent human labels.** Each label's
+  `rationale` is the evidence for it, so a careful reviewer can check our reasoning, but
+  the accuracy number still measures *agreement with our own documented standard*, not
+  ground truth. A high score means the judge enforces the rubric we wrote; it does not
+  prove the rubric matches what real users want.
+- **A miss is either a judge bug or a bad label.** On every miss, `calibrate.ts` prints
+  the judge's own `reasons`/`violations` next to the case's `rationale` so the reader can
+  tell which one was wrong.
+
+Run it in both modes:
+
+```sh
+export PATH="$HOME/.bun/bin:$PATH"
+
+# offline, deterministic — CI-safe, no network, no API key
+bun scripts/evals/calibrate.ts --mock
+# real judge
+MICRO_API_KEY=… bun scripts/evals/calibrate.ts --judge-model=deepseek-reasoner
+```
+
+Flags: `--runs=N` asks the judge N times per case and reports self-consistency,
+`--json=<path>` writes the report, and `--min-accuracy=<0..1>` (default `0.8`) is the
+exit-code gate — `0` when accuracy is at or above it, non-zero otherwise.
+
+**What `--mock` does and does not prove:** in mock mode the scripted judge constructs its
+verdict *from the case's label*, then still builds the real prompt and re-parses its
+verdict through the strict parser. So a mock run proves the prompt-build → judge → parse
+→ compare → exit-code plumbing works, and it produces a meaningful exit code — but its
+100% accuracy says **nothing** about real judge quality. Never cite a mock run as evidence
+about judge accuracy; only a real-judge run is evidence (and even that is evidence of
+agreement with our labels, not ground truth).
+
+Current gate: accuracy ≥ **0.8** against the golden set (10 cases over 5 tasks).
 

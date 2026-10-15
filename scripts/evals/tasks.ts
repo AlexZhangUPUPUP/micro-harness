@@ -629,4 +629,245 @@ export const tasks: Task[] = [
       artifacts: ['transform.ts', 'transform.test.ts'],
     },
   },
+  {
+    id: 'extract-constant',
+    title: 'Extract a repeated literal into a named constant',
+    setup: [
+      {
+        path: 'physics.ts',
+        content:
+          'export function fallTime(height: number): number {\n  return Math.sqrt((2 * height) / 9.80665)\n}\n\nexport function impactSpeed(height: number): number {\n  return Math.sqrt(2 * 9.80665 * height)\n}\n',
+      },
+    ],
+    prompt:
+      "The file `physics.ts` repeats the literal `9.80665` (standard gravity in m/s²) in two places. Extract it into a single exported constant named `GRAVITY` and replace both uses with it. The module must still compile and behave identically.",
+    check: (cwd) => {
+      const src = read(cwd, 'physics.ts')
+      const occurrences = (src.match(/9\.80665/g) ?? []).length
+      if (!src.includes('export const GRAVITY') || occurrences !== 1) return false
+      if (!src.includes('fallTime') || !src.includes('impactSpeed')) return false
+      const r = run(
+        cwd,
+        `bun -e "import('./physics.ts').then(m => { if (m.GRAVITY !== 9.80665) { console.error('GRAVITY'); process.exit(1) } if (Math.abs(m.fallTime(10) - Math.sqrt(20 / 9.80665)) > 1e-9) { console.error('fallTime'); process.exit(1) } if (Math.abs(m.impactSpeed(10) - Math.sqrt(2 * 9.80665 * 10)) > 1e-9) { console.error('impactSpeed'); process.exit(1) } console.log('ok') }).catch(e => { console.error(String(e)); process.exit(1) })"`,
+      )
+      return r.code === 0 && r.stdout.includes('ok')
+    },
+  },
+  {
+    id: 'fix-off-by-one',
+    title: 'Fix an off-by-one caught by a test',
+    timeoutMs: 120_000,
+    setup: [
+      {
+        path: 'range.ts',
+        content:
+          'export function range(n: number): number[] {\n  const out: number[] = []\n  for (let i = 0; i <= n; i++) {\n    out.push(i)\n  }\n  return out\n}\n',
+      },
+      {
+        path: 'range.test.ts',
+        content:
+          "import { expect, test } from 'bun:test'\nimport { range } from './range.ts'\n\ntest('range(5) has exactly 5 numbers 0..4', () => {\n  expect(range(5)).toEqual([0, 1, 2, 3, 4])\n})\n",
+      },
+    ],
+    prompt:
+      "Run `bun test`; it fails because `range(n)` returns `n + 1` numbers instead of `n`. Fix the off-by-one in `range.ts` so `bun test` passes. Do not modify `range.test.ts`.",
+    check: (cwd) => {
+      const src = read(cwd, 'range.ts')
+      if (src.includes('i <= n')) return false
+      if (!read(cwd, 'range.test.ts').includes('toEqual([0, 1, 2, 3, 4])')) return false
+      const r = run(cwd, 'bun test')
+      return r.code === 0
+    },
+  },
+  {
+    id: 'add-test-case',
+    title: 'Add a test that must pass',
+    timeoutMs: 120_000,
+    setup: [
+      { path: 'parity.ts', content: 'export function isEven(n: number): boolean {\n  return n % 2 === 0\n}\n' },
+    ],
+    prompt:
+      "Write a new test file `parity.test.ts` that imports `isEven` from './parity.ts' and asserts at least these three cases: `isEven(4)` is true, `isEven(7)` is false, and `isEven(0)` is true. Run `bun test`; it must pass.",
+    check: (cwd) => {
+      const t = read(cwd, 'parity.test.ts')
+      if (!t.includes("from './parity.ts'")) return false
+      if (!t.includes('isEven(4)') || !t.includes('isEven(7)') || !t.includes('isEven(0)')) return false
+      const r = run(cwd, 'bun test')
+      return r.code === 0
+    },
+  },
+  {
+    id: 'idempotent-script',
+    title: 'Make a script idempotent',
+    timeoutMs: 120_000,
+    setup: [
+      { path: 'log.txt', content: 'session=started\n' },
+      {
+        path: 'log.ts',
+        content:
+          "import { appendFileSync } from 'node:fs'\n\nappendFileSync('log.txt', 'marker=present\\n')\n",
+      },
+    ],
+    prompt:
+      "The script `log.ts` appends a `marker=present` line to `log.txt` every time it runs, so repeated runs duplicate that line. Make it idempotent: running `bun log.ts` any number of times must leave `log.txt` containing each distinct line exactly once (no duplicates). Verify by running the script twice.",
+    check: (cwd) => {
+      run(cwd, 'bun log.ts')
+      const first = read(cwd, 'log.txt')
+      run(cwd, 'bun log.ts')
+      const second = read(cwd, 'log.txt')
+      if (first === '' || first !== second) return false
+      const markers = (second.match(/marker=present/g) ?? []).length
+      return markers === 1 && second.includes('session=started')
+    },
+  },
+  {
+    id: 'simplify-error-handling',
+    title: 'Simplify redundant error handling without changing behaviour',
+    timeoutMs: 120_000,
+    setup: [
+      {
+        path: 'retry.ts',
+        content:
+          "export function load(paths: string[]): string {\n  let last: unknown = null\n  for (const p of paths) {\n    try {\n      try {\n        try {\n          return readText(p)\n        } catch (e) {\n          last = e\n        }\n      } catch (e) {\n        last = e\n      }\n    } catch (e) {\n      last = e\n    }\n  }\n  throw new Error('load: all paths failed: ' + String(last))\n}\n\nfunction readText(path: string): string {\n  if (path === 'ok.txt') return 'loaded'\n  throw new Error('no such file: ' + path)\n}\n",
+      },
+      {
+        path: 'retry.test.ts',
+        content:
+          "import { expect, test } from 'bun:test'\nimport { load } from './retry.ts'\n\ntest('returns first successful path', () => {\n  expect(load(['ok.txt'])).toBe('loaded')\n  expect(load(['missing.txt', 'ok.txt'])).toBe('loaded')\n})\n\ntest('throws a single aggregated error when all fail', () => {\n  let threw: unknown\n  try { load(['a.txt', 'b.txt']) } catch (e) { threw = e }\n  expect(threw).toBeInstanceOf(Error)\n  expect(String((threw as Error).message)).toContain('all paths failed')\n})\n",
+      },
+    ],
+    prompt:
+      '`retry.ts` exports `load(paths)` which works but wraps each read attempt in three redundant nested try/catch blocks that all do the same thing. Simplify the error handling to a single try/catch per path while keeping the exact behaviour (first successful path wins, otherwise a single aggregated error). Do not modify `retry.test.ts`; `bun test` must still pass.',
+    check: (cwd) => {
+      if (!read(cwd, 'retry.test.ts').includes("'all paths failed'")) return false
+      const r = run(cwd, 'bun test')
+      return r.code === 0
+    },
+    rubric: {
+      criteria:
+        'Is the error handling simplified to a single try/catch per path while the exact try-each-path-then-throw behaviour is preserved?',
+      mustPass: [
+        'keeps `load(paths: string[]): string` with the first-success-wins semantics',
+        'reduces the three nested try/catch blocks to a single try/catch per path',
+        "still throws a single aggregated `Error` (message includes 'all paths failed') when every path fails",
+        '`bun test` passes with retry.test.ts untouched',
+        'no new dependency, file, or exported symbol',
+      ],
+      mustFail: [
+        'swallowed an error silently (e.g. returned undefined instead of throwing when all fail)',
+        'changed the success/failure behaviour (wrong return value or wrong throw)',
+        'modified retry.test.ts',
+        'added a dependency or an unrelated abstraction',
+        'left the redundant nesting in place (no actual simplification)',
+      ],
+      artifacts: ['retry.ts', 'retry.test.ts'],
+    },
+  },
+  {
+    id: 'split-long-function',
+    title: 'Split a long function into clearly-named helpers',
+    timeoutMs: 120_000,
+    setup: [
+      {
+        path: 'report.ts',
+        content:
+          "export function summarize(rows: { name: string; amount: number }[]): string {\n  let total = 0\n  let count = 0\n  for (const r of rows) {\n    if (r.amount > 0) {\n      total = total + r.amount\n      count = count + 1\n    }\n  }\n  let average = 0\n  if (count > 0) {\n    average = total / count\n  }\n  let names: string[] = []\n  for (const r of rows) {\n    if (r.amount > 100) {\n      names.push(r.name)\n    }\n  }\n  names = names.sort()\n  const lines: string[] = []\n  lines.push('total: ' + total.toFixed(2))\n  lines.push('count: ' + count)\n  lines.push('average: ' + average.toFixed(2))\n  lines.push('large: ' + (names.length ? names.join(', ') : 'none'))\n  return lines.join('\\n')\n}\n",
+      },
+      {
+        path: 'report.test.ts',
+        content:
+          "import { expect, test } from 'bun:test'\nimport { summarize } from './report.ts'\n\nconst rows = [\n  { name: 'a', amount: 50 },\n  { name: 'b', amount: 150 },\n  { name: 'c', amount: -10 },\n]\n\ntest('summarize computes total, count, average, and large names', () => {\n  const out = summarize(rows)\n  expect(out).toContain('total: 200.00')\n  expect(out).toContain('count: 2')\n  expect(out).toContain('average: 100.00')\n  expect(out).toContain('large: b')\n})\n",
+      },
+    ],
+    prompt:
+      '`report.ts` exports `summarize(rows)`, one long function that computes a total, a count, an average, and a list of large names all inline. Split it into small, clearly-named helper functions (for example one per computation) while keeping the exact output. Do not modify `report.test.ts`; `bun test` must still pass. In your final answer, name the helpers you introduced and what each does.',
+    check: (cwd) => {
+      if (!read(cwd, 'report.test.ts').includes("'large: b'")) return false
+      const r = run(cwd, 'bun test')
+      return r.code === 0
+    },
+    rubric: {
+      criteria:
+        'Did the agent split the long function into small, clearly-named helpers with unchanged behaviour?',
+      mustPass: [
+        'keeps `summarize` name/signature and byte-identical output for the given inputs',
+        'splits the computation into at least 3 separate, descriptively named helper functions (e.g. total, average, largeNames)',
+        'each helper has a single clear responsibility and the original inline logic is removed',
+        '`bun test` passes with report.test.ts untouched',
+        'the final answer names the helpers and their responsibilities',
+      ],
+      mustFail: [
+        'left `summarize` as one long function (no real split)',
+        'changed the output format or the numbers',
+        'modified report.test.ts',
+        'introduced a class, framework, or dependency for a task this size',
+        'added dead helpers that are never used',
+      ],
+      artifacts: ['report.ts', 'report.test.ts'],
+    },
+  },
+  {
+    id: 'write-commit-message',
+    title: 'Write a conventional commit message for a diff',
+    setup: [
+      {
+        path: 'change.diff',
+        content:
+          "diff --git a/src/retry.ts b/src/retry.ts\nindex 0000000..1111111 100644\n--- a/src/retry.ts\n+++ b/src/retry.ts\n@@ -1,8 +1,8 @@\n export function fetchWithRetry(url: string, attempts: number): Promise<Response> {\n-  const delay = attempts * 100\n+  const delay = Math.min(attempts * 100, 2000)\n   for (let i = 0; i < attempts; i++) {\n     try {\n       return fetch(url)\n     } catch (e) {\n-      await new Promise(r => setTimeout(r, delay))\n+      await new Promise(r => setTimeout(r, delay * (i + 1)))\n     }\n   }\n   throw new Error('fetchWithRetry: all attempts failed')\n }\n",
+      },
+    ],
+    prompt:
+      'A teammate changed `src/retry.ts` and attached this diff (`change.diff`). Write a conventional commit message for it: a one-line subject (≤ 72 chars, imperative mood) plus a short body explaining what changed and why. Save it to `COMMIT_MSG.md` and repeat the message in your final answer.',
+    rubric: {
+      criteria:
+        'Is the commit message a correct, conventional summary of the diff — imperative subject plus a body that explains the what and the why?',
+      mustPass: [
+        'subject is imperative, ≤ 72 characters, and summarises the change (retry backoff is now capped and scaled by attempt)',
+        'body explains what changed (delay capped at 2000ms and multiplied by the attempt number) and why (avoid long fixed waits / linear backoff growth)',
+        'matches the diff: names src/retry.ts and the fetchWithRetry change without inventing extra files, functions, or behaviour',
+        'COMMIT_MSG.md contains the subject and body separated by a blank line',
+        'no typos or vague filler (e.g. "fix stuff")',
+      ],
+      mustFail: [
+        'describes a change not present in the diff (wrong file, function, or behaviour)',
+        'subject in past tense, non-imperative, or longer than 72 characters',
+        'body restates the diff line-by-line without explaining why',
+        'wrote nothing to COMMIT_MSG.md, or wrote a message that contradicts the diff',
+        'invented a breaking change, issue number, or co-author not in the diff',
+      ],
+      artifacts: ['COMMIT_MSG.md', 'change.diff'],
+    },
+  },
+  {
+    id: 'review-diff',
+    title: 'Review a diff and list its concrete risks',
+    setup: [
+      {
+        path: 'change.diff',
+        content:
+          "diff --git a/src/billing.ts b/src/billing.ts\nindex 0000000..1111111 100644\n--- a/src/billing.ts\n+++ b/src/billing.ts\n@@ -1,12 +1,14 @@\n export function invoice(items: { price: number; qty: number }[], discount: number): number {\n-  const subtotal = items.reduce((s, it) => s + it.price * it.qty, 0)\n-  const total = subtotal - discount\n-  return Math.round(total * 100) / 100\n+  const subtotal = items.reduce((s, it) => s + it.price * it.qty, 0)\n+  const rate = discount / subtotal\n+  const total = subtotal * (1 - rate)\n+  return Math.max(0, Math.round(total * 100) / 100)\n }\n",
+      },
+    ],
+    prompt:
+      'Review the diff in `change.diff`. Do not modify any file. In your final answer, list the concrete risks of this change — each as a short bullet naming the risk and why it matters — and note anything that looks like a bug. Be specific to this diff; do not list generic risks.',
+    rubric: {
+      criteria:
+        'Does the review list the specific, concrete risks present in the diff (and any bug), without padding with generic risks?',
+      mustPass: [
+        'lists at least 3 concrete risks, each tied to a specific line or behaviour in the diff',
+        'names the divide-by-zero bug: an empty items array makes subtotal 0, so `discount / subtotal` is NaN/Infinity and total becomes NaN',
+        'notes the semantic change: discount switched from a flat amount to a rate, silently changing what callers pass',
+        'notes that `Math.max(0, …)` clamps negative totals to 0, hiding a billing bug (free items)',
+        'creates no files and modifies nothing',
+      ],
+      mustFail: [
+        'lists generic risks not present in the diff ("needs tests", "check performance") without tying them to this diff',
+        'misses the central divide-by-zero bug',
+        'invented a risk that contradicts the diff',
+        'modified a file or wrote output files',
+        'hand-wavy restatement of the diff with no risk analysis',
+      ],
+      artifacts: ['change.diff'],
+    },
+  },
 ]

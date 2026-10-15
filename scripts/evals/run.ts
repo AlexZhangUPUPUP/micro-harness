@@ -525,6 +525,76 @@ export function topOrders(orders: Order[]): { id: number; total: number }[] {
     { toolCalls: [{ name: 'bash', args: { command: 'bun test' } }] },
     { text: 'Rewrote paidTotals with filter/map and topOrders with a slice/sort/slice/map pipeline. Idiomatic array methods keep the behaviour identical without adding abstractions or dependencies.' },
   ],
+  'extract-constant': [
+    { toolCalls: [{ name: 'read_file', args: { path: 'physics.ts' } }] },
+    {
+      toolCalls: [
+        {
+          name: 'write_file',
+          args: {
+            path: 'physics.ts',
+            content:
+              'export const GRAVITY = 9.80665\n\nexport function fallTime(height: number): number {\n  return Math.sqrt((2 * height) / GRAVITY)\n}\n\nexport function impactSpeed(height: number): number {\n  return Math.sqrt(2 * GRAVITY * height)\n}\n',
+          },
+        },
+      ],
+    },
+    { text: 'Extracted 9.80665 into an exported GRAVITY constant and replaced both uses with it.' },
+  ],
+  'fix-off-by-one': [
+    { toolCalls: [{ name: 'bash', args: { command: 'bun test' } }] },
+    { toolCalls: [{ name: 'read_file', args: { path: 'range.ts' } }] },
+    {
+      toolCalls: [
+        {
+          name: 'write_file',
+          args: {
+            path: 'range.ts',
+            content:
+              'export function range(n: number): number[] {\n  const out: number[] = []\n  for (let i = 0; i < n; i++) {\n    out.push(i)\n  }\n  return out\n}\n',
+          },
+        },
+      ],
+    },
+    { toolCalls: [{ name: 'bash', args: { command: 'bun test' } }] },
+    { text: 'Changed the loop bound from `i <= n` to `i < n`; `bun test` now passes. range.test.ts was left untouched.' },
+  ],
+  'add-test-case': [
+    { toolCalls: [{ name: 'read_file', args: { path: 'parity.ts' } }] },
+    {
+      toolCalls: [
+        {
+          name: 'write_file',
+          args: {
+            path: 'parity.test.ts',
+            content:
+              "import { expect, test } from 'bun:test'\nimport { isEven } from './parity.ts'\n\ntest('isEven', () => {\n  expect(isEven(4)).toBe(true)\n  expect(isEven(7)).toBe(false)\n  expect(isEven(0)).toBe(true)\n})\n",
+          },
+        },
+      ],
+    },
+    { toolCalls: [{ name: 'bash', args: { command: 'bun test' } }] },
+    { text: 'Added parity.test.ts covering isEven(4), isEven(7) and isEven(0); `bun test` passes.' },
+  ],
+  'idempotent-script': [
+    { toolCalls: [{ name: 'read_file', args: { path: 'log.ts' } }] },
+    {
+      toolCalls: [
+        {
+          name: 'write_file',
+          args: {
+            path: 'log.ts',
+            content:
+              "import { existsSync, readFileSync, appendFileSync } from 'node:fs'\n\nconst current = existsSync('log.txt') ? readFileSync('log.txt', 'utf8') : ''\nif (!current.split('\\n').includes('marker=present')) {\n  appendFileSync('log.txt', 'marker=present\\n')\n}\n",
+          },
+        },
+      ],
+    },
+    { toolCalls: [{ name: 'bash', args: { command: 'bun log.ts' } }] },
+    { toolCalls: [{ name: 'bash', args: { command: 'bun log.ts' } }] },
+    { toolCalls: [{ name: 'read_file', args: { path: 'log.txt' } }] },
+    { text: 'Made log.ts append the marker only when it is absent; running it twice leaves log.txt unchanged.' },
+  ],
 }
 
 function mockProvider(taskId: string): Provider {
