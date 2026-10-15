@@ -57,7 +57,7 @@ export function makeSummarizer(
       ],
       tools: [],
     })
-    const summary = (res.message.content ?? '').trim()
+    const summary = String(res.message.content ?? '').trim()
     const capped = summary.length <= maxChars ? summary : summary.slice(0, maxChars)
     return `${COMPACT_RECAP_PREFIX}\n${capped}`
   }

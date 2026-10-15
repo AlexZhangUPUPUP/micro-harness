@@ -18,18 +18,34 @@
 
 import type { ChatMessage } from './model.ts'
 
+/**
+ * Fixed per-image token cost used by `estimateTokens`. This is a rough estimate
+ * (vision models charge anywhere from a few hundred to ~1k tokens per image),
+ * not a real tokenizer.
+ */
+export const IMAGE_TOKENS = 800
+
 /** Cheap, model-agnostic estimate: ~4 characters per token. */
 export function estimateTokens(messages: ChatMessage[]): number {
   let chars = 0
+  let images = 0
   for (const m of messages) {
-    if (m.content) chars += String(m.content).length
+    if (typeof m.content === 'string') {
+      chars += m.content.length
+    } else if (m.content) {
+      // A multimodal part list: count the text parts, plus a fixed per-image cost.
+      for (const part of m.content) {
+        if (part.type === 'text') chars += part.text.length
+        else if (part.type === 'image_url') images += 1
+      }
+    }
     if (m.tool_calls) {
       for (const t of m.tool_calls) {
         chars += (t.function?.name?.length || 0) + (t.function?.arguments?.length || 0)
       }
     }
   }
-  return Math.ceil(chars / 4)
+  return Math.ceil(chars / 4) + images * IMAGE_TOKENS
 }
 
 /** Cap applied to a tool result before it becomes a message (~3k tokens by default). */
@@ -75,7 +91,7 @@ export interface TrimResult {
   dropped: number
   /** Estimated tokens after compaction. */
   tokens: number
-  strategy: 'none' | 'keep-head+tail' | 'tail' | 'summarize'
+  strategy: 'none' | 'keep-head+tail' | 'tail' | 'steps' | 'keep-head+steps' | 'summarize'
   /** How many messages were folded into a recap message (summarize strategy only). */
   summarized?: number
 }
@@ -96,10 +112,24 @@ interface CompactPlan {
   tail: ChatMessage[]
   /** Messages removed from the middle (the part a summarizer would fold). */
   dropped: ChatMessage[]
-  strategy: 'none' | 'keep-head+tail' | 'tail'
+  strategy: 'none' | 'keep-head+tail' | 'tail' | 'steps' | 'keep-head+steps'
 }
 
 /** Compute the deterministic drop-middle plan without mutating anything. */
+/**
+ * A step is one assistant message plus the tool results it produced. Used to trim
+ * *inside* a single long turn — the shape a coding agent actually has (one user message
+ * and dozens of tool calls), where there are no older turns to drop.
+ */
+function groupSteps(unit: ChatMessage[]): ChatMessage[][] {
+  const steps: ChatMessage[][] = []
+  for (const m of unit) {
+    if (m.role === 'assistant' || steps.length === 0) steps.push([m])
+    else steps[steps.length - 1]!.push(m)
+  }
+  return steps
+}
+
 function compactPlan(messages: ChatMessage[], options: CompactOptions): CompactPlan {
   const { maxTokens } = options
   const system = messages.filter((m) => m.role === 'system')
@@ -121,9 +151,35 @@ function compactPlan(messages: ChatMessage[], options: CompactOptions): CompactP
     }
   }
 
-  const tail = kept.flat()
-  const dropped = tailUnits.slice(0, tailUnits.length - kept.length).flat()
-  return { system, head, tail, dropped, strategy: headCount ? 'keep-head+tail' : 'tail' }
+  let tail = kept.flat()
+  let dropped = tailUnits.slice(0, tailUnits.length - kept.length).flat()
+  let strategy: TrimResult['strategy'] = headCount ? 'keep-head+tail' : 'tail'
+
+  // A single long turn cannot be trimmed by dropping whole units, so fall back to
+  // dropping the oldest *steps* inside the newest unit. We never drop the user message
+  // that states the task, never drop the newest step, and never separate a tool result
+  // from the tool call that produced it.
+  if (tail.length > 0 && estimateTokens([...system, ...head, ...tail]) > maxTokens) {
+    const lastUnit = units[units.length - 1] ?? []
+    const steps = groupSteps(lastUnit)
+    if (steps.length > 2) {
+      const lead = steps[0]!
+      const body: ChatMessage[][] = steps.slice(1)
+      const leadIndex = tail.length - lastUnit.length
+      let keepFrom = 0
+      while (keepFrom < body.length - 1 && estimateTokens([...system, ...head, ...tail.slice(0, leadIndex), ...lead, ...body.slice(keepFrom).flat()]) > maxTokens) {
+        keepFrom++
+      }
+      if (keepFrom > 0) {
+        const droppedSteps = body.slice(0, keepFrom).flat()
+        tail = [...tail.slice(0, leadIndex), ...lead, ...body.slice(keepFrom).flat()]
+        dropped = [...dropped, ...droppedSteps]
+        strategy = headCount ? 'keep-head+steps' : 'steps'
+      }
+    }
+  }
+
+  return { system, head, tail, dropped, strategy }
 }
 
 /** Trim a conversation to a token budget, dropping the middle when possible. */

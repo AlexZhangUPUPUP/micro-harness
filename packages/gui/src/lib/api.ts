@@ -39,6 +39,12 @@ export interface SearchHit {
   model?: string
 }
 
+/** An image attached to a prompt (base64, no data-URL prefix). */
+export interface ImageInput {
+  mimeType: string
+  data: string
+}
+
 export interface AgentWorktree {
   agentId: string
   path: string
@@ -74,7 +80,10 @@ export interface IntegrateFile {
   delete?: boolean
 }
 
-const TOKEN = new URLSearchParams(location.search).get('token') ?? localStorage.getItem('micro-token') ?? ''
+const TOKEN =
+  typeof location !== 'undefined' && typeof localStorage !== 'undefined'
+    ? (new URLSearchParams(location.search).get('token') ?? localStorage.getItem('micro-token') ?? '')
+    : ''
 
 export function withToken(path: string): string {
   if (!TOKEN) return path
@@ -94,12 +103,15 @@ export const api = {
   list: () => j<{ sessions: SessionMeta[] }>('/api/sessions').then((d) => d.sessions),
   get: (id: string) => j<{ session: SessionMeta; events: TaggedEvent[] }>(`/api/sessions/${id}`),
   models: () => j<{ models: string[]; default: string }>('/api/models'),
-  create: (prompt: string, opts: { title?: string; model?: string } = {}) =>
+  create: (prompt: string, opts: { title?: string; model?: string; images?: ImageInput[] } = {}) =>
     j<{ session: SessionMeta }>('/api/sessions', { method: 'POST', body: JSON.stringify({ prompt, ...opts }) }).then(
       (d) => d.session,
     ),
-  resume: (id: string, prompt: string) =>
-    j<{ session: SessionMeta }>(`/api/sessions/${id}/resume`, { method: 'POST', body: JSON.stringify({ prompt }) }).then(
+  resume: (id: string, prompt: string, images?: ImageInput[]) =>
+    j<{ session: SessionMeta }>(`/api/sessions/${id}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt, ...(images?.length ? { images } : {}) }),
+    }).then(
       (d) => d.session,
     ),
   /** Copy a session. `keep` limits the copy to the first N events (for edit-and-resend). */
@@ -115,6 +127,12 @@ export const api = {
     ),
   remove: (id: string) => j<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
   search: (q: string) => j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+  /** Answer a pending tool-call approval (allow/deny). */
+  decidePermission: (id: string, requestId: string, allow: boolean) =>
+    j<{ ok: boolean }>(`/api/sessions/${id}/permissions/${encodeURIComponent(requestId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ allow }),
+    }),
 
   // --- workspace isolation + merge queue (P7) ---
   agents: (id: string) => j<{ agents: AgentWorktree[] }>(`/api/sessions/${id}/agents`).then((d) => d.agents),

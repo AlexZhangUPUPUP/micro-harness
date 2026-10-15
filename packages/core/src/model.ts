@@ -12,12 +12,38 @@ export interface ToolCall {
   function: { name: string; arguments: string }
 }
 
+/** One part of a multimodal message, in the OpenAI-compatible wire shape. */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content?: string | null
+  content?: string | ContentPart[] | null
   tool_calls?: ToolCall[]
   tool_call_id?: string
   name?: string
+}
+
+/**
+ * Build a user message's `content` for the wire. Returns the plain string when
+ * there are no images (so text-only prompts are unchanged) and the OpenAI
+ * multimodal part list otherwise, with each image as a base64 data URL.
+ */
+export function userContent(
+  text: string,
+  images?: Array<{ mimeType: string; data: string }>,
+): string | ContentPart[] {
+  if (!images || images.length === 0) return text
+  return [
+    { type: 'text', text },
+    ...images.map(
+      (img): ContentPart => ({
+        type: 'image_url',
+        image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+      }),
+    ),
+  ]
 }
 
 export interface ToolDef {

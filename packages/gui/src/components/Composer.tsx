@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useT } from '../lib/i18n.tsx'
+import type { ImageInput } from '../lib/api.ts'
 
 interface ComposerProps {
   value: string
@@ -8,19 +10,87 @@ interface ComposerProps {
   models?: string[]
   model?: string
   setModel?: (m: string) => void
+  /** Attached images, as base64 — pasted or dropped onto the textarea. */
+  images?: ImageInput[]
+  setImages?: (next: ImageInput[]) => void
 }
 
 /** Floating input card with keyboard hints; gradient frame while a run is busy. */
-export function Composer({ value, setValue, onSend, busy, models, model, setModel }: ComposerProps) {
+export function Composer({ value, setValue, onSend, busy, models, model, setModel, images = [], setImages }: ComposerProps) {
+  const [dragging, setDragging] = useState(false)
+
+  /** Files → base64 (no data-URL prefix), the shape the server and provider want. */
+  const addFiles = (files: FileList | null | undefined): void => {
+    if (!files?.length || !setImages) return
+    const picked = [...files].filter((f) => f.type.startsWith('image/'))
+    if (!picked.length) return
+    void Promise.all(
+      picked.map(
+        (f) =>
+          new Promise<ImageInput | null>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+              const url = String(reader.result ?? '')
+              const comma = url.indexOf(',')
+              resolve(comma === -1 ? null : { mimeType: f.type, data: url.slice(comma + 1) })
+            }
+            reader.onerror = () => resolve(null)
+            reader.readAsDataURL(f)
+          }),
+      ),
+    ).then((loaded) => setImages([...images, ...loaded.filter((x): x is ImageInput => x !== null)]))
+  }
   const { t } = useT()
   return (
     <div className="shrink-0 border-t border-border/70 bg-background/70 p-3 backdrop-blur">
       <div className="mx-auto w-full max-w-[760px]">
         <div className={`rounded-xl p-px transition ${busy ? 'busy-frame' : 'bg-input focus-within:bg-teal/70'}`}>
           <div className="rounded-[11px] bg-card">
+            {(images.length > 0 || dragging) && (
+              <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2">
+                {images.map((img, i) => (
+                  <span
+                    key={`${img.mimeType}-${i}`}
+                    className="flex items-center gap-1 rounded border border-border bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                  >
+                    <img src={`data:${img.mimeType};base64,${img.data}`} alt="" className="h-5 w-5 rounded object-cover" />
+                    {img.mimeType.replace('image/', '')}
+                    <button
+                      onClick={() => setImages?.(images.filter((_, j) => j !== i))}
+                      aria-label={t('composer.removeImage')}
+                      className="ml-0.5 text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {dragging && <span className="text-[10px] text-teal">{t('composer.dropImage')}</span>}
+              </div>
+            )}
             <textarea
               value={value}
               onChange={(e) => setValue(e.target.value)}
+              onPaste={(e) => {
+                const files = e.clipboardData?.files
+                if (files?.length) {
+                  e.preventDefault()
+                  addFiles(files)
+                }
+              }}
+              onDragOver={(e) => {
+                if (e.dataTransfer?.types.includes('Files')) {
+                  e.preventDefault()
+                  setDragging(true)
+                }
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                if (e.dataTransfer?.files?.length) {
+                  e.preventDefault()
+                  setDragging(false)
+                  addFiles(e.dataTransfer.files)
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()

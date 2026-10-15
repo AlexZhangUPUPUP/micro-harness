@@ -8,6 +8,7 @@
  *   POST   /api/sessions                 create + start a session  { prompt, model?, cwd? }
  *   GET    /api/models                   list model ids (default + optional list)
  *   GET    /api/mcp                      connected MCP servers + their tools
+ *   POST   /api/sessions/:id/permissions/:requestId   answer an approval { allow }
  *   GET    /api/sessions/:id             session header + recorded events
  *   PATCH  /api/sessions/:id             rename a session          { title }
  *   DELETE /api/sessions/:id             delete a session
@@ -46,6 +47,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
+import { createApprovalBroker, type ApprovalBroker } from './approvals.ts'
 
 export interface ServerOptions {
   store: SessionStore
@@ -56,6 +58,8 @@ export interface ServerOptions {
   models?: string[]
   /** Connected MCP servers, for reporting (the tools themselves arrive in `tools`). */
   mcpServers?: McpServerInfo[]
+  /** Approval broker; created internally when omitted (tests inject one). */
+  approvals?: ApprovalBroker
   /** Working directory for the agent's tools. */
   cwd: string
   tools?: Tool[]
@@ -121,6 +125,7 @@ export function createServer(options: ServerOptions): HarnessServer {
   if (authRequired && !options.token) throw new Error('a server token is required when binding beyond loopback')
 
   const runtimes = new Map<string, SessionRuntime>()
+  const approvals = options.approvals ?? createApprovalBroker()
   const cwd = options.cwd
   const tools = options.tools
 
@@ -153,6 +158,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       tools: baseTools,
       allowBash: options.allowBash,
       approval: options.approval,
+      confirm: (req) => approvals.ask(req),
       maxDepth: options.maxDepth,
       maxConcurrency: options.maxConcurrency,
       timeoutMs: options.agentTimeoutMs,
@@ -171,16 +177,22 @@ export function createServer(options: ServerOptions): HarnessServer {
       systemPrompt: options.systemPrompt,
       pricing: options.pricing,
       maxToolOutput: options.maxToolOutput,
+      // Approvals: the loop emits `permission.request` and blocks until the client
+      // answers through POST /api/sessions/:id/permissions/:requestId.
+      approval: options.approval,
+      confirm: (req) => approvals.ask(req),
       agentId: 'main',
       parentId: meta.parentId ?? null,
     })
     return { meta, harness, hub, controller: new AbortController(), done: Promise.resolve(), off }
   }
 
-  const start = (runtime: SessionRuntime, prompt: string): void => {
+  type ImageInput = { mimeType: string; data: string }
+
+  const start = (runtime: SessionRuntime, prompt: string, images?: ImageInput[]): void => {
     runtime.done = (async () => {
       try {
-        await runtime.harness.send(prompt, runtime.controller.signal)
+        await runtime.harness.send(prompt, runtime.controller.signal, images)
       } catch (err) {
         store.update(runtime.meta.id, { status: 'error' })
         runtime.hub.forward({
@@ -196,7 +208,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     })()
   }
 
-  const create = (body: { prompt?: string; model?: string; cwd?: string; title?: string }): SessionMeta => {
+  const create = (body: { prompt?: string; model?: string; cwd?: string; title?: string; images?: ImageInput[] }): SessionMeta => {
     const meta = store.create({
       title: body.title ?? body.prompt?.slice(0, 100) ?? '',
       model: body.model ?? model,
@@ -204,18 +216,18 @@ export function createServer(options: ServerOptions): HarnessServer {
     })
     const runtime = build(meta)
     runtimes.set(meta.id, runtime)
-    if (body.prompt) start(runtime, body.prompt)
+    if (body.prompt) start(runtime, body.prompt, body.images)
     return meta
   }
 
-  const resume = (id: string, prompt: string): SessionRuntime => {
+  const resume = (id: string, prompt: string, images?: ImageInput[]): SessionRuntime => {
     const meta = store.require(id)
     const system = options.systemPrompt ?? defaultSystemPrompt(meta.cwd || cwd)
     const reconstructed = reconstructMessages(store.events(id), system, 'main')
     const runtime = build({ ...meta, status: 'active' })
     runtime.harness.messages.splice(0, runtime.harness.messages.length, ...reconstructed)
     runtimes.set(id, runtime)
-    start(runtime, prompt)
+    start(runtime, prompt, images)
     return runtime
   }
 
@@ -313,7 +325,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 2) {
       if (req.method === 'GET') return json({ sessions: store.list() })
       if (req.method === 'POST') {
-        let body: { prompt?: string; model?: string; cwd?: string; title?: string } = {}
+        let body: { prompt?: string; model?: string; cwd?: string; title?: string; images?: ImageInput[] } = {}
         try {
           body = (await req.json()) as typeof body
         } catch {
@@ -336,14 +348,14 @@ export function createServer(options: ServerOptions): HarnessServer {
       if (action === 'resume') {
         if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
-        let body: { prompt?: string } = {}
+        let body: { prompt?: string; images?: ImageInput[] } = {}
         try {
           body = (await req.json()) as typeof body
         } catch {
           /* empty */
         }
         if (!body.prompt) return json({ error: 'prompt is required' }, 400)
-        resume(id, body.prompt)
+        resume(id, body.prompt, body.images)
         return json({ session: store.require(id) }, 202)
       }
       if (action === 'fork') {
@@ -472,6 +484,19 @@ export function createServer(options: ServerOptions): HarnessServer {
         if (!title) return json({ error: 'title is required' }, 400)
         return json({ session: store.renameSession(id, title) })
       }
+      // Answer a pending approval: the loop is blocked in `confirm` until this lands.
+      if (action === 'permissions' && parts[4]) {
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        let body: { allow?: boolean } = {}
+        try {
+          body = (await req.json()) as typeof body
+        } catch {
+          /* empty */
+        }
+        const ok = approvals.answer(decodeURIComponent(parts[4]), body.allow !== false)
+        return json({ ok }, ok ? 200 : 404)
+      }
+
       if (action) return json({ error: 'not found' }, 404)
       if (req.method === 'GET') {
         if (!store.has(id)) return json({ error: 'session not found' }, 404)

@@ -1,4 +1,4 @@
-import { test } from 'bun:test'
+import { expect, test } from 'bun:test'
 import assert from 'node:assert/strict'
 import {
   COMPACT_RECAP_PREFIX,
@@ -139,8 +139,9 @@ test('compactMessagesAsync summarizer replaces the middle with one recap message
 
   const recap = r.messages[3]!
   assert.equal(recap.role, 'user')
-  assert.ok(recap.content!.startsWith(COMPACT_RECAP_PREFIX), 'recap is prefixed')
-  assert.ok(recap.content!.includes('folded'), 'recap carries the summarizer output')
+  const recapText = String(recap.content ?? '')
+  assert.ok(recapText.startsWith(COMPACT_RECAP_PREFIX), 'recap is prefixed')
+  assert.ok(recapText.includes('folded'), 'recap carries the summarizer output')
 
   // ...and the newest kept units are still a suffix of the original ordering
   const tail = r.messages.slice(4)
@@ -229,7 +230,7 @@ test('makeSummarizer flattens tool calls and results into the transcript', async
   const provider: Provider = {
     name: 'fake',
     async chat(req) {
-      transcript = req.messages[1]?.content ?? ''
+      transcript = String(req.messages[1]?.content ?? '')
       return { message: { role: 'assistant', content: 'ok' } }
     },
   }
@@ -242,4 +243,91 @@ test('makeSummarizer flattens tool calls and results into the transcript', async
   assert.ok(transcript.includes('/x'), 'includes tool call arguments')
   assert.ok(transcript.includes('file body'), 'includes the tool result')
   assert.ok(transcript.includes('tool result'), 'labels the tool result')
+})
+
+/* ---------------------------------------------------------- multimodal content */
+
+import { IMAGE_TOKENS } from '../src/context.ts'
+import { userContent } from '../src/model.ts'
+
+test('estimateTokens counts text parts and adds the fixed per-image cost', () => {
+  const text = 'describe this image please'
+  const arrayMsg: ChatMessage = {
+    role: 'user',
+    content: [
+      { type: 'text', text },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+    ],
+  }
+  const textOnly = estimateTokens([{ role: 'user', content: text }])
+  const withImage = estimateTokens([arrayMsg])
+
+  // The array form is never inflated by `String([...])` -> "[object Object]".
+  assert.equal(withImage, Math.ceil(text.length / 4) + IMAGE_TOKENS)
+  assert.equal(textOnly, Math.ceil(text.length / 4))
+  assert.ok(withImage > textOnly, 'an image costs more than the text alone')
+})
+
+test('userContent returns a plain string when images are empty or absent', () => {
+  assert.equal(userContent('hello'), 'hello')
+  assert.equal(userContent('hello', undefined), 'hello')
+  assert.equal(userContent('hello', []), 'hello')
+})
+
+test('userContent builds OpenAI-compatible image_url parts when images are present', () => {
+  const content = userContent('look', [{ mimeType: 'image/png', data: 'AAAA' }])
+  assert.deepEqual(content, [
+    { type: 'text', text: 'look' },
+    { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+  ])
+})
+
+test('a single long turn is trimmed by dropping steps, not whole units', () => {
+  // The shape of a real coding run: ONE user message, then dozens of tool steps.
+  const msgs: ChatMessage[] = [
+    { role: 'system', content: 'sys ' + 's'.repeat(200) },
+    { role: 'user', content: 'do the long thing ' + 'u'.repeat(200) },
+  ]
+  for (let i = 0; i < 20; i++) {
+    msgs.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: `c${i}`, function: { name: 'read_file', arguments: '{}' } }],
+    })
+    msgs.push({ role: 'tool', tool_call_id: `c${i}`, name: 'read_file', content: 'x'.repeat(4000) })
+  }
+  const before = estimateTokens(msgs)
+  expect(before).toBeGreaterThan(20_000)
+
+  const r = compactMessages(msgs, { maxTokens: 5000 })
+  expect(r.strategy).toBe('steps') // no second unit to keep a head from
+  expect(r.dropped).toBeGreaterThan(0)
+  expect(r.tokens).toBeLessThanOrEqual(5000)
+  // the task statement survives
+  expect(String(r.messages[1]!.content)).toContain('do the long thing')
+  // the newest step survives
+  const last = r.messages[r.messages.length - 1]!
+  expect(last.role).toBe('tool')
+  expect(last.tool_call_id).toBe('c19')
+  // and no tool result is orphaned from its call
+  for (let i = 1; i < r.messages.length; i++) {
+    if (r.messages[i]!.role === 'tool') expect(r.messages[i - 1]!.role).toBe('assistant')
+  }
+})
+
+test('step trimming also applies when a head unit is kept', () => {
+  const msgs: ChatMessage[] = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'RULE: keep this ' + 'r'.repeat(150) },
+    { role: 'assistant', content: 'understood' },
+    { role: 'user', content: 'now the long part' },
+  ]
+  for (let i = 0; i < 15; i++) {
+    msgs.push({ role: 'assistant', content: null, tool_calls: [{ id: `t${i}`, function: { name: 'bash', arguments: '{}' } }] })
+    msgs.push({ role: 'tool', tool_call_id: `t${i}`, name: 'bash', content: 'y'.repeat(4000) })
+  }
+  const r = compactMessages(msgs, { maxTokens: 6000 })
+  expect(r.tokens).toBeLessThanOrEqual(6000)
+  expect(r.strategy).toBe('keep-head+steps')
+  expect(String(r.messages[1]!.content)).toContain('RULE: keep this') // the constraint won
 })

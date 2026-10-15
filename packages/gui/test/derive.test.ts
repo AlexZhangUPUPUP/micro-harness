@@ -248,3 +248,68 @@ test('deriveAgents totals cache reads, and cacheHitRate reports the share', () =
   expect(cacheHitRate({ input: 0 })).toBe(0)
   expect(cacheHitRate({ input: 100, cacheRead: 500 })).toBe(1) // clamped
 })
+
+const session = (id: string, parentId: string | null): SessionMeta => ({
+  id,
+  title: id,
+  model: 'm',
+  cwd: '/x',
+  parentId,
+  status: 'done',
+  createdAt: 1,
+  updatedAt: 1,
+  input: 0,
+  output: 0,
+  cost: 0,
+})
+
+test('sessionForest nests a fork, sets depth, and counts descendants', () => {
+  const sessions = [session('root', null), session('a', 'root'), session('b', 'root'), session('grand', 'a')]
+  const forest = sessionForest(sessions)
+  expect(forest.map((n) => n.session.id)).toEqual(['root'])
+  const root = forest[0]!
+  expect(root.depth).toBe(0)
+  expect(root.children.map((c) => c.session.id).sort()).toEqual(['a', 'b'])
+  const a = root.children.find((c) => c.session.id === 'a')!
+  const b = root.children.find((c) => c.session.id === 'b')!
+  expect(a.depth).toBe(1)
+  expect(b.depth).toBe(1)
+  expect(a.children.map((c) => c.session.id)).toEqual(['grand'])
+  expect(a.children[0]!.depth).toBe(2)
+  expect(descendantCount(root)).toBe(3)
+  expect(descendantCount(a)).toBe(1)
+  expect(descendantCount(b)).toBe(0)
+  expect(descendantCount(a.children[0]!)).toBe(0)
+})
+
+test('ancestry returns root → session and is empty for unknown ids', () => {
+  const sessions = [session('root', null), session('a', 'root'), session('b', 'root'), session('grand', 'a')]
+  expect(ancestry(sessions, 'grand').map((s) => s.id)).toEqual(['root', 'a', 'grand'])
+  expect(ancestry(sessions, 'a').map((s) => s.id)).toEqual(['root', 'a'])
+  expect(ancestry(sessions, 'root').map((s) => s.id)).toEqual(['root'])
+  expect(ancestry(sessions, 'missing')).toEqual([])
+  expect(ancestry(sessions, null)).toEqual([])
+})
+
+test('sessionForest treats an orphan parentId as a root', () => {
+  const sessions = [session('root', null), session('orphan', 'ghost')]
+  const forest = sessionForest(sessions)
+  expect(forest.map((n) => n.session.id).sort()).toEqual(['orphan', 'root'])
+  expect(forest.find((n) => n.session.id === 'orphan')!.depth).toBe(0)
+})
+
+test('sessionForest does not hang on self-parent or parent cycles', () => {
+  const selfParent = [session('loop', 'loop')]
+  const selfForest = sessionForest(selfParent)
+  expect(selfForest.map((n) => n.session.id)).toEqual(['loop'])
+  expect(selfForest[0]!.children).toEqual([])
+
+  const cycle = [session('x', 'y'), session('y', 'x')]
+  const cycleForest = sessionForest(cycle)
+  expect(cycleForest.map((n) => n.session.id).sort()).toEqual(['x', 'y'])
+  for (const root of cycleForest) expect(root.children).toEqual([])
+  expect(ancestry(cycle, 'x').length).toBeLessThanOrEqual(2)
+})
+
+import { ancestry, descendantCount, sessionForest } from '../src/lib/derive.ts'
+import type { SessionMeta } from '../src/lib/api.ts'

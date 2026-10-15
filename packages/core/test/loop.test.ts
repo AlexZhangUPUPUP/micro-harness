@@ -377,3 +377,42 @@ test('the cost budget stops the run instead of spending without limit', async ()
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+/* ------------------------------------------------------------ multimodal sends */
+
+import type { ContentPart } from '../src/model.ts'
+
+test('send with images produces array content with a data URL; without images stays a string', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-img-'))
+  try {
+    const run = async (images?: Array<{ mimeType: string; data: string }>) => {
+      const hub = new EventHub()
+      const captured: TaggedEvent[] = []
+      hub.on((e) => captured.push(e))
+      const harness = new Harness({
+        provider: scripted([{ message: { role: 'assistant', content: 'ok' } }]),
+        model: 'fake-model',
+        cwd: dir,
+        hub,
+      })
+      await harness.send('describe this', undefined, images)
+      const req = captured.map((e) => e.event).find((e) => e.type === 'model.request')
+      expect(req && req.type === 'model.request').toBe(true)
+      const msgs = req && req.type === 'model.request' ? (req.messages as ChatMessage[]) : []
+      return msgs[msgs.length - 1]!
+    }
+
+    const withImages = await run([{ mimeType: 'image/png', data: 'AAAA' }])
+    expect(withImages.role).toBe('user')
+    expect(Array.isArray(withImages.content)).toBe(true)
+    const parts = withImages.content as ContentPart[]
+    expect(parts[0]).toEqual({ type: 'text', text: 'describe this' })
+    expect(parts[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } })
+
+    const textOnly = await run()
+    expect(textOnly.role).toBe('user')
+    expect(textOnly.content).toBe('describe this')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

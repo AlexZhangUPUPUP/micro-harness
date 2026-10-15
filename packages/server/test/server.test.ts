@@ -13,6 +13,8 @@ import {
   type ChatMessage,
   type Provider,
 } from '@micro-harness/core'
+import { createApprovalBroker } from '../src/approvals.ts'
+import type { AgentEvent } from '@micro-harness/core'
 
 interface Harness {
   srv: HarnessServer
@@ -578,5 +580,141 @@ test('apply: the accepted hunk lands on disk and the rejected hunk stays', async
     expect(after[18]).toBe('LINE-19-CHANGED') // accepted bottom hunk applied
   } finally {
     w.stop()
+  }
+})
+
+/* ------------------------------------------ approvals & multimodal prompts */
+
+test('an approval-required tool waits for the client and honours the answer', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-approve-'))
+  try {
+    const store = new SessionStore(dir)
+    // a provider that asks for a mutating tool call, then finishes
+    const replies: Array<() => unknown> = [
+      () => ({
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_file', arguments: '{"path":"x.txt","content":"hi"}' } }],
+        },
+      }),
+      () => ({ message: { role: 'assistant', content: 'done' } }),
+      () => ({ message: { role: 'assistant', content: 'done' } }),
+    ]
+    let i = 0
+    const provider: Provider = { name: 'scripted', async chat() { return replies[Math.min(i++, replies.length - 1)]!() as never } }
+    const approvals = createApprovalBroker({ timeoutMs: 5000 })
+    const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false, approval: 'suggest', approvals })
+
+    const created = await (await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'write x.txt', title: 'needs approval' }),
+    })).json()
+    const id = created.session.id
+
+    // wait for the permission request to appear on the event stream
+    let request: Extract<AgentEvent, { type: 'permission.request' }> | undefined
+    for (let n = 0; n < 60 && !request; n++) {
+      await new Promise((r) => setTimeout(r, 50))
+      request = store
+        .events(id)
+        .map((e) => e.event)
+        .find((e): e is Extract<AgentEvent, { type: 'permission.request' }> => e.type === 'permission.request')
+    }
+    expect(request).toBeDefined()
+    expect(existsSync(path.join(dir, 'x.txt'))).toBe(false) // the tool has not run yet
+    expect(approvals.pending().length).toBe(1)
+
+    // answer → the tool runs
+    const res = await fetch(`${srv.url}/api/sessions/${id}/permissions/${request!.id}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ allow: true }),
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+
+    for (let n = 0; n < 60; n++) {
+      await new Promise((r) => setTimeout(r, 50))
+      if (readFileSync(path.join(dir, 'x.txt'), 'utf8').includes('hi')) break
+    }
+    expect(readFileSync(path.join(dir, 'x.txt'), 'utf8')).toBe('hi')
+    const decided = store.events(id).map((e) => e.event).find((e) => e.type === 'permission.result')
+    expect(decided && 'decision' in decided ? decided.decision : '').toBe('allow')
+
+    // answering twice (or an unknown id) is a 404, not a crash
+    const again = await fetch(`${srv.url}/api/sessions/${id}/permissions/${request!.id}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ allow: false }),
+    })
+    expect(again.status).toBe(404)
+    srv.stop(true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a denied approval stops the tool and is reported as such', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-deny-'))
+  try {
+    const store = new SessionStore(dir)
+    const replies = [
+      { message: { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'write_file', arguments: '{"path":"y.txt","content":"nope"}' } }] } },
+      { message: { role: 'assistant', content: 'ok' } },
+      { message: { role: 'assistant', content: 'ok' } },
+    ]
+    let i = 0
+    const provider: Provider = { name: 'scripted', async chat() { return replies[Math.min(i++, replies.length - 1)]! as never } }
+    const approvals = createApprovalBroker({ timeoutMs: 5000 })
+    const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false, approval: 'suggest', approvals })
+    const created = await (await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'write y.txt' }),
+    })).json()
+    const id = created.session.id
+    let request: Extract<AgentEvent, { type: 'permission.request' }> | undefined
+    for (let n = 0; n < 60 && !request; n++) {
+      await new Promise((r) => setTimeout(r, 50))
+      request = store.events(id).map((e) => e.event).find((e): e is Extract<AgentEvent, { type: 'permission.request' }> => e.type === 'permission.request')
+    }
+    await fetch(`${srv.url}/api/sessions/${id}/permissions/${request!.id}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ allow: false }),
+    })
+    await new Promise((r) => setTimeout(r, 300))
+    expect(existsSync(path.join(dir, 'y.txt'))).toBe(false)
+    const result = store.events(id).map((e) => e.event).find((e) => e.type === 'tool.result')
+    expect(result && 'ok' in result ? result.ok : true).toBe(false)
+    srv.stop(true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('images on a prompt reach the provider as multimodal content parts', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-img-'))
+  try {
+    const store = new SessionStore(dir)
+    const { provider, seen } = echoProvider()
+    const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+    const created = await (await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'what is this?', images: [{ mimeType: 'image/png', data: 'AAAA' }] }),
+    })).json()
+    expect(created.session.id).toBeTruthy()
+    for (let n = 0; n < 40 && seen.length === 0; n++) await new Promise((r) => setTimeout(r, 25))
+    const user = seen[0]?.find((m) => m.role === 'user')
+    expect(Array.isArray(user?.content)).toBe(true)
+    const parts = user!.content as Array<{ type: string; text?: string; image_url?: { url: string } }>
+    expect(parts[0]).toEqual({ type: 'text', text: 'what is this?' })
+    expect(parts[1]?.image_url?.url).toBe('data:image/png;base64,AAAA')
+    srv.stop(true)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })
