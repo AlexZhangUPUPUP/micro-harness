@@ -52,9 +52,27 @@ test('chatStream assembles text, thinking and tool calls from SSE', async () => 
     expect(deltas.map((d) => d.text).join('')).toBe('let me thinkHello')
     expect(res.message.content).toBe('Hello')
     expect(res.message.tool_calls?.[0]?.id).toBe('call_1')
+    // the API rejects a replayed assistant message whose tool call lacks `type`
+    expect(res.message.tool_calls?.[0]?.type).toBe('function')
     expect(res.message.tool_calls?.[0]?.function.name).toBe('read_file')
     expect(res.message.tool_calls?.[0]?.function.arguments).toBe('{"path":"a.txt"}')
     expect(res.usage?.prompt_tokens).toBe(7)
+  } finally {
+    server.stop(true)
+  }
+})
+
+test('a streamed tool call without an id still gets one', async () => {
+  const { server, url } = sseServer([
+    JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'list_dir', arguments: '{}' } }] } }] }),
+    JSON.stringify({ choices: [{ delta: {} }] }),
+  ])
+  try {
+    const res = await chatStream({ baseUrl: url, apiKey: 'x', model: 'fake' }, [{ role: 'user', content: 'hi' }], [], undefined)
+    const call = res.message.tool_calls?.[0]
+    expect(call?.type).toBe('function')
+    expect(typeof call?.id).toBe('string')
+    expect((call?.id ?? '').length).toBeGreaterThan(0)
   } finally {
     server.stop(true)
   }
