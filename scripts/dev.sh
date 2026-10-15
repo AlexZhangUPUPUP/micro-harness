@@ -66,11 +66,30 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Refuse to start if something already serves on this port — otherwise Bun.serve
+# throws, our process dies, and an older server silently keeps answering /health
+# (the classic "why is my GUI still the old one" trap).
+if curl -sf "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1; then
+  echo "✗ a micro-harness server is already running on port $SERVER_PORT." >&2
+  echo "  stop it:  pkill -f 'micro-harness/packages/server'; pkill -f 'scripts/dev.sh'" >&2
+  echo "  or pick another port:  MICRO_PORT=8888 $0 --single" >&2
+  exit 1
+fi
+
 MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" \
 MICRO_PRICE_INPUT="${MICRO_PRICE_INPUT:-}" MICRO_PRICE_OUTPUT="${MICRO_PRICE_OUTPUT:-}" \
 MICRO_PRICE_INPUT_CACHED="${MICRO_PRICE_INPUT_CACHED:-}" MICRO_MAX_TOOL_OUTPUT="${MICRO_MAX_TOOL_OUTPUT:-}" \
   bun packages/server/src/main.ts >/tmp/micro-harness-server.log 2>&1 &
 SRV=$!
+
+# If the port was taken by a non-HTTP service, Bun.serve throws and our process
+# dies. `kill -0` succeeds for an unreaped zombie, so check the process state too.
+sleep 0.5
+if ! kill -0 "$SRV" 2>/dev/null || [ "$(ps -o state= -p "$SRV" 2>/dev/null | tr -d ' ')" = "Z" ]; then
+  echo "✗ server did not start on port $SERVER_PORT." >&2
+  [ -f /tmp/micro-harness-server.log ] && sed 's/^/  | /' /tmp/micro-harness-server.log >&2 || true
+  exit 1
+fi
 
 for _ in $(seq 1 60); do
   curl -sf "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1 && break
