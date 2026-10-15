@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type SessionMeta, type TaggedEvent } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
 import { Transcript } from './components/Transcript.tsx'
@@ -9,11 +9,12 @@ import { Composer } from './components/Composer.tsx'
 import { AgentsPanel } from './components/AgentsPanel.tsx'
 import { TracePanel } from './components/TracePanel.tsx'
 import { ChangesPanel } from './components/ChangesPanel.tsx'
+import { InspectorPanel } from './components/InspectorPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
 import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
 
-type View = 'chat' | 'trace' | 'changes'
-const VIEWS: View[] = ['chat', 'trace', 'changes']
+type View = 'chat' | 'trace' | 'changes' | 'inspector'
+const VIEWS: View[] = ['chat', 'trace', 'changes', 'inspector']
 
 export default function App() {
   const { t, lang, setLang } = useT()
@@ -114,6 +115,7 @@ export default function App() {
   const usageSeries = useMemo(() => deriveUsageSeries(shown), [shown])
   const chat = useMemo(() => deriveChat(shown), [shown])
   const tree = useMemo(() => deriveAgents(shown), [shown])
+  const requests = useMemo(() => deriveInspector(shown), [shown])
 
   // Follow the stream only while the user is parked at the bottom — scrolling up
   // freezes the view (and surfaces a "back to bottom" pill).
@@ -381,6 +383,8 @@ export default function App() {
               <AgentsPanel roots={tree.roots} total={tree.total} />
             ) : view === 'trace' ? (
               <TracePanel events={events} replayAt={replayAt} setReplayAt={setReplayAt} />
+            ) : view === 'inspector' ? (
+              <InspectorPanel requests={requests} />
             ) : current ? (
               <ChangesPanel sessionId={current} />
             ) : null}

@@ -1,15 +1,19 @@
 # micro-harness
 
-**一个极简、零依赖的 agent harness** —— agent 循环、工具调度与上下文窗口，几百行
-TypeScript 写完。没有 SDK、没有框架、没有构建步骤：Node ≥ 22.18 直接运行 `.ts` 文件。
+**一个基于插件的编码 agent 平台** —— 自带 agent 循环、多 agent 编排、服务端、CLI 与
+Web GUI，从一份极简可读的 harness 长出来。
 
 [English](README.md) · **简体中文**
 
-> 所谓 **agent harness**（agent 运行时），就是包在 LLM 外面、把它变成 agent 的那层：
-> 跑循环、执行工具、管理上下文窗口、跟模型对话。本仓库就是这四件事的一份清晰可读的
-> 实现——不多做别的。
+> **这是哪个分支？** 本 README 描述的是 **`platform`** 分支。
+> [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) 上是原始的
+> **极简种子**：`src/` 下六个文件，零依赖、无构建步骤，Node ≥ 22.18 直接运行。想理解
+> agent harness 怎么工作，就从那份从头读到尾；本分支是在同一套设计上长出来的平台。
+> 平台的 P0 把种子移进了 `packages/core`，所以这里没有 `src/`。
 
-```
+> 所谓 **agent harness**（agent 运行时），就是包在 LLM 外面、把它变成 agent 的那层：
+> 跑循环、执行工具、管理上下文窗口、跟模型对话。
+
         ┌──────────────────────────────────────────────────────┐
         │                      harness                         │
         │                                                      │
@@ -20,53 +24,60 @@ TypeScript 写完。没有 SDK、没有框架、没有构建步骤：Node ≥ 22
         │                     │                                │
         │              context.trim() when the window fills    │
         └──────────────────────────────────────────────────────┘
-```
 
 ## 运行
 
 ```bash
-export MICRO_BASE_URL=https://api.deepseek.com     # 任意 OpenAI 兼容端点
-export MICRO_API_KEY=sk-...
-export MICRO_MODEL=deepseek-chat
+bun install
 
-node src/cli.ts "创建 hello.txt 写入 'hi'，然后读回来打印内容"
-node src/cli.ts               # 交互式 REPL（跨轮保留上下文）
-node src/cli.ts --allow-bash "找出最大的 3 个文件并总结"
-node src/cli.ts --trace "…"   # 把 JSONL 轨迹写到 ./traces/
+# CLI —— 种子里那个 cli.ts 长大了，现在在 packages/core/src/cli.ts
+bun start "创建 hello.txt 写入 'hi'，然后读回来打印内容"
+bun start                       # 交互式 REPL（/help、提示词模板、skills）
+bun start --allow-bash "找出最大的 3 个文件并总结"
+bun start --isolate --tree "…"  # 每个子 agent 一个 git worktree + 打印 agent 树
+bun start -- run --auto --tasks tasks.txt   # 无人值守驱动（预算 + 超时）
+
+# 整套：服务端（SSE + SQLite/FTS）与 GUI
+scripts/dev.sh                  # → http://127.0.0.1:5273
 ```
 
 | 参数 | 含义 |
 |---|---|
 | `--dir <path>` | 工具被沙箱限制的工作目录（默认 `.`） |
 | `--model <id>` / `--base-url <url>` | 覆盖环境变量里的配置 |
+| `--approval <mode>` | `suggest` / `auto-edit` / `full-auto`（默认 `full-auto`） |
 | `--allow-bash` | 启用 `bash` 工具（默认关闭） |
-| `--max-steps <n>` | 循环最大迭代次数（默认 24） |
-| `--max-context <n>` | 上下文预算（按估算 token 计，默认 24000） |
+| `--isolate` | 每个子 agent 一个独立 git worktree |
+| `--tree` | 运行结束后打印 agent 树 |
+| `--max-steps <n>` / `--max-context <n>` | 循环步数（24）/ 上下文预算（24000） |
 | `--trace` | 把每个事件追加到 JSONL 轨迹文件 |
 | `--quiet` | 不打印工具活动 |
 
 ## 四个部件
 
+它们依然是这个项目的核心——种子里的四个文件现在位于 `packages/core/src/`，其它一切都
+是围着它们长出来的：
+
 | 文件 | 它是什么 |
 |---|---|
-| `src/harness.ts` | **循环** —— 模型 → 工具 → 把结果喂回去 → 重复，带步数上限 |
-| `src/tools.ts` | **工具注册与调度** —— `read_file`、`write_file`、`list_dir`、`bash`；路径沙箱；工具报错会变成消息，模型可以从中恢复 |
-| `src/context.ts` | **上下文窗口** —— token 估算 + 裁剪，始终保留 system prompt 和完整回合，绝不把 tool 结果和它的调用拆散 |
-| `src/model.ts` | **模型 I/O** —— OpenAI 兼容的 `chat/completions` 调用，遇 429/5xx 自动重试 |
-
-另有两个小文件：`src/trace.ts`（JSONL 轨迹）与 `src/cli.ts`（一次性执行 + REPL）。
+| `packages/core/src/harness.ts` | **循环** —— 模型 → 工具 → 把结果喂回去 → 重复，带步数上限、并行工具调用和审批模式 |
+| `packages/core/src/tools.ts` | **工具注册与调度** —— `read_file`、`write_file`、`list_dir`、`bash`；路径沙箱；工具报错会变成消息，模型可以从中恢复 |
+| `packages/core/src/context.ts` | **上下文窗口** —— token 估算 + 裁剪，始终保留 system prompt 和完整回合，绝不把 tool 结果和它的调用拆散 |
+| `packages/core/src/model.ts` | **模型 I/O** —— OpenAI 兼容的 `chat/completions` 调用，带流式与 429/5xx 重试 |
 
 ## 设计要点
 
-- **零运行时依赖。** 只用 Node 内置模块（`node:child_process`、`node:fs`、`fetch`）。
-  跑之前不需要 `npm install`。
-- **没有构建步骤。** 靠 Node 的类型擦除直接运行 TypeScript。
+- **种子零依赖，平台不是。** `main` 的 `src/` 只用 Node 内置模块。本分支是 Bun 单体仓库
+  —— Bun 做工具链、`bun:sqlite` 做索引、React + Vite + Tailwind 做 GUI——不过根
+  `package.json` 依然没有声明任何运行时依赖。
 - **错误也是数据。** 工具失败返回 `{ output, isError: true }`，作为一条普通的 `tool`
   消息追加进去——模型看得到失败原因并可以重试，这正是 agent 循环能稳住的关键。
 - **沙箱。** 文件工具会把每个路径解析到 `--dir` 内部并拒绝越界；`bash` 需要显式开启。
 - **裁剪不拆回合。** 一条 `tool` 消息永远和产生它的 assistant `tool_calls` 一起保留。
-- **可观测性是内置的。** 循环产出结构化事件（`step`、`tool_call`、`tool_result`、
-  `trim`、`usage`）；CLI 把它们渲染出来，`--trace` 把它们落盘。
+- **事件是唯一的契约。** 循环只产出一条带标签的事件流；会话 JSONL、服务端 SSE、CLI、
+  GUI 的轨迹/回放以及检视面板都只是它的消费者。
+- **能力共享，状态隔离。** provider、工具和存储是共享的；消息、cwd 和策略按会话、按
+  子 agent 隔离。
 
 ## 测试
 
@@ -128,8 +139,12 @@ cd packages/gui && MICRO_SERVER=http://127.0.0.1:8787 bun run dev   # 终端 2
 
 ![命令面板](docs/gui-palette.png)
 
-右侧面板有三个视图。**agents** 画出子 agent 树及每个节点的用量（悬浮节点看详情卡），
-**轨迹** 是原始事件流，带分类 chip、文本过滤和回放拖动条：
+右侧面板有四个视图。**agents** 画出子 agent 树及每个节点的用量（悬浮节点看详情卡）；
+**轨迹** 是原始事件流，带分类 chip、文本过滤和回放拖动条；**改动** 逐 hunk 审阅某个
+agent 的 diff；**检视** 回答「我们到底给模型发了什么」——每一次调用都展示实际发出的
+载荷：系统提示词、工具 schema，以及每一条消息，直接来自 `model.request` 事件：
+
+![检视面板](docs/gui-inspector.png)
 
 ![轨迹面板](docs/gui-trace.png)
 
@@ -160,15 +175,15 @@ token 迷你折线图**；agent 树画出真正的连线并在悬浮时给出详
 原样不动**。输入框里的**模型选择器**数据来自 `GET /api/models`，因此
 `MICRO_MODELS=model-a,model-b scripts/dev.sh` 就能列出多个模型。
 
-## 一个仓库里的两层
+## 两个分支，一个项目
 
-`main` 是**极简种子**：`src/` 下的所有东西都是一份零依赖的 harness，可以从头读到尾——
-循环、工具调度、上下文窗口、模型 I/O——由 Node ≥ 22.18 直接运行。
+| 分支 | 它是什么 |
+|---|---|
+| [`main`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/main) | **极简种子** —— `src/` 下六个文件，零依赖、无构建步骤，Node ≥ 22.18 直接运行。那份可以从头读到尾的参考实现。 |
+| `platform`（本分支） | **平台** —— `packages/{kernel,core,server,gui}`：插件内核、事件驱动核心、多 agent 编排、服务端、CLI 与 GUI，沿种子的设计长出来。它是 `main` 的直系后代，不是分叉。 |
 
-这个 **`platform`** 分支把这颗种子长成了一个完整的 **agent 平台**，放在 `packages/` 下：
-插件内核、带流式与并行工具调用的事件驱动核心、一等公民的多 agent 编排、带 SSE +
-SQLite/FTS 索引的服务端、CLI，以及上面这套 Web GUI。`src/` 里的种子保持原样，作为那份
-可读的参考实现——平台是沿着同一套设计长出来的，而不是分叉它。
+种子没有被复制一份——P0 是**把那些文件搬进** `packages/core`，再在它们周围长出平台。
+所以本分支没有 `src/`，而 `main` 依然保有那份可读的原作。
 
 平台整体设计（插件内核、组合方式、服务端、GUI、MCP/ACP）见
 **[ARCHITECTURE.md](ARCHITECTURE.md)**，长期规划见 **[ROADMAP.md](ROADMAP.md)**。

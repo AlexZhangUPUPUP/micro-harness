@@ -11,6 +11,13 @@ export type AgentEvent =
   | { type: 'session.start'; model: string; cwd: string; parentId?: string | null }
   | { type: 'user.message'; text: string }
   | { type: 'turn.start'; turn: number }
+  /**
+   * The exact payload handed to the model for one turn. This duplicates content
+   * that is already on the stream (that is the point): it is the only way to see
+   * what the model actually received *after* trimming. It is deliberately not
+   * indexed for search — see `eventText`.
+   */
+  | { type: 'model.request'; model: string; system: string; tools: string[]; messages: unknown[]; tokens: number }
   | { type: 'text.delta'; text: string }
   | { type: 'thinking.delta'; text: string }
   | { type: 'tool.call'; id: string; name: string; args: unknown }

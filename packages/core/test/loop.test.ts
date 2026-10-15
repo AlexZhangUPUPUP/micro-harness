@@ -147,3 +147,35 @@ test('tags every event with the agent id and parent id', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('every model call records the exact request for the inspector', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-inspect-'))
+  try {
+    const { harness, events } = setup(
+      [
+        { message: assistantTool('c1', 'write_file', { path: 'a.txt', content: 'hi' }) },
+        { message: { role: 'assistant', content: 'done' } },
+      ],
+      dir,
+    )
+    await harness.send('hello')
+
+    const reqs = events.filter((e) => e.event.type === 'model.request').map((e) => e.event)
+    expect(reqs.length).toBe(2) // one per model call
+    const first = reqs[0]!
+    expect(first.type === 'model.request' && first.model).toBe('fake-model')
+    expect(first.type === 'model.request' && first.tools).toContain('write_file')
+    expect(first.type === 'model.request' && first.system.length > 0).toBe(true)
+    // the exact array that went out: system + the user turn
+    const roles = (r: typeof first): string[] =>
+      r.type === 'model.request' ? (r.messages as Array<{ role: string }>).map((m) => m.role) : []
+    expect(roles(first)).toEqual(['system', 'user'])
+    // the second call also carries the tool result from the first
+    expect(roles(reqs[1]!)).toContain('tool')
+    expect((reqs[1]!.type === 'model.request' && reqs[1]!.messages.length) as number).toBeGreaterThan(2)
+    // and it is a snapshot: history growing later must not rewrite the record
+    expect(roles(first)).toEqual(['system', 'user'])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

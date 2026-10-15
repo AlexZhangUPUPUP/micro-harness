@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, splitDiffHunks, toMarkdown, truncate } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -193,4 +193,45 @@ test('splitDiffHunks handles several files', () => {
   const hunks = splitDiffHunks(diff)
   expect(hunks.map((h) => h.file)).toEqual(['one.txt', 'two.txt'])
   expect(hunks.map((h) => h.index)).toEqual([0, 1])
+})
+
+test('deriveInspector collects the exact requests in order', () => {
+  const events = [
+    ev('main', null, { type: 'turn.start', turn: 1 }),
+    ev('main', null, {
+      type: 'model.request',
+      model: 'deepseek-chat',
+      system: 'you are a harness',
+      tools: ['read_file', 'bash'],
+      messages: [{ role: 'system', content: 'you are a harness' }, { role: 'user', content: 'hi' }],
+      tokens: 42,
+    }),
+    ev('child', 'main', {
+      type: 'model.request',
+      model: 'deepseek-chat',
+      system: 'you are a harness',
+      tools: [],
+      messages: [{ role: 'system', content: 'you are a harness' }],
+      tokens: 9,
+    }),
+  ]
+  const reqs = deriveInspector(events)
+  expect(reqs.length).toBe(2)
+  expect(reqs[0]!.agentId).toBe('main')
+  expect(reqs[0]!.tools).toEqual(['read_file', 'bash'])
+  expect(reqs[0]!.messages.length).toBe(2)
+  expect(reqs[1]!.agentId).toBe('child')
+  expect(deriveInspector([ev('main', null, { type: 'text.delta', text: 'x' })])).toEqual([])
+})
+
+test('messagePreview summarises each role', () => {
+  expect(messagePreview({ role: 'user', content: 'hello   world' })).toBe('hello world')
+  expect(messagePreview({ role: 'tool', name: 'read_file', content: 'line1\nline2' })).toBe('read_file: line1 line2')
+  expect(
+    messagePreview({
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'c', function: { name: 'write_file', arguments: '{}' } }],
+    }),
+  ).toBe('→ write_file')
 })
