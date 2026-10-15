@@ -39,7 +39,7 @@
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ✅ |
 | **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ✅ |
 | **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ✅ |
-| **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ☐ |
+| **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ✅ |
 | **P8** | 互操作 | MCP client + ACP server | ☐ |
 | **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ☐ |
 | **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ☐ |
@@ -170,10 +170,13 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P7 · 隔离与合并
 
-- [ ] git worktree：每个 agent 一个工作区（改文件时自动启用）
-- [ ] 差异预览 + **合并队列**（自动合干净的 + 冲突汇总）
-- [ ] 端口自 PiStudio 已验证的实现
-- [ ] 验收：2 个 agent 并行改不同文件 → 一键合并；改同一文件 → 冲突面板
+- [x] **git worktree 隔离**：`AgentRunner.isolation='worktree'`，每个子 agent 一个工作区；发出 `agent.worktree` 事件
+- [x] 差异预览：`worktreeDiff`（改了什么 + 统一 diff）
+- [x] **合并队列**：`integratePreview` 依次三方合并每个 agent（自动解干净的 + 冲突汇总）+ `integrateApply`
+- [x] 移植自 PiStudio 已验证的 `worktree.js` / `merge.js`（逻辑未改，`isolation.ts` 为类型化门面）
+- [x] CLI `--isolate`；server `MICRO_ISOLATE=1` + `/agents`、`/agents/:id/diff|promote|cleanup`、`GET|POST /integrate`
+- [x] 验收：两个 agent 并行写不同文件 → 一键合并；写同一文件 → 冲突被标出（测试覆盖）
+- [x] GUI：agent 上的 `wt` 徽章 + **changes 面板**（每 agent diff / promote + integrate all）
 
 ## P8 · 互操作
 
