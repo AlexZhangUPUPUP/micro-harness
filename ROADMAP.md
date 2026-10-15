@@ -33,16 +33,16 @@
 | 阶段 | 名称 | 关键交付 | 状态 |
 |---|---|---|---|
 | **P0** | 基座 | monorepo + Bun 工具链 + CI | ✅ |
-| **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ✅ |
+| **P1** | 内核 | Context/DI/生命周期/作用域/事件 | ↩️ 已回退 |
 | **P2** | core | 事件化 loop + Provider + 工具审批 + 会话 JSONL | ✅ |
 | **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ✅ |
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ✅ |
 | **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ✅ |
 | **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ✅ |
 | **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ✅ |
-| **P8** | 互操作 | MCP client + ACP server | ☐ |
-| **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ☐ |
-| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ☐ |
+| **P8** | 互操作 | MCP client + ACP server | ✅ |
+| **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ✅ |
+| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ◐ evals + 二进制 ✅；发布未做 |
 
 **第一晚目标：P0 → P1 → P2 → P3（最小可用多 agent）。**
 
@@ -125,7 +125,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 **验收**
 - [x] `bun test` 覆盖：事件序列、工具错误回灌、并行工具、审批拒绝、会话 replay、agent 标记
-- [ ] 真机跑通：写文件 → 读回 → 正确作答（CLI 已可）
+- [x] 真机跑通：写文件 → 读回 → 正确作答（真 DeepSeek；evals 的 `read-and-write` 任务亦为真机通过）
 - [x] 生成的 JSONL 可被 replay 出同一事件序列
 
 ---
@@ -180,7 +180,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] **trace 面板 + replay 滑杆**（按 seq 切片事件流，会话随之重建）
 - [x] **多 agent 面板**：agent 树 + 每个 agent 的 token/成本/工具数
 - [x] 验收：GUI 能对话、看 trace、看多 agent 树（`docs/gui.png`，已 OCR 校验）
-- [ ] diff 审阅 / inspector（context、system prompt）——留待后续
+- [x] diff 审阅 / inspector（context、system prompt）—— inspector 面板展示发给模型的原始 payload；diff 支持 hunk 级 accept/reject
 
 ## P7 · 隔离与合并
 
@@ -197,10 +197,10 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] **MCP client**：stdio + streamable HTTP 两种传输（不引官方 SDK）；`mcp.json` 启动时读取；工具按 `<server>__<tool>` 命名空间合并进注册表；`GET /api/mcp` 报告状态。已对官方参考 server 端到端验证（13 工具 → 模型调用 → 42）
 - [x] **ACP server**（让编辑器驱动我们）：协议 v1，JSON-RPC/NDJSON；`initialize`/`session/new`/`session/prompt`/`session/cancel` 入，`session/update`+`session/request_permission`+`fs/*` 出；`micro-harness acp` 启动。真机验证：真 CLI 子进程 + 真模型，单回合 101 条 update，文件确实落盘
 - [x] 关键结论：MCP 用"启动时读配置"就够了，**不需要容器**——见 docs/design-comparison.zh-CN.md
-- [ ] **MCP client**：接入 stdio / streamable-http，工具自动注册
-- [ ] **ACP server**：Zed / DSH 等可驱动我们
-- [ ] 验收：接入一个真实 MCP server；Zed 里能对话
- · 上下文与经济性
+- [x] 验收：接入一个真实 MCP server（官方参考 server 端到端：13 工具 → 模型调用 → 42）
+- [ ] 验收：在 Zed 里驱动我们对话 —— 未验证（ACP 已用真 CLI 子进程 + 真模型验证：单回合 101 条 update）
+
+## P9 · 上下文与经济性
 
 - [x] **缓存前缀保全**：工具输出在*写入时*截断（前缀不再被事后重写）+ 压缩保留头部而非砍头——实测真 DeepSeek 命中 69–78%
 - [x] **成本/缓存命中计量**：DeepSeek/OpenAI/Anthropic 三种方言归一化成 `usage.cacheRead`，按缓存折扣计价，GUI 显示命中率
@@ -212,7 +212,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 - [x] `evals/`：任务集 + runner + 报告 —— 26 任务（确定性 + LLM 裁判 + rubric），`--mock` 无网确定性、CI-safe；新增**标注金标集 + 裁判校准 CLI**（`golden.ts` 10 例、`calibrate.ts`，`--min-accuracy` 门禁）
 - [x] `bun build --compile` 出单文件二进制（macOS/Linux）—— `dist/micro-harness`，`--help`/`--version` 无需 API key 即可用
-- [ ] npm/bun 发布 + 文档站 —— 未做（需要先决定包名 / npm 账号 / 是否发布）
+- [ ] npm/bun 发布 —— 暂不发布（已决定）；文档站 —— 未做
 - [ ] 验收：`micro-harness` 一条命令装好、跑通评测 —— 未做
 
 ---
