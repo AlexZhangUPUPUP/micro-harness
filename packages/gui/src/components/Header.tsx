@@ -66,7 +66,7 @@ export function Header({ current, tokens, cost, series, busy, dark, onToggleThem
         <button
           onClick={onTogglePanel}
           aria-label={t('a11y.togglePanel')}
-          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground lg:hidden"
+          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" />
