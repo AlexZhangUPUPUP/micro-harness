@@ -210,10 +210,10 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P10 · 评测与发布
 
-- [ ] `evals/`：任务集 + runner + 报告
-- [ ] `bun build --compile` 出单文件二进制（macOS/Linux）
-- [ ] npm/bun 发布 + 文档站
-- [ ] 验收：`micro-harness` 一条命令装好、跑通评测
+- [x] `evals/`：任务集 + runner + 报告 —— 26 任务（确定性 + LLM 裁判 + rubric），`--mock` 无网确定性、CI-safe；新增**标注金标集 + 裁判校准 CLI**（`golden.ts` 10 例、`calibrate.ts`，`--min-accuracy` 门禁）
+- [x] `bun build --compile` 出单文件二进制（macOS/Linux）—— `dist/micro-harness`，`--help`/`--version` 无需 API key 即可用
+- [ ] npm/bun 发布 + 文档站 —— 未做（需要先决定包名 / npm 账号 / 是否发布）
+- [ ] 验收：`micro-harness` 一条命令装好、跑通评测 —— 未做
 
 ---
 
