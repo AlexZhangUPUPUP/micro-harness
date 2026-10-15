@@ -18,6 +18,20 @@ type View = 'chat' | 'trace' | 'changes' | 'inspector'
 const VIEWS: View[] = ['chat', 'trace', 'changes', 'inspector']
 const NEW_KEY = '__new__'
 
+/** Thin draggable divider between a side column and the main area. */
+function Divider({ onResize }: { onResize: (e: React.PointerEvent) => void }) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      onPointerDown={onResize}
+      className="group relative z-10 -mx-1 w-2 shrink-0 cursor-col-resize touch-none select-none"
+    >
+      <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition group-hover:bg-teal/70" />
+    </div>
+  )
+}
+
 export default function App() {
   const { t, lang, setLang } = useT()
   const [sessions, setSessions] = useState<SessionMeta[]>([])
@@ -43,6 +57,8 @@ export default function App() {
     const saved = localStorage.getItem('micro-panel')
     return saved === null ? window.matchMedia('(min-width: 1024px)').matches : saved === '1'
   })
+  const [leftW, setLeftW] = useState(() => Number(localStorage.getItem('micro-left-w')) || 260)
+  const [rightW, setRightW] = useState(() => Number(localStorage.getItem('micro-right-w')) || 320)
   const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   // True while the user is composing a brand-new session, so the session poll
@@ -64,6 +80,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('micro-panel', showPanel ? '1' : '0')
   }, [showPanel])
+
+  // Remember the column widths.
+  useEffect(() => {
+    localStorage.setItem('micro-left-w', String(leftW))
+  }, [leftW])
+  useEffect(() => {
+    localStorage.setItem('micro-right-w', String(rightW))
+  }, [rightW])
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -286,6 +310,29 @@ export default function App() {
     [current],
   )
 
+  /** Drag a divider to resize a side column, clamped so main stays usable. */
+  const startResize = (side: 'left' | 'right') => (e: React.PointerEvent): void => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = side === 'left' ? leftW : rightW
+    const min = side === 'left' ? 180 : 220
+    const max = side === 'left' ? 480 : 560
+    const onMove = (ev: PointerEvent): void => {
+      const next = startW + (side === 'left' ? ev.clientX - startX : startX - ev.clientX)
+      const clamped = Math.max(min, Math.min(max, next))
+      if (side === 'left') setLeftW(clamped)
+      else setRightW(clamped)
+    }
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.userSelect = ''
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
   const paletteActions: PaletteAction[] = useMemo(
     () => [
       { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]) } },
@@ -330,9 +377,10 @@ export default function App() {
         {/* Persistent rail: inline, never an overlay — so interacting with the
             composer (or anything in main) can't dismiss it. */}
         <aside
+          style={{ width: leftW }}
           className={`${
             showSidebar ? 'flex' : 'hidden'
-          } w-[260px] shrink-0 flex-col border-r border-border bg-background`}
+          } shrink-0 flex-col border-r border-border bg-background`}
         >
           <Sidebar
             sessions={sessions}
@@ -363,6 +411,8 @@ export default function App() {
             }}
           />
         </aside>
+
+        {showSidebar && <Divider onResize={startResize('left')} />}
 
         <main className={`relative flex min-w-0 flex-1 flex-col ${replayAt != null ? 'saturate-[0.8]' : ''}`}>
           <div
@@ -404,10 +454,12 @@ export default function App() {
         </main>
 
         {/* Persistent panel: inline, not an overlay — same reasoning as the rail. */}
+        {showPanel && <Divider onResize={startResize('right')} />}
         <aside
+          style={{ width: rightW }}
           className={`${
             showPanel ? 'flex' : 'hidden'
-          } w-[320px] max-w-[88vw] shrink-0 flex-col border-l border-border bg-background`}
+          } shrink-0 flex-col border-l border-border bg-background`}
         >
           <div role="tablist" aria-label={t('a11y.tabs')} className="flex shrink-0 gap-1 border-b border-border p-2">
             {VIEWS.map((v) => (
