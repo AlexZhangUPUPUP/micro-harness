@@ -5,10 +5,13 @@ interface ComposerProps {
   setValue: (v: string) => void
   onSend: () => void
   busy: boolean
+  models?: string[]
+  model?: string
+  setModel?: (m: string) => void
 }
 
 /** Floating input card with keyboard hints; gradient frame while a run is busy. */
-export function Composer({ value, setValue, onSend, busy }: ComposerProps) {
+export function Composer({ value, setValue, onSend, busy, models, model, setModel }: ComposerProps) {
   const { t } = useT()
   return (
     <div className="shrink-0 border-t border-border/70 bg-background/70 p-3 backdrop-blur">
@@ -39,6 +42,20 @@ export function Composer({ value, setValue, onSend, busy }: ComposerProps) {
                   <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-gold" aria-hidden="true" />
                   {t('composer.running')}
                 </span>
+              )}
+              {models && models.length > 1 && (
+                <select
+                  value={model}
+                  onChange={(e) => setModel?.(e.target.value)}
+                  aria-label={t('composer.model')}
+                  className="rounded border border-border bg-transparent px-1.5 py-px font-mono text-[10px] text-muted-foreground outline-none focus:border-teal/50"
+                >
+                  {models.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
               )}
               <button
                 onClick={onSend}

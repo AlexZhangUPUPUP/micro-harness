@@ -7,6 +7,7 @@
  *   MICRO_DATA_DIR                session + index directory (default ~/.micro-harness)
  *   MICRO_SERVER_TOKEN            bearer token (required beyond loopback)
  *   MICRO_MODEL / MICRO_BASE_URL / MICRO_API_KEY   model provider
+ *   MICRO_MODELS                  comma-separated model list (defaults to MICRO_MODEL alone)
  *   MICRO_PRICE_INPUT / MICRO_PRICE_OUTPUT         USD per 1M tokens
  */
 
@@ -20,6 +21,10 @@ const port = Number(process.env.MICRO_PORT ?? 8787)
 const hostname = process.env.MICRO_HOST ?? '127.0.0.1'
 const dataDir = path.resolve(process.env.MICRO_DATA_DIR ?? path.join(os.homedir(), '.micro-harness'))
 const model = process.env.MICRO_MODEL ?? 'deepseek-chat'
+const models = (process.env.MICRO_MODELS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
 const baseUrl = process.env.MICRO_BASE_URL ?? 'https://api.deepseek.com'
 const apiKey = process.env.MICRO_API_KEY ?? ''
 const token = process.env.MICRO_SERVER_TOKEN
@@ -35,6 +40,7 @@ const server = createServer({
   store,
   provider,
   model,
+  models,
   cwd: process.cwd(),
   hostname,
   port,

@@ -29,6 +29,8 @@ export default function App() {
   const [runTick, setRunTick] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [models, setModels] = useState<string[]>([])
+  const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
   const [showSidebar, setShowSidebar] = useState(() => window.matchMedia('(min-width: 768px)').matches)
   const [showPanel, setShowPanel] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   const [atBottom, setAtBottom] = useState(true)
@@ -54,6 +56,22 @@ export default function App() {
     const t = setInterval(() => void refreshSessions(), 5000)
     return () => clearInterval(t)
   }, [refreshSessions])
+
+  // Available models come from the server (MICRO_MODELS); remember the choice.
+  useEffect(() => {
+    void api
+      .models()
+      .then((d) => {
+        setModels(d.models)
+        setModel((cur) => cur || d.default)
+      })
+      .catch(() => {})
+  }, [])
+
+  const chooseModel = (m: string): void => {
+    setModel(m)
+    localStorage.setItem('micro-model', m)
+  }
 
   // ⌘K / Ctrl+K opens the command palette.
   useEffect(() => {
@@ -157,10 +175,43 @@ export default function App() {
         await api.resume(current, text)
         setRunTick((t) => t + 1)
       } else {
-        const meta = await api.create(text)
+        const meta = await api.create(text, { model: model || undefined })
         composing.current = false
         setCurrent(meta.id)
       }
+      void refreshSessions()
+    } catch (err) {
+      setError(String((err as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Rename a session in place (PATCH), then refresh the list. */
+  const renameSession = (id: string, title: string): void => {
+    void api
+      .rename(id, title)
+      .then(() => void refreshSessions())
+      .catch((err: unknown) => setError(String((err as Error).message)))
+  }
+
+  /**
+   * Edit a user message and resend: fork the session truncated to just before that
+   * message (`at` is its index in the event array), then run the edited prompt in
+   * the fork — the original session is left untouched.
+   */
+  const editResend = async (at: number, text: string): Promise<void> => {
+    if (!current) return
+    setBusy(true)
+    setError('')
+    try {
+      const forked = await api.fork(current, at)
+      composing.current = false
+      setCurrent(forked.id)
+      setEvents([])
+      setReplayAt(null)
+      await api.resume(forked.id, text)
+      setRunTick((t) => t + 1)
       void refreshSessions()
     } catch (err) {
       setError(String((err as Error).message))
@@ -247,6 +298,7 @@ export default function App() {
               setEvents([])
               if (isMobile()) setShowSidebar(false)
             }}
+            onRename={renameSession}
             onDelete={(id) => {
               void api
                 .remove(id)
@@ -269,7 +321,7 @@ export default function App() {
             onScroll={onScroll}
             className={replayAt == null ? 'bg-dots min-h-0 flex-1 overflow-y-auto px-4 py-4' : 'min-h-0 flex-1 overflow-y-auto bg-gold/5 px-4 py-4'}
           >
-            <Transcript items={chat} />
+            <Transcript items={chat} onEditResend={(at, text) => void editResend(at, text)} />
           </div>
           {replayAt != null && (
             <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full border border-gold/50 bg-gold/15 px-2.5 py-0.5 font-mono text-[10px] font-medium tracking-widest text-gold">
@@ -284,7 +336,15 @@ export default function App() {
               ↓ {t('chat.toBottom')}
             </button>
           )}
-          <Composer value={input} setValue={setInput} onSend={() => void send()} busy={busy} />
+          <Composer
+            value={input}
+            setValue={setInput}
+            onSend={() => void send()}
+            busy={busy}
+            models={models}
+            model={model}
+            setModel={chooseModel}
+          />
         </main>
 
         {/* backdrop for the side panel on narrow windows */}

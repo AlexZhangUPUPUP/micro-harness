@@ -10,6 +10,7 @@ interface SidebarProps {
   onSelect: (id: string) => void
   onNew: () => void
   onDelete?: (id: string) => void
+  onRename?: (id: string, title: string) => void
 }
 
 const statusDot = (status: string): string => {
@@ -20,15 +21,18 @@ const statusDot = (status: string): string => {
 }
 
 /** Left rail: sessions grouped by day, hover to delete, keyboard-navigable. */
-export function Sidebar({ sessions, current, onSelect, onNew, onDelete }: SidebarProps) {
+export function Sidebar({ sessions, current, onSelect, onNew, onDelete, onRename }: SidebarProps) {
   const { t } = useT()
   const listRef = useRef<HTMLDivElement>(null)
   const [armed, setArmed] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const groups = groupSessions(sessions)
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    const target = e.target as HTMLElement
+    if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return
     const items = listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]')
     if (!items?.length) return
     e.preventDefault()
@@ -79,6 +83,22 @@ export function Sidebar({ sessions, current, onSelect, onNew, onDelete }: Sideba
             {g.items.map((s) => {
               const active = s.id === current
               const isArmed = armed === s.id
+              const isEditing = editingId === s.id
+              const title = s.title || s.id.slice(0, 8)
+              const finishRename = (value: string) => {
+                const next = value.trim()
+                setEditingId(null)
+                if (!next || next === title) return
+                onRename?.(s.id, next)
+              }
+              const meta = (
+                <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(s.status)}`} aria-hidden="true" />
+                  <span className="truncate">
+                    {s.status} · {s.model} · {fmtTokens(s.input + s.output)} tok · {fmtCost(s.cost)}
+                  </span>
+                </span>
+              )
               return (
                 <div
                   key={s.id}
@@ -87,20 +107,63 @@ export function Sidebar({ sessions, current, onSelect, onNew, onDelete }: Sideba
                   }`}
                 >
                   {active && <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-teal" aria-hidden="true" />}
-                  <button
-                    role="option"
-                    aria-selected={active}
-                    onClick={() => onSelect(s.id)}
-                    className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left"
-                  >
-                    <span className="block truncate text-[12px] font-medium leading-5">{s.title || s.id.slice(0, 8)}</span>
-                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(s.status)}`} aria-hidden="true" />
-                      <span className="truncate">
-                        {s.status} · {s.model} · {fmtTokens(s.input + s.output)} tok · {fmtCost(s.cost)}
-                      </span>
-                    </span>
-                  </button>
+                  {isEditing ? (
+                    <div className="min-w-0 flex-1 rounded-lg px-3 py-2">
+                      <input
+                        autoFocus
+                        defaultValue={title}
+                        aria-label={t('sessions.renameTitle')}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          e.stopPropagation()
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            e.currentTarget.blur()
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            setEditingId(null)
+                          }
+                        }}
+                        onBlur={(e) => finishRename(e.currentTarget.value)}
+                        className="w-full bg-transparent text-[12px] font-medium leading-5 outline-none ring-0"
+                      />
+                      {meta}
+                    </div>
+                  ) : (
+                    <button
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => onSelect(s.id)}
+                      className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left"
+                    >
+                      <span className="block truncate text-[12px] font-medium leading-5">{title}</span>
+                      {meta}
+                    </button>
+                  )}
+                  {onRename && !isEditing && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEditingId(s.id)
+                      }}
+                      title={t('sessions.renameTitle')}
+                      aria-label={t('sessions.rename')}
+                      className="my-1.5 mr-1.5 grid w-7 shrink-0 place-items-center rounded-md text-[10px] transition text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-3 w-3"
+                        aria-hidden="true"
+                      >
+                        <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+                      </svg>
+                    </button>
+                  )}
                   {onDelete && (
                     <button
                       onClick={(e) => {

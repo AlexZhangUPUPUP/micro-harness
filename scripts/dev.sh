@@ -3,6 +3,7 @@
 #
 #   scripts/dev.sh                     # http://127.0.0.1:5273
 #   MICRO_MODEL=deepseek-reasoner scripts/dev.sh
+#   MICRO_MODELS=deepseek-chat,deepseek-reasoner scripts/dev.sh   # GUI model picker
 #   MICRO_PORT=8787 MICRO_GUI_PORT=5273 scripts/dev.sh
 #
 # API key resolution order: MICRO_API_KEY → DEEPSEEK_API_KEY → OPENAI_API_KEY →
@@ -14,6 +15,7 @@ SERVER_PORT="${MICRO_PORT:-8787}"
 GUI_PORT="${MICRO_GUI_PORT:-5273}"
 MODEL="${MICRO_MODEL:-deepseek-chat}"
 ISOLATE="${MICRO_ISOLATE:-0}"
+MODELS="${MICRO_MODELS:-}"
 DATA_DIR="${MICRO_DATA_DIR:-$HOME/.micro-harness}"
 
 KEY="${MICRO_API_KEY:-${DEEPSEEK_API_KEY:-${OPENAI_API_KEY:-}}}"
@@ -37,7 +39,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" \
+MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" \
   bun packages/server/src/main.ts >/tmp/micro-harness-server.log 2>&1 &
 SRV=$!
 

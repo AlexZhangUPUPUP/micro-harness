@@ -6,10 +6,12 @@
  *   GET    /health
  *   GET    /api/sessions                 list sessions
  *   POST   /api/sessions                 create + start a session  { prompt, model?, cwd? }
+ *   GET    /api/models                   list model ids (default + optional list)
  *   GET    /api/sessions/:id             session header + recorded events
+ *   PATCH  /api/sessions/:id             rename a session          { title }
  *   DELETE /api/sessions/:id             delete a session
  *   POST   /api/sessions/:id/resume      continue a session        { prompt }
- *   POST   /api/sessions/:id/fork        copy a session to a new id
+ *   POST   /api/sessions/:id/fork        copy a session to a new id { keep? }
  *   GET    /api/sessions/:id/events      SSE stream (replay + live)
  *   GET    /api/search?q=…               FTS5 full-text search
  *
@@ -44,6 +46,8 @@ export interface ServerOptions {
   provider: Provider
   /** Model used for new sessions/forks (roles may override later). */
   model: string
+  /** Model ids advertised by GET /api/models; defaults to [model]. */
+  models?: string[]
   /** Working directory for the agent's tools. */
   cwd: string
   tools?: Tool[]
@@ -204,7 +208,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     return runtime
   }
 
-  const fork = (id: string): SessionMeta => {
+  const fork = (id: string, keep?: number): SessionMeta => {
     const source = store.require(id)
     const copy = store.create({
       title: source.title ? `${source.title} (fork)` : '(fork)',
@@ -212,7 +216,9 @@ export function createServer(options: ServerOptions): HarnessServer {
       cwd: source.cwd,
       parentId: source.id,
     })
-    store.appendAll(copy.id, store.events(id))
+    const events = store.events(id)
+    // `keep` truncates the copied transcript; when absent the fork copies everything.
+    store.appendAll(copy.id, typeof keep === 'number' ? events.slice(0, keep) : events)
     return store.require(copy.id)
   }
 
@@ -332,7 +338,13 @@ export function createServer(options: ServerOptions): HarnessServer {
       if (action === 'fork') {
         if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
-        return json({ session: fork(id) }, 201)
+        let body: { keep?: number } = {}
+        try {
+          body = (await req.json()) as typeof body
+        } catch {
+          /* empty body: fork everything */
+        }
+        return json({ session: fork(id, body.keep) }, 201)
       }
       // --- isolation / merge queue (P7) ---
       if (action === 'agents') {
@@ -399,6 +411,18 @@ export function createServer(options: ServerOptions): HarnessServer {
         return json({ error: 'method not allowed' }, 405)
       }
 
+      if (req.method === 'PATCH') {
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        let body: { title?: string } = {}
+        try {
+          body = (await req.json()) as typeof body
+        } catch {
+          /* empty */
+        }
+        const title = (body.title ?? '').trim()
+        if (!title) return json({ error: 'title is required' }, 400)
+        return json({ session: store.renameSession(id, title) })
+      }
       if (action) return json({ error: 'not found' }, 404)
       if (req.method === 'GET') {
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
@@ -418,6 +442,13 @@ export function createServer(options: ServerOptions): HarnessServer {
         return json({ ok: true })
       }
       return json({ error: 'method not allowed' }, 405)
+    }
+
+    // /api/models
+    if (parts[0] === 'api' && parts[1] === 'models') {
+      if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
+      const models = options.models && options.models.length ? options.models : [model]
+      return json({ models, default: model })
     }
 
     // /api/search?q=…

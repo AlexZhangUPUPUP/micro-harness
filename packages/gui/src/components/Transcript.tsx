@@ -1,11 +1,17 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ChatItem } from '../lib/derive.ts'
 import { useT } from '../lib/i18n.tsx'
 import Markdown from './Markdown.tsx'
 import { fmtTime } from '../lib/format.ts'
 
 /** The conversation stream: user bubbles, assistant blocks, tool timeline, notices. */
-export function Transcript({ items }: { items: ChatItem[] }) {
+export function Transcript({
+  items,
+  onEditResend,
+}: {
+  items: ChatItem[]
+  onEditResend?: (at: number, text: string) => void
+}) {
   const { t } = useT()
   if (items.length === 0) {
     return (
@@ -21,25 +27,86 @@ export function Transcript({ items }: { items: ChatItem[] }) {
   return (
     <div role="log" aria-live="polite" aria-label={t('a11y.transcript')} className="stagger mx-auto w-full max-w-[760px] space-y-3">
       {items.map((item) => (
-        <TranscriptItem key={item.id} item={item} />
+        <TranscriptItem key={item.id} item={item} onEditResend={onEditResend} />
       ))}
     </div>
   )
 }
 
-function TranscriptItem({ item }: { item: ChatItem }) {
-  if (item.kind === 'user') return <UserBubble item={item} />
+function TranscriptItem({ item, onEditResend }: { item: ChatItem; onEditResend?: (at: number, text: string) => void }) {
+  if (item.kind === 'user') return <UserBubble item={item} onEditResend={onEditResend} />
   if (item.kind === 'notice') return <Notice item={item} />
   if (item.kind === 'tool') return <ToolCard item={item} />
   return <AssistantBlock item={item} />
 }
 
-function UserBubble({ item }: { item: Extract<ChatItem, { kind: 'user' }> }) {
+function UserBubble({
+  item,
+  onEditResend,
+}: {
+  item: Extract<ChatItem, { kind: 'user' }>
+  onEditResend?: (at: number, text: string) => void
+}) {
+  const { t } = useT()
+  const [editing, setEditing] = useState(false)
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  const save = () => {
+    const text = ref.current?.value.trim() ?? ''
+    if (text) onEditResend?.(item.at, text)
+  }
+
+  if (editing) {
+    return (
+      <div className="flex animate-rise justify-end">
+        <div className="flex w-full max-w-[70%] flex-col gap-1.5">
+          <textarea
+            ref={ref}
+            autoFocus
+            defaultValue={item.text}
+            rows={2}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setEditing(false)
+              else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault()
+                save()
+              }
+            }}
+            className="w-full resize-none rounded-2xl rounded-br-md border border-border/60 bg-input px-3.5 py-2 text-[13px] leading-relaxed outline-none focus:border-teal/50"
+          />
+          <div className="flex justify-end gap-1.5">
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-md px-2 py-1 text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={save}
+              className="rounded-md bg-teal px-2.5 py-1 text-[11px] font-medium text-white transition hover:brightness-110"
+            >
+              {t('chat.save')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex justify-end animate-rise">
+    <div className="group flex animate-rise justify-end">
       <div className="max-w-[70%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-teal to-teal/80 px-3.5 py-2 text-[13px] leading-relaxed text-white shadow-[0_2px_12px_hsl(var(--teal)/0.35)]">
         {item.text}
       </div>
+      {onEditResend && (
+        <button
+          onClick={() => setEditing(true)}
+          title={t('chat.editTitle')}
+          className="ml-1 shrink-0 self-center rounded px-1 text-[10px] text-muted-foreground opacity-0 transition hover:text-teal group-hover:opacity-100"
+        >
+          {t('chat.edit')}
+        </button>
+      )}
     </div>
   )
 }
