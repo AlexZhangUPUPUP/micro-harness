@@ -35,3 +35,5 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-16 · 会话树 · 侧栏 list/tree 切换，`sessionForest`/`ancestry`/`descendantCount`（防环）· 4 个纯函数测试
 - 2026-10-16 · **真实长跑抓到并修掉一个严重 bug**：压缩只能丢「整个回合」，而一次编码运行常常只有 1 个 user 消息 → 单轮长任务**上下文预算完全不被执行**（实测峰值 52700 / 预算 24000，0 次压缩）。新增**步骤级裁剪**（丢 assistant+其工具结果，绝不拆散、保留任务陈述与最新一步）后同一条运行峰值 23685 / 24000、7 次压缩。多 agent 长跑另测：3 个 agent、2 个 worktree、各自独立上下文、70233 tokens、$0.0102
 
+- 2026-10-15 · P10（评测加深）· 标注金标集 + 裁判校准：`golden.ts`（10 例，逐例 `rationale` 作证据）、`calibrate.ts`（`--mock` 走完整 prompt→strict-parse→比对→exit-code；真实模式 `--judge-model`，`--min-accuracy` 门禁，miss 时并列 judge reasons 与 label）；任务集 18→26（+4 确定性 +4 rubric）；补齐 4 个新确定性任务的 mock 脚本（此前 `run.ts --mock` 红：8 fails）· `bun test` 153/153、typecheck 干净；`run.ts --mock` 44 pass / 0 fail / 8 skipped exit 0；`calibrate.ts --mock` 10/10 exit 0
+- 2026-10-15 · P10（发布）· 修单文件二进制：`--help`/`--version` 在 API key 检查**之前**处理（此前 `micro-harness --version` 直接 `missing API key` 退出 1，属发布阻塞）；抽出 `VERSION` 常量并复用给 ACP `agentInfo`；`dist/` 进 `.gitignore` · 重编 `dist/micro-harness`，`--version`=0.1.0 / `--help` 正常 / 缺 key 仍 exit 1；`bun test` 153/153
