@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -234,4 +234,17 @@ test('messagePreview summarises each role', () => {
       tool_calls: [{ id: 'c', function: { name: 'write_file', arguments: '{}' } }],
     }),
   ).toBe('→ write_file')
+})
+
+test('deriveAgents totals cache reads, and cacheHitRate reports the share', () => {
+  const events = [
+    ev('main', null, { type: 'usage', input: 1000, output: 10, cacheRead: 800, cost: 0.001 }),
+    ev('main', null, { type: 'usage', input: 1000, output: 10, cost: 0.002 }),
+  ]
+  const { total } = deriveAgents(events)
+  expect(total.cacheRead).toBe(800)
+  expect(total.input).toBe(2000)
+  expect(cacheHitRate(total)).toBeCloseTo(0.4, 5)
+  expect(cacheHitRate({ input: 0 })).toBe(0)
+  expect(cacheHitRate({ input: 100, cacheRead: 500 })).toBe(1) // clamped
 })

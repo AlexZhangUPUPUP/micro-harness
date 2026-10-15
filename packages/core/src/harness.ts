@@ -10,7 +10,8 @@
  * message so the model can recover.
  */
 
-import { estimateTokens, trimMessages } from './context.ts'
+import { cacheReadTokens } from './model.ts'
+import { compactMessages, DEFAULT_TOOL_OUTPUT_CHARS, estimateTokens, truncateToolOutput } from './context.ts'
 import type { ChatMessage, ToolCall } from './model.ts'
 import type { Provider } from './provider.ts'
 import { dispatch, makeTools, toolDefs, type Tool, type ToolContext, type ToolResult } from './tools.ts'
@@ -36,8 +37,13 @@ export interface HarnessOptions {
   tools?: Tool[]
   /** Nesting depth of this agent (root = 0). Sub-agents get depth + 1. */
   depth?: number
-  /** USD per 1M tokens, used to stamp `usage` events with a `cost`. */
-  pricing?: { input: number; output: number }
+  /** Cap on a single tool result, in characters, applied when it is appended. */
+  maxToolOutput?: number
+  /**
+   * USD per 1M tokens, used to stamp `usage` events with a `cost`. `inputCached` is
+   * the discounted rate for input served from the provider's prompt cache.
+   */
+  pricing?: { input: number; output: number; inputCached?: number }
 }
 
 export type ApprovalMode = 'suggest' | 'auto-edit' | 'full-auto'
@@ -76,13 +82,14 @@ export class Harness {
   readonly #provider: Provider
   readonly #tools: Tool[]
   readonly #system: string
+  readonly #maxToolOutput: number
   readonly #toolCtx: ToolContext
   readonly #maxSteps: number
   readonly #maxContextTokens: number
   readonly #parallelTools: boolean
   readonly #approval: ApprovalMode
   readonly #confirm?: ConfirmFn
-  readonly #pricing?: { input: number; output: number }
+  readonly #pricing?: { input: number; output: number; inputCached?: number }
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
@@ -105,6 +112,7 @@ export class Harness {
 
     const system = opts.systemPrompt ?? defaultSystemPrompt(opts.cwd)
     this.#system = system
+    this.#maxToolOutput = opts.maxToolOutput ?? DEFAULT_TOOL_OUTPUT_CHARS
     this.messages = [{ role: 'system', content: system }]
     this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd, parentId: opts.parentId ?? null })
   }
@@ -119,14 +127,16 @@ export class Harness {
       this.log.emit({ type: 'turn.start', turn: step })
       let streamedText = false
 
-      const { messages, dropped } = trimMessages(this.messages, this.#maxContextTokens)
+      const { messages, dropped, tokens, strategy } = compactMessages(this.messages, {
+        maxTokens: this.#maxContextTokens,
+      })
       if (dropped > 0) {
         this.messages.splice(0, this.messages.length, ...messages)
         this.log.emit({
           type: 'context.trim',
           dropped,
-          tokens: estimateTokens(messages),
-          strategy: 'window',
+          tokens,
+          strategy,
         })
       }
 
@@ -159,11 +169,19 @@ export class Harness {
       if (usage) {
         const input = usage.prompt_tokens ?? 0
         const output = usage.completion_tokens ?? 0
+        const cacheRead = cacheReadTokens(usage)
+        const price = this.#pricing
         this.log.emit({
           type: 'usage',
           input,
           output,
-          cost: this.#pricing ? (input / 1e6) * this.#pricing.input + (output / 1e6) * this.#pricing.output : undefined,
+          // Only when the provider actually reported a hit, so events stay small.
+          ...(cacheRead > 0 ? { cacheRead } : {}),
+          cost: price
+            ? ((input - cacheRead) / 1e6) * price.input +
+              (cacheRead / 1e6) * (price.inputCached ?? price.input) +
+              (output / 1e6) * price.output
+            : undefined,
         })
       }
       if (message.content && !streamedText) this.log.emit({ type: 'text.delta', text: String(message.content) })
@@ -233,6 +251,9 @@ export class Harness {
 
       const started = Date.now()
       const result = await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
+      // Cap the result *now*, not at trim time: a stable prefix is what lets the
+      // provider's prompt cache hit, and rewriting history would throw it away.
+      const capped = truncateToolOutput(result.output, this.#maxToolOutput)
       this.log.emit({
         type: 'tool.result',
         id: call.id,
@@ -240,8 +261,9 @@ export class Harness {
         ok: !result.isError,
         output: result.output,
         ms: Date.now() - started,
+        ...(capped.elided > 0 ? { elided: capped.elided } : {}),
       })
-      return { call, result }
+      return { call, result: { ...result, output: capped.text } }
     }
 
     const settled =

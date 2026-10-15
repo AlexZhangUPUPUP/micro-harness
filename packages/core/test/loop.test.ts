@@ -1,11 +1,12 @@
 import { test, expect } from 'bun:test'
+import { writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Harness } from '../src/harness.ts'
 import { EventHub, type TaggedEvent } from '../src/events.ts'
 import type { ChatResponse, Provider } from '../src/provider.ts'
-import type { ChatMessage } from '../src/model.ts'
+import { cacheReadTokens, type ChatMessage } from '../src/model.ts'
 
 const assistantTool = (id: string, name: string, args: unknown): ChatMessage => ({
   role: 'assistant',
@@ -24,7 +25,16 @@ function scripted(responses: ChatResponse[]): Provider {
   }
 }
 
-function setup(responses: ChatResponse[], cwd: string, opts: { maxSteps?: number; parallelTools?: boolean } = {}) {
+function setup(
+  responses: ChatResponse[],
+  cwd: string,
+  opts: {
+    maxSteps?: number
+    parallelTools?: boolean
+    maxToolOutput?: number
+    pricing?: { input: number; output: number; inputCached?: number }
+  } = {},
+) {
   const hub = new EventHub()
   const events: TaggedEvent[] = []
   hub.on((e) => events.push(e))
@@ -35,6 +45,8 @@ function setup(responses: ChatResponse[], cwd: string, opts: { maxSteps?: number
     hub,
     maxSteps: opts.maxSteps,
     parallelTools: opts.parallelTools,
+    maxToolOutput: opts.maxToolOutput,
+    pricing: opts.pricing,
   })
   return { harness, events, hub }
 }
@@ -175,6 +187,117 @@ test('every model call records the exact request for the inspector', async () =>
     expect((reqs[1]!.type === 'model.request' && reqs[1]!.messages.length) as number).toBeGreaterThan(2)
     // and it is a snapshot: history growing later must not rewrite the record
     expect(roles(first)).toEqual(['system', 'user'])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+/* ------------------------------------------------ prompt caching & compaction */
+
+test('a provider prompt-cache hit is surfaced and priced at the cached rate', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-cache-'))
+  try {
+    const hub = new EventHub()
+    const captured: TaggedEvent[] = []
+    hub.on((e) => captured.push(e))
+    const harness = new Harness({
+      provider: scripted([
+        {
+          message: { role: 'assistant', content: 'hi' },
+          usage: { prompt_tokens: 1000, completion_tokens: 100, prompt_cache_hit_tokens: 800 },
+        },
+      ]),
+      model: 'fake-model',
+      cwd: dir,
+      hub,
+      pricing: { input: 1, output: 2, inputCached: 0.1 }, // USD per 1M tokens
+    })
+    await harness.send('x')
+
+    const usage = captured.map((e) => e.event).find((e) => e.type === 'usage')
+    expect(usage && 'cacheRead' in usage ? usage.cacheRead : null).toBe(800)
+    // 200 uncached @ $1/M + 800 cached @ $0.1/M + 100 output @ $2/M
+    expect(usage && 'cost' in usage ? usage.cost : null).toBeCloseTo(480e-6, 9)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('no cacheRead field is emitted when the provider reports no hit', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-nocache-'))
+  try {
+    const { harness, events } = setup(
+      [{ message: { role: 'assistant', content: 'hi' }, usage: { prompt_tokens: 10, completion_tokens: 1 } }],
+      dir,
+    )
+    await harness.send('x')
+    const usage = events.map((e) => e.event).find((e) => e.type === 'usage')
+    expect(usage && 'cacheRead' in usage).toBe(false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('cache dialects are normalized (DeepSeek / OpenAI / Anthropic)', () => {
+  expect(cacheReadTokens({ prompt_cache_hit_tokens: 5 })).toBe(5)
+  expect(cacheReadTokens({ prompt_tokens_details: { cached_tokens: 7 } })).toBe(7)
+  expect(cacheReadTokens({ cache_read_input_tokens: 9 })).toBe(9)
+  expect(cacheReadTokens({ prompt_tokens: 10 })).toBe(0)
+  expect(cacheReadTokens(undefined)).toBe(0)
+})
+
+test('an oversized tool result is capped once, when it is appended', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-cap-'))
+  try {
+    const big = 'x'.repeat(40_000)
+    writeFileSync(path.join(dir, 'big.txt'), big)
+    const { harness, events } = setup(
+      [
+        { message: assistantTool('c1', 'read_file', { path: 'big.txt' }) },
+        { message: { role: 'assistant', content: 'done' } },
+      ],
+      dir,
+      { maxToolOutput: 1000 },
+    )
+    await harness.send('read the big file')
+
+    // `read_file` has its own ~20k-char cap; the harness cap is a second, tighter one
+    // that applies to every tool (bash, MCP tools, ...), so measure against that.
+    const result = events.map((e) => e.event).find((e) => e.type === 'tool.result')
+    expect(result && 'elided' in result ? result.elided : 0).toBeGreaterThan(18_000)
+    // the event keeps the tool's own full output for the trace/UI
+    expect(String(result && 'output' in result ? result.output : '').length).toBeGreaterThan(19_000)
+
+    // ...but the message the model sees is capped, and says so
+    const toolMsg = harness.messages.find((m) => m.role === 'tool')
+    const content = String(toolMsg?.content ?? '')
+    expect(content.length).toBeLessThan(1200)
+    expect(content).toMatch(/characters elided/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('later turns never rewrite what was already sent (a cacheable prefix)', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-prefix-'))
+  try {
+    const { harness, events } = setup(
+      [
+        { message: assistantTool('c1', 'write_file', { path: 'a.txt', content: 'hi' }) },
+        { message: { role: 'assistant', content: 'done' } },
+      ],
+      dir,
+    )
+    await harness.send('write it')
+    const reqs = events
+      .map((e) => e.event)
+      .filter((e): e is Extract<TaggedEvent['event'], { type: 'model.request' }> => e.type === 'model.request')
+    expect(reqs.length).toBe(2)
+    const [first, second] = [reqs[0]!.messages, reqs[1]!.messages]
+    expect(second.length).toBeGreaterThan(first.length)
+    // request #2 is request #1 plus the new turn: byte-identical prefix, so the
+    // provider's prompt cache can hit on everything that came before.
+    expect(JSON.stringify(second.slice(0, first.length))).toBe(JSON.stringify(first))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

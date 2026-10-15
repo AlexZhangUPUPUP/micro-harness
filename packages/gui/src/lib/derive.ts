@@ -118,6 +118,8 @@ export interface AgentNode {
   parentId: string | null
   input: number
   output: number
+  /** Input tokens served from the provider's prompt cache. */
+  cacheRead: number
   cost: number
   tools: number
   errors: number
@@ -132,7 +134,7 @@ export interface AgentNode {
 export interface AgentTree {
   roots: AgentNode[]
   agents: AgentNode[]
-  total: { input: number; output: number; cost: number }
+  total: { input: number; output: number; cacheRead: number; cost: number }
 }
 
 /** Rebuild the multi-agent tree and per-agent usage from the tagged stream. */
@@ -146,6 +148,7 @@ export function deriveAgents(events: TaggedEvent[]): AgentTree {
         parentId,
         input: 0,
         output: 0,
+        cacheRead: 0,
         cost: 0,
         tools: 0,
         errors: 0,
@@ -167,6 +170,7 @@ export function deriveAgents(events: TaggedEvent[]): AgentTree {
     if (ev.type === 'usage') {
       node.input += Number(ev.input ?? 0)
       node.output += Number(ev.output ?? 0)
+      node.cacheRead += Number(ev.cacheRead ?? 0)
       node.cost += Number(ev.cost ?? 0)
     } else if (ev.type === 'tool.result') {
       node.tools += 1
@@ -194,10 +198,22 @@ export function deriveAgents(events: TaggedEvent[]): AgentTree {
   }
   const roots = agents.filter((node) => !node.parentId || !map.has(node.parentId))
   const total = agents.reduce(
-    (acc, node) => ({ input: acc.input + node.input, output: acc.output + node.output, cost: acc.cost + node.cost }),
-    { input: 0, output: 0, cost: 0 },
+    (acc, node) => ({
+      input: acc.input + node.input,
+      output: acc.output + node.output,
+      cacheRead: acc.cacheRead + node.cacheRead,
+      cost: acc.cost + node.cost,
+    }),
+    { input: 0, output: 0, cacheRead: 0, cost: 0 },
   )
   return { roots, agents, total }
+}
+
+/** Share of input tokens served from the provider's prompt cache (0–1). */
+export function cacheHitRate(usage: { input: number; cacheRead?: number }): number {
+  const input = Number(usage.input ?? 0)
+  if (!input) return 0
+  return Math.min(1, Number(usage.cacheRead ?? 0) / input)
 }
 
 /** Slice of the stream up to (and including) `upto` — powers the replay scrubber. */
