@@ -1,5 +1,6 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { SessionMeta } from '../lib/api.ts'
+import { groupSessions } from '../lib/derive.ts'
 import { useT } from '../lib/i18n.tsx'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
 
@@ -8,6 +9,7 @@ interface SidebarProps {
   current: string | null
   onSelect: (id: string) => void
   onNew: () => void
+  onDelete?: (id: string) => void
 }
 
 const statusDot = (status: string): string => {
@@ -17,10 +19,13 @@ const statusDot = (status: string): string => {
   return 'bg-teal'
 }
 
-/** Left rail: session list with status dots, keyboard-navigable. */
-export function Sidebar({ sessions, current, onSelect, onNew }: SidebarProps) {
+/** Left rail: sessions grouped by day, hover to delete, keyboard-navigable. */
+export function Sidebar({ sessions, current, onSelect, onNew, onDelete }: SidebarProps) {
   const { t } = useT()
   const listRef = useRef<HTMLDivElement>(null)
+  const [armed, setArmed] = useState<string | null>(null)
+
+  const groups = groupSessions(sessions)
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
@@ -51,7 +56,7 @@ export function Sidebar({ sessions, current, onSelect, onNew }: SidebarProps) {
         role="listbox"
         aria-label={t('sessions.title', { n: sessions.length })}
         onKeyDown={onKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto p-2"
+        className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
       >
         {sessions.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
@@ -65,29 +70,63 @@ export function Sidebar({ sessions, current, onSelect, onNew }: SidebarProps) {
             </button>
           </div>
         )}
-        {sessions.map((s) => {
-          const active = s.id === current
-          return (
-            <button
-              key={s.id}
-              role="option"
-              aria-selected={active}
-              onClick={() => onSelect(s.id)}
-              className={`relative mb-1 block w-full rounded-lg px-3 py-2 text-left transition ${
-                active ? 'bg-teal/10' : 'hover:bg-muted/60'
-              }`}
-            >
-              {active && <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-teal" aria-hidden="true" />}
-              <span className="block truncate text-[12px] font-medium leading-5">{s.title || s.id.slice(0, 8)}</span>
-              <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(s.status)}`} aria-hidden="true" />
-                <span className="truncate">
-                  {s.status} · {s.model} · {fmtTokens(s.input + s.output)} tok · {fmtCost(s.cost)}
-                </span>
-              </span>
-            </button>
-          )
-        })}
+
+        {groups.map((g) => (
+          <div key={g.key}>
+            <div className="sticky top-0 z-10 -mx-2 bg-card/95 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground backdrop-blur">
+              {t(`sessions.${g.key}`)}
+            </div>
+            {g.items.map((s) => {
+              const active = s.id === current
+              const isArmed = armed === s.id
+              return (
+                <div
+                  key={s.id}
+                  className={`group relative mb-1 flex items-stretch rounded-lg transition ${
+                    active ? 'bg-teal/10' : 'hover:bg-muted/60'
+                  }`}
+                >
+                  {active && <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-teal" aria-hidden="true" />}
+                  <button
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => onSelect(s.id)}
+                    className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left"
+                  >
+                    <span className="block truncate text-[12px] font-medium leading-5">{s.title || s.id.slice(0, 8)}</span>
+                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(s.status)}`} aria-hidden="true" />
+                      <span className="truncate">
+                        {s.status} · {s.model} · {fmtTokens(s.input + s.output)} tok · {fmtCost(s.cost)}
+                      </span>
+                    </span>
+                  </button>
+                  {onDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isArmed) {
+                          setArmed(null)
+                          onDelete(s.id)
+                        } else {
+                          setArmed(s.id)
+                        }
+                      }}
+                      title={isArmed ? t('common.cancel') : t('common.delete')}
+                      className={`my-1.5 mr-1.5 grid w-7 shrink-0 place-items-center rounded-md text-[10px] transition ${
+                        isArmed
+                          ? 'bg-destructive/15 text-destructive'
+                          : 'text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-destructive'
+                      }`}
+                    >
+                      {isArmed ? t('common.cancel').slice(0, 3) : '×'}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </div>
   )

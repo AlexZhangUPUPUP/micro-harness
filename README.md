@@ -127,6 +127,12 @@ full-text search across every saved session (`/api/search`, FTS5):
 
 ![command palette](docs/gui-palette.png)
 
+The right panel has three views. **agents** draws the sub-agent tree with per-node
+usage (hover a node for its detail card), and **trace** is the raw event stream with
+category chips, a text filter and a replay scrubber:
+
+![trace panel](docs/gui-trace.png)
+
 Everything the GUI renders is derived from the event stream by pure functions in
 `packages/gui/src/lib/derive.ts` (unit-tested).
 

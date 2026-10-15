@@ -210,3 +210,21 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Micro-interactions -------------------------------------------------------- */
+/* Staggered entrance for transcript items (the per-item animate-rise is reused,
+   we only shift its delay). */
+.stagger > *:nth-child(2) { animation-delay: 30ms; }
+.stagger > *:nth-child(3) { animation-delay: 60ms; }
+.stagger > *:nth-child(4) { animation-delay: 90ms; }
+.stagger > *:nth-child(5) { animation-delay: 120ms; }
+.stagger > *:nth-child(6) { animation-delay: 150ms; }
+
+/* Tactile press feedback (brightness, not transform, so absolutely-positioned
+   buttons that rely on translate keep their place). */
+button:active:not(:disabled) { filter: brightness(0.92); }
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger > * { animation: none !important; }
+  button:active:not(:disabled) { filter: none; }
+}

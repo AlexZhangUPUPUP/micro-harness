@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { deriveAgents, deriveChat, truncate } from '../src/lib/derive.ts'
+import { deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, truncate } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -75,4 +75,39 @@ test('truncate powers the replay scrubber', () => {
   expect(deriveChat(half).some((i) => i.kind === 'tool')).toBe(true)
   // the child has not been seen yet at seq 7
   expect(deriveAgents(half).agents.length).toBe(1)
+})
+
+test('deriveUsageSeries collects tokens per model call', () => {
+  const events = [
+    ev('main', null, { type: 'usage', input: 10, output: 5 }),
+    ev('main', null, { type: 'text.delta', text: 'x' }),
+    ev('main', null, { type: 'usage', input: 20, output: 8 }),
+  ]
+  expect(deriveUsageSeries(events)).toEqual([15, 28])
+})
+
+test('filterTrace filters by category, agent and text', () => {
+  const events = [
+    ev('main', null, { type: 'text.delta', text: 'hello world' }),
+    ev('main', null, { type: 'tool.call', id: 'c', name: 'write_file', args: { path: 'a' } }),
+    ev('child', 'main', { type: 'tool.result', id: 'c', name: 'write_file', ok: true, output: 'ok', ms: 1 }),
+    ev('main', null, { type: 'error', message: 'boom' }),
+  ]
+  expect(filterTrace(events, { category: 'tool' }).length).toBe(2)
+  expect(filterTrace(events, { agentId: 'child' }).length).toBe(1)
+  expect(filterTrace(events, { q: 'boom' }).length).toBe(1)
+  expect(filterTrace(events, { category: 'all' }).length).toBe(4)
+})
+
+test('groupSessions buckets by day', () => {
+  const now = new Date('2026-10-15T12:00:00').getTime()
+  const day = 86_400_000
+  const sessions = [
+    { id: 'a', updatedAt: now - 1000 },
+    { id: 'b', updatedAt: now - day },
+    { id: 'c', updatedAt: now - 5 * day },
+  ]
+  const groups = groupSessions(sessions, now)
+  expect(groups.map((g) => g.key)).toEqual(['today', 'yesterday', 'earlier'])
+  expect(groups[0]!.items.map((s) => s.id)).toEqual(['a'])
 })

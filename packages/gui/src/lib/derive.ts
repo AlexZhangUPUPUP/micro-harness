@@ -202,3 +202,68 @@ export function deriveAgents(events: TaggedEvent[]): AgentTree {
 export function truncate(events: TaggedEvent[], upto: number): TaggedEvent[] {
   return events.slice(0, Math.max(0, Math.min(upto, events.length)))
 }
+
+/** Tokens consumed per model call (input + output), in order — for a sparkline. */
+export function deriveUsageSeries(events: TaggedEvent[]): number[] {
+  const out: number[] = []
+  for (const e of events) {
+    if (e.event.type === 'usage') out.push(Number(e.event.input ?? 0) + Number(e.event.output ?? 0))
+  }
+  return out
+}
+
+export type TraceCategory = 'all' | 'text' | 'tool' | 'usage' | 'error' | 'other'
+
+export function traceCategory(type: string): Exclude<TraceCategory, 'all'> {
+  if (type.startsWith('tool.')) return 'tool'
+  if (type.startsWith('text.') || type.startsWith('thinking.')) return 'text'
+  if (type === 'usage') return 'usage'
+  if (type === 'error') return 'error'
+  return 'other'
+}
+
+export interface TraceFilter {
+  category?: TraceCategory
+  agentId?: string | null
+  q?: string
+}
+
+/** Filter the trace by category, agent and free text (pure). */
+export function filterTrace(events: TaggedEvent[], filter: TraceFilter): TaggedEvent[] {
+  const q = (filter.q ?? '').trim().toLowerCase()
+  const cat = filter.category ?? 'all'
+  return events.filter((e) => {
+    if (filter.agentId && e.agentId !== filter.agentId) return false
+    if (cat !== 'all' && traceCategory(e.event.type) !== cat) return false
+    if (q) {
+      const hay = `${e.agentId} ${e.event.type} ${JSON.stringify(e.event)}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+}
+
+export type SessionBucket = 'today' | 'yesterday' | 'earlier'
+
+/** Group sessions into Today / Yesterday / Earlier by `updatedAt` (pure). */
+export function groupSessions<T extends { updatedAt: number }>(
+  sessions: T[],
+  now = Date.now(),
+): Array<{ key: SessionBucket; items: T[] }> {
+  const startOfDay = (t: number): number => {
+    const d = new Date(t)
+    d.setHours(0, 0, 0, 0)
+    return d.getTime()
+  }
+  const today = startOfDay(now)
+  const yesterday = today - 86_400_000
+  const buckets: Record<SessionBucket, T[]> = { today: [], yesterday: [], earlier: [] }
+  for (const s of sessions) {
+    if (s.updatedAt >= today) buckets.today.push(s)
+    else if (s.updatedAt >= yesterday) buckets.yesterday.push(s)
+    else buckets.earlier.push(s)
+  }
+  return (['today', 'yesterday', 'earlier'] as const)
+    .filter((k) => buckets[k].length > 0)
+    .map((key) => ({ key, items: buckets[key] }))
+}

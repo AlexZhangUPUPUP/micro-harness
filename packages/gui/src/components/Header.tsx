@@ -1,10 +1,12 @@
 import { useT } from '../lib/i18n.tsx'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
+import { RollingNumber, Sparkline } from './Fx.tsx'
 
 interface HeaderProps {
   current: string | null
   tokens: number
   cost: number
+  series: number[]
   busy: boolean
   dark: boolean
   onToggleTheme: () => void
@@ -13,7 +15,7 @@ interface HeaderProps {
 }
 
 /** Slim command bar: brand, current session, live usage, global actions. */
-export function Header({ current, tokens, cost, busy, dark, onToggleTheme, onToggleSessions, onTogglePanel }: HeaderProps) {
+export function Header({ current, tokens, cost, series, busy, dark, onToggleTheme, onToggleSessions, onTogglePanel }: HeaderProps) {
   const { t, lang, setLang } = useT()
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 backdrop-blur">
@@ -39,10 +41,13 @@ export function Header({ current, tokens, cost, busy, dark, onToggleTheme, onTog
 
       <div className="ml-auto flex items-center gap-1.5">
         <span
-          className="hidden items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground md:flex"
+          className="hidden items-center gap-2 rounded-full border border-border bg-background/60 px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground md:flex"
           aria-label={busy ? t('composer.running') : t('header.idle')}
         >
-          {t('header.usage', { tok: fmtTokens(tokens), cost: fmtCost(cost) })}
+          <Sparkline values={series} className="text-teal/70" />
+          <RollingNumber value={tokens} format={fmtTokens} /> tok
+          <span className="opacity-40">·</span>
+          <RollingNumber value={cost} format={fmtCost} />
         </span>
         <button
           onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
