@@ -12,6 +12,8 @@
     "start": "bun packages/core/src/cli.ts",
     "test": "bun test",
     "verify": "bun scripts/verify-features.ts",
+    "dev": "scripts/dev.sh",
+    "ui": "scripts/dev.sh --single",
     "typecheck": "tsc --noEmit",
     "build:bin": "bun build --compile --outfile dist/micro-harness packages/core/src/cli.ts",
     "eval": "bun scripts/evals/run.ts",

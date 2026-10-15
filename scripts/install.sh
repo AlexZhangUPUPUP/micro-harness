@@ -26,6 +26,16 @@ mkdir -p "$PREFIX"
 install -m 0755 dist/micro-harness "$PREFIX/micro-harness"
 echo "✓ installed: $PREFIX/micro-harness"
 
+# A launcher for the whole stack (server + GUI) that works from anywhere.
+# It points back at this checkout; the GUI is built on first run.
+cat > "$PREFIX/micro-harness-ui" <<WRAP
+#!/usr/bin/env bash
+# Installed by micro-harness scripts/install.sh — runs this checkout's dev stack.
+exec "$DIR/scripts/dev.sh" --single "\$@"
+WRAP
+chmod 0755 "$PREFIX/micro-harness-ui"
+echo "✓ installed: $PREFIX/micro-harness-ui  (server + GUI)"
+
 case ":$PATH:" in
   *":$PREFIX:"*) ;;
   *) echo "  note: $PREFIX is not on your PATH — add it to use 'micro-harness' directly" ;;

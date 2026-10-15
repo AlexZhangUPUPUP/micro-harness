@@ -136,8 +136,11 @@ micro-harness --version              # 0.1.0
 **Run the whole stack** — server, GUI and a key picked up automatically:
 
 ```bash
-scripts/dev.sh                   # → http://127.0.0.1:5273
+bun run ui                       # one process: the server serves the GUI  → http://127.0.0.1:8787
+bun run dev                      # two processes (server + Vite preview)    → http://127.0.0.1:5273
 ```
+
+Both open a browser (`scripts/dev.sh --no-open` to skip it); `MICRO_ISOLATE=1` gives every sub-agent its own git worktree.
 
 <details>
 <summary>All CLI flags and environment variables</summary>

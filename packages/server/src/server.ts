@@ -43,7 +43,7 @@ import {
   type Tool,
   type McpServerInfo,
 } from '@micro-harness/core'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
@@ -85,6 +85,11 @@ export interface ServerOptions {
   token?: string
   /** Force token auth even on loopback (tests / reverse proxies). */
   requireAuth?: boolean
+  /**
+   * Serve the built GUI at `/` from this directory (single-process mode).
+   * `false` or omitted = API only. `main.ts` turns it on when the GUI is built.
+   */
+  guiDir?: string | false
 }
 
 export interface SessionRuntime {
@@ -118,11 +123,50 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
+const GUI_MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+}
+
+/**
+ * Serve the built GUI: a real file when it exists, otherwise `index.html` so
+ * client-side routes (e.g. `/sessions/abc`) deep-link correctly. Only called for
+ * non-`/api` GETs, so the API surface is untouched.
+ */
+function guiResponse(guiRoot: string, guiIndex: string, pathname: string): Response {
+  const send = (filePath: string): Response =>
+    new Response(Bun.file(filePath), {
+      headers: { 'content-type': GUI_MIME[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream' },
+    })
+  if (pathname === '/' || pathname === '') return send(guiIndex)
+  const resolved = path.normalize(path.join(guiRoot, pathname))
+  if (resolved !== guiRoot && resolved.startsWith(guiRoot + path.sep) && existsSync(resolved) && statSync(resolved).isFile()) {
+    return send(resolved)
+  }
+  return send(guiIndex)
+}
+
 export function createServer(options: ServerOptions): HarnessServer {
   const { store, provider, model } = options
   const hostname = options.hostname ?? '127.0.0.1'
   const authRequired = options.requireAuth ?? !isLoopback(hostname)
   if (authRequired && !options.token) throw new Error('a server token is required when binding beyond loopback')
+  const guiRoot = options.guiDir ? path.resolve(options.guiDir) : null
+  const guiIndex = guiRoot ? path.join(guiRoot, 'index.html') : null
 
   const runtimes = new Map<string, SessionRuntime>()
   const approvals = options.approvals ?? createApprovalBroker()
@@ -316,7 +360,14 @@ export function createServer(options: ServerOptions): HarnessServer {
     const url = new URL(req.url)
     const parts = url.pathname.split('/').filter(Boolean)
 
-    if (url.pathname === '/health' || url.pathname === '/') {
+    if (url.pathname === '/health') {
+      return json({ ok: true, name: 'micro-harness', version: '0.1.0' })
+    }
+    // When a GUI build is present, serve it (public; the API stays token-gated below).
+    if (guiRoot && guiIndex && req.method === 'GET' && parts[0] !== 'api') {
+      return guiResponse(guiRoot, guiIndex, url.pathname)
+    }
+    if (url.pathname === '/') {
       return json({ ok: true, name: 'micro-harness', version: '0.1.0' })
     }
     if (!authorized(req, url)) return json({ error: 'unauthorized' }, 401)
