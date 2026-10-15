@@ -30,6 +30,7 @@
 - [🧩 架构](#-架构)
 - [🤖 多 agent](#-多-agent)
 - [🔌 MCP](#-mcp)
+- [🧩 ACP —— 让编辑器驱动我们](#-acp--让编辑器驱动我们)
 - [🖥 GUI](#-gui)
 - [📐 设计原则](#-设计原则)
 - [📁 仓库结构](#-仓库结构)
@@ -259,6 +260,33 @@ HTTP**（JSON 或一次性 SSE 回复）；工具按 `<server>__<tool>` 加命�
 
 ---
 
+## 🧩 ACP —— 让编辑器驱动**我们**
+
+MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**，于是编辑器
+（Zed，或任何带 ACP 客户端的工具）可以直接驱动这个 harness。协议版本 1，JSON-RPC，
+换行分隔。
+
+| 方向 | 方法 |
+|---|---|
+| **入**（客户端 → agent） | `initialize` · `session/new` · `session/prompt` · `session/cancel` |
+| **出**（agent → 客户端） | `session/update`（流式文本、带 `kind`/`status` 的工具调用、用量与成本） · `session/request_permission` · `fs/read_text_file` / `fs/write_text_file` |
+
+有两件事是从设计里自然长出来的，而不是外挂上去的：
+
+- **审批终于有 UI 了。** `--approval suggest` 会把每个改文件的工具调用通过
+  `session/request_permission` 发给编辑器，于是*允许一次 / 总是允许 / 拒绝 / 总是拒绝*
+  成了真实选项，而不再是一个缺失的 confirm 钩子。
+- **文件系统接缝回本了。** 当客户端声明 `fs.readTextFile` / `fs.writeTextFile` 时，读写
+  **走编辑器**——于是 agent 能看到未保存的缓冲区——而 `list` 仍落在本地磁盘，因为 ACP
+  没有列目录的原语。正是这种不对称，让 `FileSystem` 必须是一个 provider **对象**而不是
+  一个布尔开关。
+
+已用真机验证：把真 CLI 当子进程驱动、接真模型，单个回合产出 101 条 `session/update`
+通知（流式文本、4 次工具调用、带成本的用量）；在不声明 fs 能力时，文件确实落盘
+（`hello from acp`）。
+
+---
+
 ## 🖥 GUI
 
 | 区域 | 它能做什么 |
@@ -286,6 +314,7 @@ HTTP**（JSON 或一次性 SSE 回复）；工具按 `<server>__<tool>` 加命�
 
 - **种子零依赖，平台不是。** `seed-v1` 只用 Node 内置模块。当前分支是 Bun 单体仓库——Bun 做工具链、`bun:sqlite` 做索引、React + Vite + Tailwind 做 GUI——不过根 `package.json` 依然没有声明任何运行时依赖。
 - **错误也是数据。** 工具失败返回 `{ output, isError: true }`，作为一条普通的 `tool` 消息追加进去，模型看得到失败原因并可以恢复。这正是循环能稳住的关键。
+- **压缩是策略，不是常量。** 默认确定性地丢中间；`--compact=summarize` 把被丢掉的轮次换成一段由模型写的摘要（这次调用失败就退回丢弃）。`--max-cost` 让一次运行在无限花钱之前停下。
 - **绝不重写过去。** 工具结果是在**写入时**截断的，而不是等窗口满了再动它——这样消息前缀逐字节稳定，而这正是厂商 prompt cache 能命中的前提。真需要压缩时，丢的是**中间**：保留 system prompt 与第一轮用户消息（约束都在那儿）加最新的若干轮，于是 tool 消息永远不会和它的调用拆散，早期指令也不会消失。
 - **把经济性量化。** 三家厂商用三个不同的字段名上报缓存命中，这里统一归一化成 `usage.cacheRead`，按缓存价计价（DeepSeek 命中比未命中便宜约 10 倍），并在 GUI 里显示命中率——本仓库的真实运行命中 69–78%。
 - **沙箱。** 文件工具会把每个路径解析到 `--dir` 内部并拒绝越界；`bash` 需要显式开启。
@@ -337,6 +366,8 @@ bun install
 bun test              # 120 个测试，19 个文件
 bun run typecheck     # tsc --noEmit，干净
 bun run verify        # 脚本化功能自检（不走网络）
+bun run eval:mock      # 评测套件跑脚本化 provider —— CI 友好、不走网络
+bun run eval           # 同一套任务跑真模型（逐任务 token/成本/缓存）
 ```
 
 测试覆盖内核的生命周期与作用域、循环与流式、审批、会话回放、服务端接口、worktree 隔离、针对真实 `git diff` 输出的部分补丁应用，以及 GUI 渲染所依赖的每一个纯函数派生。

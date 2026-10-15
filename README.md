@@ -30,6 +30,7 @@
 - [🧩 How it is built](#-how-it-is-built)
 - [🤖 Multi-agent](#-multi-agent)
 - [🔌 MCP](#-mcp)
+- [🧩 ACP — editors drive us](#-acp--editors-drive-us)
 - [🖥 The GUI](#-the-gui)
 - [📐 Design principles](#-design-principles)
 - [📁 Repository layout](#-repository-layout)
@@ -264,6 +265,34 @@ we wrote down for bringing back the plugin container — see
 
 ---
 
+## 🧩 ACP — editors drive *us*
+
+The mirror image of MCP: `micro-harness acp` speaks the **Agent Client Protocol** on
+stdio, so an editor (Zed, or anything with an ACP client) can drive this harness
+directly. Protocol version 1; JSON-RPC, newline-delimited.
+
+| direction | methods |
+|---|---|
+| **in** (client → agent) | `initialize` · `session/new` · `session/prompt` · `session/cancel` |
+| **out** (agent → client) | `session/update` (streamed text, tool calls with `kind`/`status`, usage + cost) · `session/request_permission` · `fs/read_text_file` / `fs/write_text_file` |
+
+Two things fall out of the design rather than being bolted on:
+
+- **Approvals finally have a UI.** `--approval suggest` routes each mutating tool call to
+  the editor through `session/request_permission`, so *allow once / always allow / reject
+  / always reject* are real choices instead of a missing confirm hook.
+- **The filesystem seam earns its keep.** When the client advertises `fs.readTextFile` /
+  `fs.writeTextFile`, reads and writes go **through the editor** — so the agent sees
+  unsaved buffers — while `list` stays on local disk, because ACP has no
+  directory-listing primitive. That asymmetry is exactly why `FileSystem` is a provider
+  *object* and not a boolean flag.
+
+Verified by driving the real CLI as a subprocess with a real model: one turn produced 101
+`session/update` notifications (streamed text, four tool calls, usage with cost), and
+with the fs capability withheld the file really landed on disk (`hello from acp`).
+
+---
+
 ## 🖥 The GUI
 
 | area | what it does |
@@ -291,6 +320,7 @@ we wrote down for bringing back the plugin container — see
 
 - **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
+- **Compaction is a strategy, not a constant.** The default drops the middle deterministically; `--compact=summarize` replaces the dropped turns with one model-written recap (and falls back to dropping if that call fails). `--max-cost` stops a run before it can spend without limit.
 - **Never rewrite the past.** A tool result is capped *when it is appended*, not when the window later fills, so the message prefix stays byte-stable — which is exactly what lets a provider's prompt cache hit. When the window does fill, compaction drops the **middle**: it keeps the system prompt and the first user turn (where the constraints live) plus the newest turns, so a `tool` message is never orphaned from its call and early instructions survive.
 - **Measure the economics.** Providers report prompt-cache hits under three different names; they are normalized into `usage.cacheRead`, priced at the cached rate (a cache hit is ~10x cheaper than a miss on DeepSeek), and surfaced in the GUI as a hit rate — a real run on this repo hits 69–78%.
 - **Sandboxing.** File tools resolve every path inside `--dir` and refuse traversal; `bash` is opt-in.
@@ -342,6 +372,8 @@ bun install
 bun test              # 120 tests across 19 files
 bun run typecheck     # tsc --noEmit, clean
 bun run verify        # scripted feature checks (no network)
+bun run eval:mock      # eval suite against a scripted provider — CI-safe, no network
+bun run eval           # the same suite against a real model (per-task tokens/cost/cache)
 ```
 
 The suite covers the kernel's lifecycle and scoping, the loop and its streaming, approvals, session replay, the server's endpoints, worktree isolation, partial patch application against real `git diff` output, and every pure derivation the GUI renders.

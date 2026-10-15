@@ -195,7 +195,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 ## P8 · 互操作
 
 - [x] **MCP client**：stdio + streamable HTTP 两种传输（不引官方 SDK）；`mcp.json` 启动时读取；工具按 `<server>__<tool>` 命名空间合并进注册表；`GET /api/mcp` 报告状态。已对官方参考 server 端到端验证（13 工具 → 模型调用 → 42）
-- [ ] ACP server（让编辑器驱动）
+- [x] **ACP server**（让编辑器驱动我们）：协议 v1，JSON-RPC/NDJSON；`initialize`/`session/new`/`session/prompt`/`session/cancel` 入，`session/update`+`session/request_permission`+`fs/*` 出；`micro-harness acp` 启动。真机验证：真 CLI 子进程 + 真模型，单回合 101 条 update，文件确实落盘
 - [x] 关键结论：MCP 用"启动时读配置"就够了，**不需要容器**——见 docs/design-comparison.zh-CN.md
 - [ ] **MCP client**：接入 stdio / streamable-http，工具自动注册
 - [ ] **ACP server**：Zed / DSH 等可驱动我们
@@ -204,9 +204,9 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 - [x] **缓存前缀保全**：工具输出在*写入时*截断（前缀不再被事后重写）+ 压缩保留头部而非砍头——实测真 DeepSeek 命中 69–78%
 - [x] **成本/缓存命中计量**：DeepSeek/OpenAI/Anthropic 三种方言归一化成 `usage.cacheRead`，按缓存折扣计价，GUI 显示命中率
-- [ ] 压缩策略插件：`summarize` / `structured-state`（当前是 `keep-head+tail`，接缝已留：`compactMessages(messages, { keepHead })`）
-- [ ] 预算熔断（交互式运行；`run --auto` 已有 `--max-cost`）
-- [ ] 验收：长会话不爆窗口 + 命中率报告（单测已覆盖压缩与前缀稳定性，缺真实长会话实测）
+- [x] **压缩策略**：确定性的 `drop-middle`（默认）+ `summarize`（`--compact=summarize`，一次模型调用把被丢的轮次折成一段 recap，失败自动退回）。`structured-state` 仍未做
+- [x] **预算熔断**：`--max-cost` / `MICRO_MAX_COST`，累计成本超限即停并发 `error(fatal)` + `turn.end{stopReason:"budget"}`
+- [~] 验收：压缩与前缀稳定性已有单测；命中率在评测里可见（`bun run eval` 报告 cache 列）。仍缺一次真实长会话实测
 
 ## P10 · 评测与发布
 
