@@ -11,7 +11,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-111_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-112_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -24,6 +24,7 @@
 ## 📑 目录
 
 - [✨ 这是什么](#-这是什么)
+- [🆚 与其他 harness 的区别](#-与其他-harness-的区别)
 - [📸 效果预览](#-效果预览)
 - [🚀 快速开始](#-快速开始)
 - [🧩 架构](#-架构)
@@ -59,7 +60,7 @@ flowchart LR
 | | |
 |---|---|
 | **事件是唯一契约** | 循环只产出一条带标签的事件流。会话日志、服务端 SSE、CLI、轨迹面板、回放、agent 树和检视面板都只是它的消费者——没有旁路。 |
-| **一切皆插件** | 自研约 500 行的内核：`provide`/`get`/`inject`，生命周期 `waiting → active → failed`，作用域，`fork()`/`isolate()`。刻意做成 Cordis 的形状，方便日后迁移。 |
+| **要接缝，不要容器** | 扩展点是**编译期接口**——`Provider`、`Tool`、`FileSystem`、`AgentRole`、`AgentEvent`——装配是显式代码（`createServer`、`makeTools`）。我们先做了一个 DI 容器，量出它（**25** 个装配点、**0** 个运行时消费者），然后[把它删了](docs/design-comparison.zh-CN.md)。 |
 | **多 agent 是一等公民** | `task` 工具支持 `single`/`parallel`/`chain`/`race` 四种模式，真正的上下文隔离，以及深度/并发/token/成本四重上限。不是外挂上去的。 |
 | **隔离之后还有审阅** | 每个子 agent 拿到自己的 git worktree，并行 agent 不会互相覆盖——而且结果可以**逐 hunk**决定应用哪些。 |
 | **默认可观测** | 滚动的 token/成本、agent 树、回放拖动条，以及能看到「实际发给模型的载荷」的检视面板。 |
@@ -160,19 +161,23 @@ scripts/dev.sh                   # → http://127.0.0.1:5273
 
 ---
 
+## 🆚 与其他 harness 的区别
+
+每个 harness 的 README 都在暗示"我们才是好的那个"。这一份选择把过程摊开：我们从
+**DeepSeek Harness**、**pi**、**Claude Code**、**Codex** 各自抄了什么、刻意拒绝了什么、
+以及我们不确定的地方。被删掉的那个 DI 容器也住在那里——连同支持删除它的那些测量数字。
+
+**→ [docs/design-comparison.zh-CN.md](docs/design-comparison.zh-CN.md)**
+
+---
+
 ## 🧩 架构
 
-四个包，依赖单向。内核不知道 agent 是什么，core 不知道 HTTP 是什么，GUI 只读事件流。
+三个包，依赖单向。core 不知道 HTTP 是什么，GUI 只读事件流。
 
 ```mermaid
 flowchart TB
-  subgraph K["packages/kernel —— 插件内核"]
-    k1["provide / get / inject"]
-    k2["生命周期 waiting → active → failed"]
-    k3["作用域 · fork() · isolate() · 事件总线"]
-  end
-
-  subgraph CO["packages/core —— agent 运行时"]
+  subgraph CO["packages/core —— agent 运行时 · 能力接缝"]
     c1["循环 · 流式 · 并行工具调用"]
     c2["provider · 工具 · 上下文窗口"]
     c3["多 agent runner · 会话 · CLI"]
@@ -187,12 +192,11 @@ flowchart TB
     g1["React 19 · Vite · Tailwind"]
   end
 
-  K --> CO --> SV --> GU
+  CO --> SV --> GU
 ```
 
 | 包 | 它是什么 |
 |---|---|
-| `packages/kernel` | 插件内核：服务容器、生命周期、作用域、事件总线、config schema 校验。自研，零依赖。 |
 | `packages/core` | 长大后的种子：循环、工具调度、上下文窗口、provider、多 agent runner、会话、CLI。 |
 | `packages/server` | Bun HTTP + SSE：会话、流式、FTS5 检索索引、worktree 隔离接口与合并队列。 |
 | `packages/gui` | React 19 + Vite + Tailwind。每个视图都由 `lib/derive.ts` 里纯函数、有单测地从事件流派生。 |
@@ -265,7 +269,6 @@ flowchart LR
 ```
 micro-harness/
 ├── packages/
-│   ├── kernel/                  # 插件内核：DI、生命周期、作用域、事件总线
 │   ├── core/                    # agent 循环、工具、上下文、provider、多 agent、CLI
 │   ├── server/                  # HTTP + SSE + SQLite/FTS5 索引
 │   └── gui/                     # React 19 + Vite + Tailwind
@@ -284,7 +287,7 @@ micro-harness/
 ## 🗺 路线图
 
 - [x] **P0 · 基座** —— monorepo、Bun 工具链、CI
-- [x] **P1 · 内核** —— 服务/DI、生命周期、作用域、事件总线（自研约 500 行）
+- [x] ~~**P1 · 内核** —— 服务/DI、生命周期、作用域、事件总线~~ **已回退**：做出来了（396 行 + 10 个测试），量出**0** 个运行时消费者，于是删除，改用编译期接缝。见[对比文档](docs/design-comparison.zh-CN.md)。
 - [x] **P2 · 事件化 core** —— `AgentEvent`、流式、并行工具调用、审批模式、会话
 - [x] **P3 · 多 agent** —— runner、`task` 工具、上下文防火墙、多重上限
 - [x] **P4 · Server** —— HTTP + SSE、会话 API、SQLite/FTS5 索引
@@ -301,7 +304,7 @@ micro-harness/
 
 ```bash
 bun install
-bun test              # 111 个测试，19 个文件
+bun test              # 112 个测试，18 个文件
 bun run typecheck     # tsc --noEmit，干净
 bun run verify        # 脚本化功能自检（不走网络）
 ```

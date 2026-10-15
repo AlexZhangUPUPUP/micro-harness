@@ -21,6 +21,7 @@ import path from 'node:path'
 import { Harness, type ApprovalMode, type ConfirmFn } from './harness.ts'
 import type { EventHub } from './events.ts'
 import { createWorktree, isGitRepo, removeWorktree, type Worktree } from './isolation.ts'
+import { localFs, type FileSystem } from './fs.ts'
 import type { Provider } from './provider.ts'
 import type { Tool, ToolContext, ToolResult } from './tools.ts'
 
@@ -149,6 +150,8 @@ export interface AgentRunnerOptions {
   roles: AgentRegistry
   /** Base tools handed to every agent (the `task` tool is added automatically). */
   tools: Tool[]
+  /** Inherited by child agents that do not get their own worktree. */
+  fs?: FileSystem
   allowBash?: boolean
   approval?: ApprovalMode
   confirm?: ConfirmFn
@@ -279,6 +282,8 @@ export class AgentRunner {
       provider: this.#opts.provider,
       model: role.model ?? this.#opts.model,
       cwd: worktree?.path ?? this.#opts.cwd,
+      // A worktree is a filesystem swap, not a special case in the tools.
+      fs: worktree ? localFs(worktree.path) : this.#opts.fs,
       allowBash: this.#opts.allowBash,
       maxSteps: role.maxSteps,
       systemPrompt: role.systemPrompt ?? DEFAULT_AGENT_PROMPT,
