@@ -87,6 +87,9 @@ export function reconstructMessages(
       case 'tool.call':
         pendingCalls.push({
           id: event.id,
+          // The API rejects a replayed assistant message whose tool calls lack
+          // `type`, so a reconstructed history must carry it too.
+          type: 'function',
           function: { name: event.name, arguments: JSON.stringify(event.args ?? {}) },
         })
         break

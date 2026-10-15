@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ChatItem } from '../lib/derive.ts'
 import { useT } from '../lib/i18n.tsx'
+import Markdown from './Markdown.tsx'
 import { fmtTime } from '../lib/format.ts'
 
 /** The conversation stream: user bubbles, assistant blocks, tool timeline, notices. */
@@ -133,10 +134,8 @@ function AssistantBlock({ item }: { item: Extract<ChatItem, { kind: 'assistant' 
     return (
       <div className="ml-8 animate-rise rounded-xl border border-teal/30 bg-teal/5 px-3.5 py-2.5 backdrop-blur">
         <div className="mb-1 font-mono text-[10px] font-medium text-teal">⎇ {item.agentId}</div>
-        <div className="whitespace-pre-wrap text-[13px] leading-6">
-          {item.text}
-          {caret}
-        </div>
+        <Markdown text={item.text} className="text-[13px] leading-6" />
+        {caret}
         {meta}
       </div>
     )
@@ -144,10 +143,8 @@ function AssistantBlock({ item }: { item: Extract<ChatItem, { kind: 'assistant' 
 
   return (
     <div className="animate-rise border-l-2 border-teal/40 pl-4">
-      <div className="whitespace-pre-wrap text-[13.5px] leading-7">
-        {item.text}
-        {caret}
-      </div>
+      <Markdown text={item.text} className="text-[13.5px] leading-7" />
+      {caret}
       {meta}
     </div>
   )

@@ -35,3 +35,16 @@ test('records every event to JSONL and replays them back', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('reconstructed tool calls carry type:"function" (replayed history must be valid)', async () => {
+  const { reconstructMessages } = await import('../src/session.ts')
+  const events = [
+    { agentId: 'main', parentId: null, seq: 1, t: 1, event: { type: 'user.message', text: 'go' } },
+    { agentId: 'main', parentId: null, seq: 2, t: 2, event: { type: 'tool.call', id: 'c1', name: 'write_file', args: { path: 'a.txt' } } },
+    { agentId: 'main', parentId: null, seq: 3, t: 3, event: { type: 'tool.result', id: 'c1', name: 'write_file', ok: true, output: 'ok', ms: 1 } },
+  ] as never[]
+  const messages = reconstructMessages(events, 'sys', 'main')
+  const assistant = messages.find((m) => m.role === 'assistant' && m.tool_calls?.length)
+  expect(assistant?.tool_calls?.[0]?.type).toBe('function')
+  expect(assistant?.tool_calls?.[0]?.id).toBe('c1')
+})

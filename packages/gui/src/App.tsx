@@ -9,12 +9,13 @@ import { Composer } from './components/Composer.tsx'
 import { AgentsPanel } from './components/AgentsPanel.tsx'
 import { TracePanel } from './components/TracePanel.tsx'
 import { ChangesPanel } from './components/ChangesPanel.tsx'
+import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
 
 type View = 'chat' | 'trace' | 'changes'
 const VIEWS: View[] = ['chat', 'trace', 'changes']
 
 export default function App() {
-  const { t } = useT()
+  const { t, lang, setLang } = useT()
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [current, setCurrent] = useState<string | null>(null)
   const [events, setEvents] = useState<TaggedEvent[]>([])
@@ -25,16 +26,21 @@ export default function App() {
   const [replayAt, setReplayAt] = useState<number | null>(null)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [runTick, setRunTick] = useState(0)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(() => window.matchMedia('(min-width: 768px)').matches)
   const [showPanel, setShowPanel] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // True while the user is composing a brand-new session, so the session poll
+  // does not immediately re-select the newest one (that made "+ new" a no-op).
+  const composing = useRef(false)
 
   const refreshSessions = useCallback(async () => {
     try {
       const list = await api.list()
       setSessions(list)
-      // Auto-open the newest session so the app is never a blank page.
-      setCurrent((cur) => cur ?? list[0]?.id ?? null)
+      // Auto-open the newest session on first load so the app is never blank —
+      // but never override an explicit "new session".
+      if (!composing.current) setCurrent((cur) => cur ?? list[0]?.id ?? null)
     } catch (err) {
       setError(String((err as Error).message))
     }
@@ -45,6 +51,18 @@ export default function App() {
     const t = setInterval(() => void refreshSessions(), 5000)
     return () => clearInterval(t)
   }, [refreshSessions])
+
+  // ⌘K / Ctrl+K opens the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // Load + subscribe to the selected session. `runTick` re-subscribes after a
   // follow-up, because the server closes the stream when each run finishes.
@@ -87,6 +105,7 @@ export default function App() {
         setRunTick((t) => t + 1)
       } else {
         const meta = await api.create(text)
+        composing.current = false
         setCurrent(meta.id)
       }
       void refreshSessions()
@@ -105,6 +124,19 @@ export default function App() {
   }
 
   const isMobile = (): boolean => window.matchMedia('(max-width: 767px)').matches
+
+  const paletteActions: PaletteAction[] = useMemo(
+    () => [
+      { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]) } },
+      { id: 'chat', label: t('tabs.chat'), run: () => setView('chat') },
+      { id: 'trace', label: t('tabs.trace'), run: () => setView('trace') },
+      { id: 'changes', label: t('tabs.changes'), run: () => setView('changes') },
+      { id: 'theme', label: t('palette.theme'), run: toggleTheme },
+      { id: 'lang', label: t('palette.lang'), run: () => setLang(lang === 'zh' ? 'en' : 'zh') },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, lang, setLang],
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -143,11 +175,13 @@ export default function App() {
             sessions={sessions}
             current={current}
             onSelect={(id) => {
+              composing.current = false
               setCurrent(id)
               setReplayAt(null)
               if (isMobile()) setShowSidebar(false)
             }}
             onNew={() => {
+              composing.current = true
               setCurrent(null)
               setEvents([])
               if (isMobile()) setShowSidebar(false)
@@ -202,6 +236,17 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        actions={paletteActions}
+        onOpenSession={(id) => {
+          composing.current = false
+          setCurrent(id)
+          setReplayAt(null)
+        }}
+      />
     </div>
   )
 }
