@@ -11,7 +11,15 @@
  */
 
 import { cacheReadTokens } from './model.ts'
-import { compactMessages, DEFAULT_TOOL_OUTPUT_CHARS, estimateTokens, truncateToolOutput } from './context.ts'
+import {
+  compactMessages,
+  compactMessagesAsync,
+  DEFAULT_TOOL_OUTPUT_CHARS,
+  estimateTokens,
+  truncateToolOutput,
+  type Summarizer,
+} from './context.ts'
+import { makeSummarizer } from './compact.ts'
 import { localFs, type FileSystem } from './fs.ts'
 import type { ChatMessage, ToolCall } from './model.ts'
 import type { Provider } from './provider.ts'
@@ -42,6 +50,13 @@ export interface HarnessOptions {
   fs?: FileSystem
   /** Cap on a single tool result, in characters, applied when it is appended. */
   maxToolOutput?: number
+  /**
+   * How the window is compacted when it fills: `drop-middle` (deterministic, default)
+   * or `summarize` (one model call folds the dropped turns into a recap).
+   */
+  compact?: 'drop-middle' | 'summarize'
+  /** Stop the run once the cumulative cost passes this many USD. */
+  maxCost?: number
   /**
    * USD per 1M tokens, used to stamp `usage` events with a `cost`. `inputCached` is
    * the discounted rate for input served from the provider's prompt cache.
@@ -86,6 +101,10 @@ export class Harness {
   readonly #tools: Tool[]
   readonly #system: string
   readonly #maxToolOutput: number
+  readonly #compact: 'drop-middle' | 'summarize'
+  readonly #summarizer?: Summarizer
+  readonly #maxCost?: number
+  #spent = 0
   readonly #toolCtx: ToolContext
   readonly #maxSteps: number
   readonly #maxContextTokens: number
@@ -119,6 +138,9 @@ export class Harness {
     const system = opts.systemPrompt ?? defaultSystemPrompt(opts.cwd)
     this.#system = system
     this.#maxToolOutput = opts.maxToolOutput ?? DEFAULT_TOOL_OUTPUT_CHARS
+    this.#compact = opts.compact ?? 'drop-middle'
+    this.#summarizer = opts.compact === 'summarize' ? makeSummarizer(opts.provider, opts.model) : undefined
+    this.#maxCost = opts.maxCost
     this.messages = [{ role: 'system', content: system }]
     this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd, parentId: opts.parentId ?? null })
   }
@@ -133,9 +155,11 @@ export class Harness {
       this.log.emit({ type: 'turn.start', turn: step })
       let streamedText = false
 
-      const { messages, dropped, tokens, strategy } = compactMessages(this.messages, {
-        maxTokens: this.#maxContextTokens,
-      })
+      const trim =
+        this.#compact === 'summarize'
+          ? await compactMessagesAsync(this.messages, { maxTokens: this.#maxContextTokens, summarizer: this.#summarizer })
+          : compactMessages(this.messages, { maxTokens: this.#maxContextTokens })
+      const { messages, dropped, tokens, strategy } = trim
       if (dropped > 0) {
         this.messages.splice(0, this.messages.length, ...messages)
         this.log.emit({
@@ -177,6 +201,12 @@ export class Harness {
         const output = usage.completion_tokens ?? 0
         const cacheRead = cacheReadTokens(usage)
         const price = this.#pricing
+        if (price) {
+          this.#spent +=
+            ((input - cacheRead) / 1e6) * price.input +
+            (cacheRead / 1e6) * (price.inputCached ?? price.input) +
+            (output / 1e6) * price.output
+        }
         this.log.emit({
           type: 'usage',
           input,
@@ -190,6 +220,14 @@ export class Harness {
             : undefined,
         })
       }
+      // Budget breaker: a run must not be able to spend without limit.
+      if (this.#maxCost !== undefined && this.#spent > this.#maxCost) {
+        const text = `stopped: cost budget of $${this.#maxCost} exceeded (spent $${this.#spent.toFixed(6)})`
+        this.log.emit({ type: 'error', message: text, fatal: true })
+        this.log.emit({ type: 'turn.end', stopReason: 'budget', text })
+        return text
+      }
+
       if (message.content && !streamedText) this.log.emit({ type: 'text.delta', text: String(message.content) })
 
       const calls = message.tool_calls ?? []

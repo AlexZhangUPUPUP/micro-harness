@@ -7,6 +7,7 @@ import { Harness } from '../src/harness.ts'
 import { EventHub, type TaggedEvent } from '../src/events.ts'
 import type { ChatResponse, Provider } from '../src/provider.ts'
 import { cacheReadTokens, type ChatMessage } from '../src/model.ts'
+import { COMPACT_RECAP_PREFIX } from '../src/context.ts'
 
 const assistantTool = (id: string, name: string, args: unknown): ChatMessage => ({
   role: 'assistant',
@@ -33,6 +34,7 @@ function setup(
     parallelTools?: boolean
     maxToolOutput?: number
     pricing?: { input: number; output: number; inputCached?: number }
+    maxCost?: number
   } = {},
 ) {
   const hub = new EventHub()
@@ -47,6 +49,7 @@ function setup(
     parallelTools: opts.parallelTools,
     maxToolOutput: opts.maxToolOutput,
     pricing: opts.pricing,
+    maxCost: opts.maxCost,
   })
   return { harness, events, hub }
 }
@@ -298,6 +301,78 @@ test('later turns never rewrite what was already sent (a cacheable prefix)', asy
     // request #2 is request #1 plus the new turn: byte-identical prefix, so the
     // provider's prompt cache can hit on everything that came before.
     expect(JSON.stringify(second.slice(0, first.length))).toBe(JSON.stringify(first))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+/* ---------------------------------------------- compaction strategy & budget */
+
+test("compact: 'summarize' folds the dropped turns into a recap", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-sum-'))
+  try {
+    const hub = new EventHub()
+    const captured: TaggedEvent[] = []
+    hub.on((e) => captured.push(e))
+    const harness = new Harness({
+      // the summarizer runs *before* the turn's model call, so it consumes the third
+      // response: #1 'one', #2 'two', #3 the recap (summarizer), #4 the answer.
+      provider: scripted([
+        { message: { role: 'assistant', content: 'one' } },
+        { message: { role: 'assistant', content: 'two' } },
+        { message: { role: 'assistant', content: 'earlier turns were about a and b' } },
+        { message: { role: 'assistant', content: 'three' } },
+      ]),
+      model: 'fake-model',
+      cwd: dir,
+      hub,
+      maxContextTokens: 60, // force compaction on every turn
+      compact: 'summarize',
+    })
+    await harness.send('first turn with some words in it to take up budget')
+    await harness.send('second turn with some more words to take up budget')
+    await harness.send('third turn')
+
+    const trims = captured.map((e) => e.event).filter((e) => e.type === 'context.trim')
+    expect(trims.length).toBeGreaterThan(0)
+    expect(trims.some((t) => t.type === 'context.trim' && t.strategy === 'summarize')).toBe(true)
+
+    const requests = captured
+      .map((e) => e.event)
+      .filter((e): e is Extract<TaggedEvent['event'], { type: 'model.request' }> => e.type === 'model.request')
+    const last = requests[requests.length - 1]!
+    const contents = last.messages.map((m) => String((m as ChatMessage).content ?? ''))
+    const recap = contents.find((c) => c.startsWith(COMPACT_RECAP_PREFIX))
+    expect(recap).toBeDefined()
+    expect(recap!).toContain('earlier turns were about a and b')
+    expect(recap!.length).toBeLessThan(1300)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('the cost budget stops the run instead of spending without limit', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-budget-'))
+  try {
+    const { harness, events } = setup(
+      [
+        { message: { role: 'assistant', content: 'first' }, usage: { prompt_tokens: 1000, completion_tokens: 100 } },
+        { message: { role: 'assistant', content: 'second' }, usage: { prompt_tokens: 1000, completion_tokens: 100 } },
+      ],
+      dir,
+      { pricing: { input: 1, output: 1 }, maxCost: 0.0005 },
+    )
+    const text = await harness.send('spend money')
+
+    expect(text).toMatch(/cost budget/)
+    const types = events.map((e) => e.event.type)
+    expect(types).toContain('error')
+    const err = events.map((e) => e.event).find((e) => e.type === 'error')
+    expect(err && 'fatal' in err ? err.fatal : false).toBe(true)
+    const end = [...events].reverse().find((e) => e.event.type === 'turn.end')
+    expect(end && 'stopReason' in end.event ? end.event.stopReason : '').toBe('budget')
+    // it stopped after the first paid call rather than running the script dry
+    expect(events.filter((e) => e.event.type === 'usage').length).toBe(1)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
