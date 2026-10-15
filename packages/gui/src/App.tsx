@@ -39,7 +39,10 @@ export default function App() {
     const saved = localStorage.getItem('micro-sidebar')
     return saved === null ? window.matchMedia('(min-width: 768px)').matches : saved === '1'
   })
-  const [showPanel, setShowPanel] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
+  const [showPanel, setShowPanel] = useState(() => {
+    const saved = localStorage.getItem('micro-panel')
+    return saved === null ? window.matchMedia('(min-width: 1024px)').matches : saved === '1'
+  })
   const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   // True while the user is composing a brand-new session, so the session poll
@@ -56,6 +59,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('micro-sidebar', showSidebar ? '1' : '0')
   }, [showSidebar])
+
+  // Remember whether the detail panel is open.
+  useEffect(() => {
+    localStorage.setItem('micro-panel', showPanel ? '1' : '0')
+  }, [showPanel])
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -395,18 +403,11 @@ export default function App() {
           />
         </main>
 
-        {/* backdrop for the side panel on narrow windows */}
-        {showPanel && (
-          <div
-            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
-            aria-hidden="true"
-            onClick={() => setShowPanel(false)}
-          />
-        )}
+        {/* Persistent panel: inline, not an overlay — same reasoning as the rail. */}
         <aside
           className={`${
             showPanel ? 'flex' : 'hidden'
-          } fixed inset-y-0 right-0 z-40 w-[320px] max-w-[88vw] shrink-0 flex-col border-l border-border bg-background shadow-xl lg:static lg:z-auto lg:shadow-none`}
+          } w-[320px] max-w-[88vw] shrink-0 flex-col border-l border-border bg-background`}
         >
           <div role="tablist" aria-label={t('a11y.tabs')} className="flex shrink-0 gap-1 border-b border-border p-2">
             {VIEWS.map((v) => (
