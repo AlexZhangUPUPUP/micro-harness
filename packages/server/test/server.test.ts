@@ -217,3 +217,48 @@ test('binding beyond loopback without a token is refused', () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('a session can delegate to a sub-agent through the task tool', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-server-agent-'))
+  const store = new SessionStore(dir)
+  const provider: Provider = {
+    name: 'scripted',
+    async chat(req) {
+      const hasToolResult = req.messages.some((m) => m.role === 'tool')
+      if (lastUser(req.messages).includes('CHILD')) return { message: { role: 'assistant', content: 'CHILD-OK' } }
+      if (!hasToolResult) {
+        return {
+          message: {
+            role: 'assistant',
+            content: 'delegating',
+            tool_calls: [
+              { id: 'call_1', type: 'function', function: { name: 'task', arguments: JSON.stringify({ mode: 'single', prompt: 'say CHILD-OK' }) } },
+            ],
+          },
+        }
+      }
+      return { message: { role: 'assistant', content: 'parent done' } }
+    },
+  }
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+  try {
+    const created = await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'please delegate' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await srv.idle(session.id)
+
+    const body = (await (await fetch(`${srv.url}/api/sessions/${session.id}`)).json()) as {
+      events: Array<{ agentId: string; event: { type: string; name?: string; ok?: boolean; text?: string } }>
+    }
+    const task = body.events.find((e) => e.event.type === 'tool.result' && e.event.name === 'task')
+    expect(task?.event.ok).toBe(true)
+    expect(body.events.some((e) => e.agentId !== 'main')).toBe(true)
+    expect(body.events.some((e) => e.event.type === 'turn.end' && (e.event.text ?? '').includes('parent done'))).toBe(true)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

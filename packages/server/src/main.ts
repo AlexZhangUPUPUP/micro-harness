@@ -12,7 +12,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
-import { openaiProvider } from '@micro-harness/core'
+import { loadAgentRoles, openaiProvider } from '@micro-harness/core'
 import { createServer } from './server.ts'
 import { SessionStore } from './store.ts'
 
@@ -26,6 +26,9 @@ const token = process.env.MICRO_SERVER_TOKEN
 
 if (!apiKey) console.error('warning: MICRO_API_KEY is not set — model calls will fail')
 
+const agentsDir = process.env.MICRO_AGENTS_DIR
+const roles = agentsDir ? loadAgentRoles(path.resolve(agentsDir)) : []
+
 const store = new SessionStore(dataDir)
 const provider = openaiProvider({ baseUrl, apiKey })
 const server = createServer({
@@ -36,6 +39,8 @@ const server = createServer({
   hostname,
   port,
   token,
+  roles,
+  allowBash: process.env.MICRO_ALLOW_BASH === '1',
   pricing: {
     input: Number(process.env.MICRO_PRICE_INPUT ?? 0),
     output: Number(process.env.MICRO_PRICE_OUTPUT ?? 0),

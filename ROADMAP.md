@@ -38,7 +38,7 @@
 | **P3** | **多 agent** ⭐ | agents 服务 + `task` 工具（single/parallel/chain/race） | ✅ |
 | **P4** | Server | `Bun.serve` HTTP+SSE + 会话 API + SQLite/FTS 索引 | ✅ |
 | **P5** | CLI | TUI：流式、审批、斜杠命令、多 agent 树视图 | ✅ |
-| **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ☐ |
+| **P6** | GUI | 迁移 PiStudio React：trace/inspector/replay/diff | ✅ |
 | **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ☐ |
 | **P8** | 互操作 | MCP client + ACP server | ☐ |
 | **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ☐ |
@@ -161,10 +161,12 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P6 · GUI
 
-- [ ] 迁移 PiStudio React → `packages/gui`，对接新 server
-- [ ] trace / inspector / replay
-- [ ] diff 审阅 + 多 agent 面板
-- [ ] 验收：GUI 能对话、看 trace、看多 agent 树
+- [x] `packages/gui`：React 19 + Vite + Tailwind，复用 PiStudio 的设计 token，对接新 server
+- [x] 事件驱动展示层（`src/lib/derive.ts`：事件流 → 聊天 / agent 树，纯函数、可单测）
+- [x] **trace 面板 + replay 滑杆**（按 seq 切片事件流，会话随之重建）
+- [x] **多 agent 面板**：agent 树 + 每个 agent 的 token/成本/工具数
+- [x] 验收：GUI 能对话、看 trace、看多 agent 树（`docs/gui.png`，已 OCR 校验）
+- [ ] diff 审阅 / inspector（context、system prompt）——留待后续
 
 ## P7 · 隔离与合并
 

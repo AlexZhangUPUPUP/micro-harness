@@ -17,7 +17,20 @@
  * enforced whenever `token` is configured. SSE clients may pass `?token=`.
  */
 
-import { EventHub, Harness, defaultSystemPrompt, type Provider, reconstructMessages, type TaggedEvent, type Tool } from '@micro-harness/core'
+import {
+  AgentRunner,
+  EventHub,
+  Harness,
+  createAgentRegistry,
+  defaultSystemPrompt,
+  makeTaskTool,
+  makeTools,
+  reconstructMessages,
+  type AgentRole,
+  type Provider,
+  type TaggedEvent,
+  type Tool,
+} from '@micro-harness/core'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
 
@@ -29,6 +42,14 @@ export interface ServerOptions {
   /** Working directory for the agent's tools. */
   cwd: string
   tools?: Tool[]
+  /** Agent roles exposed to the `task` tool (the default "agent" role is always added). */
+  roles?: AgentRole[]
+  allowBash?: boolean
+  approval?: 'suggest' | 'auto-edit' | 'full-auto'
+  maxDepth?: number
+  maxConcurrency?: number
+  agentTimeoutMs?: number
+  agentMaxTokens?: number
   maxSteps?: number
   systemPrompt?: string
   pricing?: { input: number; output: number }
@@ -86,11 +107,33 @@ export function createServer(options: ServerOptions): HarnessServer {
     const hub = new EventHub()
     // Attach persistence *before* the Harness emits its `session.start`.
     const off = hub.on((e: TaggedEvent) => store.append(meta.id, e))
+    const sessionModel = meta.model || model
+    const sessionCwd = meta.cwd || cwd
+    const baseTools = options.tools ?? makeTools()
+
+    // Multi-agent: every session gets its own runner (bound to this session's hub
+    // so child-agent events land in the same recorded stream) and the `task` tool.
+    const runner = new AgentRunner({
+      provider,
+      model: sessionModel,
+      cwd: sessionCwd,
+      hub,
+      roles: createAgentRegistry(options.roles ?? []),
+      tools: baseTools,
+      allowBash: options.allowBash,
+      approval: options.approval,
+      maxDepth: options.maxDepth,
+      maxConcurrency: options.maxConcurrency,
+      timeoutMs: options.agentTimeoutMs,
+      maxTokens: options.agentMaxTokens,
+      pricing: options.pricing,
+    })
+
     const harness = new Harness({
       provider,
-      model: meta.model || model,
-      cwd: meta.cwd || cwd,
-      tools,
+      model: sessionModel,
+      cwd: sessionCwd,
+      tools: [...baseTools, makeTaskTool(runner)],
       hub,
       maxSteps: options.maxSteps,
       systemPrompt: options.systemPrompt,

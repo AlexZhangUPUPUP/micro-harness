@@ -16,3 +16,4 @@ jobs:
       - run: bun install
       - run: bun test
       - run: bun run typecheck
+      - run: cd packages/gui && bun run build
