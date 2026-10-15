@@ -123,11 +123,13 @@ export function CommandPalette({ open, onClose, actions, onOpenSession }: Comman
           placeholder={t('palette.placeholder')}
           className="w-full border-b border-border bg-transparent px-4 py-3 text-[14px] outline-none"
         />
-        <div className="max-h-[50vh] overflow-y-auto py-1">
+        <div role="listbox" aria-label={t('palette.commands')} className="max-h-[50vh] overflow-y-auto py-1">
           {items.length === 0 && <div className="px-4 py-3 text-[12px] text-muted-foreground">{t('palette.noResults')}</div>}
           {items.map((it, i) => (
             <button
               key={it.key}
+              role="option"
+              aria-selected={i === index}
               onMouseEnter={() => setIndex(i)}
               onClick={() => choose(i)}
               className={`flex w-full items-center gap-3 px-4 py-2 text-left text-[13px] ${i === index ? 'bg-muted' : ''}`}

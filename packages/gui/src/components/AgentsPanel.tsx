@@ -100,8 +100,11 @@ function AgentRow({ node }: { node: AgentNode }) {
           <span className="absolute bottom-3 left-0 top-0 w-px bg-border" aria-hidden="true" />
           {node.children.map((c) => (
             <div key={c.agentId} className="relative">
-              {/* elbow into the child */}
-              <span className="absolute -left-3.5 top-3.5 h-px w-3.5 bg-border" aria-hidden="true" />
+              {/* rounded elbow into the child */}
+              <span
+                className="absolute -left-3.5 top-0 h-[18px] w-3.5 rounded-bl-[8px] border-b border-l border-border"
+                aria-hidden="true"
+              />
               <AgentRow node={c} />
             </div>
           ))}
