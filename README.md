@@ -158,6 +158,13 @@ bottom" pill); and scrubbing the trace desaturates the whole view into **REPLAY*
 The palette also exports the current session as Markdown and copies the raw trace as
 JSON. A desktop notification fires when a run finishes while the tab is hidden.
 
+Sessions can be **renamed inline** (hover a row) or deleted, and the transcript is
+editable: hovering a user message offers **edit & resend**, which forks the session
+truncated to just before that message and runs the edited prompt in the fork — the
+original session is left untouched. The composer's **model picker** is fed by
+`GET /api/models`, so `MICRO_MODELS=model-a,model-b scripts/dev.sh` advertises
+several.
+
 ## Two layers in one repo
 
 `main` is the **minimal seed**: everything under `src/` is a dependency-free harness

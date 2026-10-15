@@ -34,7 +34,7 @@ function echoProvider(): { provider: Provider; seen: ChatMessage[][] } {
   }
 }
 
-function boot(overrides: { token?: string; requireAuth?: boolean } = {}): Harness {
+function boot(overrides: { token?: string; requireAuth?: boolean; models?: string[] } = {}): Harness {
   const dir = mkdtempSync(path.join(tmpdir(), 'mh-server-'))
   const store = new SessionStore(dir)
   const { provider, seen } = echoProvider()
@@ -45,6 +45,7 @@ function boot(overrides: { token?: string; requireAuth?: boolean } = {}): Harnes
     cwd: dir,
     requireAuth: overrides.requireAuth ?? false,
     token: overrides.token,
+    models: overrides.models,
   })
   return {
     srv,
@@ -154,6 +155,103 @@ test('fork copies the transcript into a child session', async () => {
     expect(forked.parentId).toBe(session.id)
     expect(h.store.events(forked.id).length).toBe(h.store.events(session.id).length)
     expect(h.store.get(forked.id)?.title).toContain('fork')
+  } finally {
+    h.stop()
+  }
+})
+
+test('fork with { keep } truncates the copy, fork without keep copies all', async () => {
+  const h = boot()
+  try {
+    const { session } = (await (
+      await fetch(`${h.srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'truncate me' }),
+      })
+    ).json()) as { session: { id: string } }
+    await h.srv.idle(session.id)
+
+    const total = h.store.events(session.id).length
+    expect(total).toBeGreaterThan(2)
+
+    const truncated = await fetch(`${h.srv.url}/api/sessions/${session.id}/fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep: 2 }),
+    })
+    expect(truncated.status).toBe(201)
+    const { session: child } = (await truncated.json()) as { session: { id: string } }
+    expect(h.store.events(child.id).length).toBe(2)
+
+    const full = await fetch(`${h.srv.url}/api/sessions/${session.id}/fork`, { method: 'POST' })
+    const { session: fullChild } = (await full.json()) as { session: { id: string } }
+    expect(h.store.events(fullChild.id).length).toBe(total)
+  } finally {
+    h.stop()
+  }
+})
+
+test('PATCH /api/sessions/:id renames a session', async () => {
+  const h = boot()
+  try {
+    const { session } = (await (
+      await fetch(`${h.srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'old name' }),
+      })
+    ).json()) as { session: { id: string } }
+    await h.srv.idle(session.id)
+
+    const res = await fetch(`${h.srv.url}/api/sessions/${session.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '  new name  ' }),
+    })
+    expect(res.status).toBe(200)
+    const { session: renamed } = (await res.json()) as { session: { title: string } }
+    expect(renamed.title).toBe('new name')
+    // persisted to disk + sqlite, so a fresh store read agrees
+    expect(h.store.get(session.id)?.title).toBe('new name')
+
+    const unknown = await fetch(`${h.srv.url}/api/sessions/nope`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'x' }),
+    })
+    expect(unknown.status).toBe(404)
+    expect(((await unknown.json()) as { error: string }).error).toBe('session not found')
+
+    const blank = await fetch(`${h.srv.url}/api/sessions/${session.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '   ' }),
+    })
+    expect(blank.status).toBe(400)
+    expect(((await blank.json()) as { error: string }).error).toBe('title is required')
+  } finally {
+    h.stop()
+  }
+})
+
+test('GET /api/models lists configured models and the default', async () => {
+  const h = boot({ models: ['a-model', 'b-model'] })
+  try {
+    const res = await fetch(`${h.srv.url}/api/models`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ models: ['a-model', 'b-model'], default: 'fake-model' })
+  } finally {
+    h.stop()
+  }
+})
+
+test('GET /api/models falls back to the single default model', async () => {
+  const h = boot()
+  try {
+    const res = await fetch(`${h.srv.url}/api/models`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ models: ['fake-model'], default: 'fake-model' })
   } finally {
     h.stop()
   }

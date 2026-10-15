@@ -44,6 +44,18 @@ test('deriveChat builds user, assistant and tool items in order', () => {
   expect(last!.kind === 'assistant' && last.streaming).toBe(false)
 })
 
+test('deriveChat records the event-array index in user.at', () => {
+  const events = [
+    ev('main', null, { type: 'text.delta', text: 'hi' }),
+    ev('main', null, { type: 'user.message', content: 'first' }),
+    ev('main', null, { type: 'text.delta', text: 'ok' }),
+    ev('main', null, { type: 'user.message', content: 'second' }),
+  ]
+  const users = deriveChat(events).filter((i) => i.kind === 'user')
+  expect(users.map((u) => (u.kind === 'user' ? u.at : -1))).toEqual([1, 3])
+  expect(users.map((u) => (u.kind === 'user' ? u.text : ''))).toEqual(['first', 'second'])
+})
+
 test('deriveChat turns errors into notices', () => {
   const items = deriveChat([ev('main', null, { type: 'error', message: 'boom' })])
   expect(items).toHaveLength(1)
@@ -141,7 +153,7 @@ test('annotateDiff numbers old/new lines per hunk', () => {
 test('toMarkdown serializes a transcript', () => {
   const md = toMarkdown(
     [
-      { kind: 'user', id: 'u1', t: 0, text: 'hi' },
+      { kind: 'user', id: 'u1', t: 0, text: 'hi', at: 0 },
       { kind: 'assistant', id: 'a1', t: 0, agentId: 'main', text: '```ts\nx\n```', streaming: false, input: 1, output: 2 },
       { kind: 'tool', id: 't1', t: 0, agentId: 'main', name: 'read_file', args: { path: 'a' }, output: 'ok', ok: true },
     ],

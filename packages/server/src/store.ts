@@ -265,6 +265,12 @@ export class SessionStore {
     return next
   }
 
+  renameSession(id: string, title: string): SessionMeta {
+    // update() already persists to meta.json + sqlite, so a rename is just a
+    // title patch; require() throws if the session is unknown.
+    return this.update(id, { title })
+  }
+
   delete(id: string): boolean {
     if (!this.has(id)) return false
     this.db.query('DELETE FROM events WHERE session_id = ?').run(id)

@@ -93,13 +93,26 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   list: () => j<{ sessions: SessionMeta[] }>('/api/sessions').then((d) => d.sessions),
   get: (id: string) => j<{ session: SessionMeta; events: TaggedEvent[] }>(`/api/sessions/${id}`),
-  create: (prompt: string, title?: string) =>
-    j<{ session: SessionMeta }>('/api/sessions', { method: 'POST', body: JSON.stringify({ prompt, title }) }).then((d) => d.session),
+  models: () => j<{ models: string[]; default: string }>('/api/models'),
+  create: (prompt: string, opts: { title?: string; model?: string } = {}) =>
+    j<{ session: SessionMeta }>('/api/sessions', { method: 'POST', body: JSON.stringify({ prompt, ...opts }) }).then(
+      (d) => d.session,
+    ),
   resume: (id: string, prompt: string) =>
     j<{ session: SessionMeta }>(`/api/sessions/${id}/resume`, { method: 'POST', body: JSON.stringify({ prompt }) }).then(
       (d) => d.session,
     ),
-  fork: (id: string) => j<{ session: SessionMeta }>(`/api/sessions/${id}/fork`, { method: 'POST' }).then((d) => d.session),
+  /** Copy a session. `keep` limits the copy to the first N events (for edit-and-resend). */
+  fork: (id: string, keep?: number) =>
+    j<{ session: SessionMeta }>(`/api/sessions/${id}/fork`, {
+      method: 'POST',
+      body: JSON.stringify(keep === undefined ? {} : { keep }),
+    }).then((d) => d.session),
+  /** Retitle a session in place. */
+  rename: (id: string, title: string) =>
+    j<{ session: SessionMeta }>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }).then(
+      (d) => d.session,
+    ),
   remove: (id: string) => j<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
   search: (q: string) => j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
 
