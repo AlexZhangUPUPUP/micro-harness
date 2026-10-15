@@ -382,7 +382,7 @@ bun test              # 120 个测试，19 个文件
 bun run typecheck     # tsc --noEmit，干净
 bun run verify        # 脚本化功能自检（不走网络）
 bun run eval:mock      # 评测套件跑脚本化 provider —— CI 友好、不走网络
-bun run eval           # 同一套任务跑真模型（逐任务 token/成本/缓存）
+bun run eval --judge   # 同一套任务 + 对开放式任务引入 LLM 裁判
 ```
 
 测试覆盖内核的生命周期与作用域、循环与流式、审批、会话回放、服务端接口、worktree 隔离、针对真实 `git diff` 输出的部分补丁应用，以及 GUI 渲染所依赖的每一个纯函数派生。

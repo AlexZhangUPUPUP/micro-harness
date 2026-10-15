@@ -391,7 +391,7 @@ bun test              # 120 tests across 19 files
 bun run typecheck     # tsc --noEmit, clean
 bun run verify        # scripted feature checks (no network)
 bun run eval:mock      # eval suite against a scripted provider — CI-safe, no network
-bun run eval           # the same suite against a real model (per-task tokens/cost/cache)
+bun run eval --judge   # the same suite plus an LLM judge for open-ended tasks
 ```
 
 The suite covers the kernel's lifecycle and scoping, the loop and its streaming, approvals, session replay, the server's endpoints, worktree isolation, partial patch application against real `git diff` output, and every pure derivation the GUI renders.
