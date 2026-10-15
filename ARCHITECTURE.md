@@ -1,13 +1,10 @@
 # ARCHITECTURE
 
-> 目标形态：一个**完整的开源 coding-agent harness 平台**——自己的 agent loop + 插件化内核 + Server + CLI + GUI，支持 MCP 与 ACP，DeepSeek 等 OpenAI 兼容模型优先。
+> 目标形态：一个**完整的开源 coding-agent harness 平台**——自己的 agent loop + Server + CLI + GUI，支持 MCP 客户端与 ACP，DeepSeek 等 OpenAI 兼容模型优先。
 >
-> 本文是**开工前的设计基线**。`micro-harness` 目前是最小参考实现，将成长为本文里的 `core`。
-
-> **修订（2026-10-16）**：本文是开工前的设计基线，其中 §1「core 跑在内核上」**已被回退**——
-> 自研插件内核做出来后被测量为不承重（0 个运行时消费者），已删除，改为**编译期能力接缝**。
-> 原因、数字与恢复条件见 [docs/design-comparison.zh-CN.md](docs/design-comparison.zh-CN.md)。
-> 其余各节仍然有效。
+> ⚠️ **本文是开工前的设计基线，属于存档。现状以 [README.md](README.md) 与 [ROADMAP.md](ROADMAP.md) 为准。**
+>
+> **修订（2026-10-16）**：§1「core 跑在内核上」**已被回退**——自研插件内核做出来后被测量为不承重（0 个运行时消费者），已删除，改为**编译期能力接缝**；§2 的目录树是**当时的目标态，不是今天的实际结构**；§3「内核规格」整节随之作废。原因、数字与恢复条件见 [docs/design-comparison.zh-CN.md](docs/design-comparison.zh-CN.md)。其余各节仍大体有效，但细节以现状文档为准。
 
 ---
 
@@ -15,7 +12,7 @@
 
 ### 目标
 - **自己拥有 agent loop**（不是只编排别人的 harness）。
-- **一切皆插件**：provider / tool / context 策略 / 审批策略 / 命令 / UI 槽位 / 存储，全部是插件。
+- ~~**一切皆插件**：provider / tool / context 策略 / 审批策略 / 命令 / UI 槽位 / 存储，全部是插件。~~ **已废弃**：能力改为**编译期接缝**（`Provider`/`Tool`/`FileSystem`/`AgentRole`/`AgentEvent`），不是运行时插件容器（见文首修订）。
 - **一个内核，多个前端**：headless server + CLI + GUI（Web + 桌面）。
 - **互操作**：MCP（消费外部工具/资源）、ACP（被编辑器/其他客户端驱动）。
 - **性能与分发**：TypeScript + Bun，可编译成单文件二进制。
@@ -29,7 +26,7 @@
 
 ---
 
-## 1. 分层
+## 1. 分层（⚠️ 已回退：内核未采用，见文首修订）
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -53,38 +50,27 @@
 
 ---
 
-## 2. 目录树（目标 monorepo）
+## 2. 目录树
+
+> ⚠️ 本节原为「目标 monorepo」（`kernel/ providers/ storage/ cli/ evals/ profiles/` 多包拆分），**未采用**：内核回退后其余并入 `core`/`server`/`gui`。以下是 `main` 分支的**实际**结构。
 
 ```
 harness/
-  package.json                # workspaces root
-  ARCHITECTURE.md
+  package.json                  # workspaces root（不声明运行时依赖）
+  ARCHITECTURE.md  ROADMAP.md  PROGRESS.md
   packages/
-    kernel/                   # ~400-600 行：Context/DI/生命周期/作用域/事件
-      src/context.ts
-      src/plugin.ts
-      src/lifecycle.ts
-      src/events.ts
-      src/schema.ts           # 基于 zod/valibot 的 Config 校验（薄封装）
-      test/
-    core/                     # 原 micro-harness：loop + tools + context
-      src/loop.ts
-      src/tools/{read,write,list,bash}.ts
-      src/context/{window,compact,cache}.ts
-      src/plugin.ts           # 把 loop 注册为一个插件
-    providers/                # openai-compatible / deepseek / anthropic / ollama
-    server/                   # Bun.serve：HTTP + SSE + ACP + MCP
-    storage/                  # JSONL 会话 + SQLite 索引（复用 PiStudio db.js 思路）
-    cli/                      # 终端客户端（ink 或自绘 TUI）
-    gui/                      # React + Vite + Electron（迁移自 PiStudio）
-    sdk/                      # server API 的 TS 客户端（可选）
-    evals/                    # 评测任务 + runner
-  profiles/                   # 组合层：base.yml / web.yml / headless.yml / acp.yml
+    core/                       # agent loop + tools + context + provider + agents + MCP/ACP + CLI
+      src/  test/
+    server/                     # Bun.serve + SSE + 会话存储（JSONL + SQLite/FTS5）
+      src/  test/
+    gui/                        # React + Vite + Tailwind
+      src/  test/
+  scripts/                      # dev.sh、verify-features.ts、evals/、install.sh
 ```
 
 ---
 
-## 3. 内核规格
+## 3. 内核规格（⚠️ 已作废：内核未采用，见文首修订）
 
 ### 3.1 Context（DI + 作用域）
 
@@ -190,7 +176,7 @@ export type AgentEvent =
 
 ---
 
-## 4. 组合层（composition）
+## 4. 组合层（composition）（⚠️ 目标态：profile 组合层未采用）
 
 对标 DSH 的 `cordis.patch.yml`，但语义由我们定义。
 
@@ -218,7 +204,7 @@ export type AgentEvent =
 
 ---
 
-## 5. 插件点清单（extension points）
+## 5. 插件点清单（extension points）（⚠️ 已被编译期接缝取代）
 
 | 插件点 | 用途 | 进程内/外 |
 |---|---|---|

@@ -17,7 +17,7 @@
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
 </p>
 
-> 🌱 原始的**极简种子**——六个文件、零依赖、无构建步骤，Node ≥ 22.18 直接运行——已冻结在 [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) 这个 tag 上。想理解核心，就从那份从头读到尾；当前分支是在它之上长出来的平台。
+> 🌱 原始的**极简种子**——六个源码文件、零依赖、无构建步骤，Node ≥ 22.18 直接运行——已冻结在 [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) 这个 tag 上。想理解核心，就从那份从头读到尾；当前分支是在它之上长出来的平台。
 
 ---
 
@@ -382,7 +382,8 @@ micro-harness/
 - [x] **P7 · 隔离** —— 每个 agent 一个 git worktree、合并回主干、合并队列
 - [x] **P8 · 互操作** —— MCP client、ACP server
 - [x] **P9 · 上下文与经济性** —— 压缩策略、cache-prefix 复用、成本计量
-- [x] **P10 · 评测与发布** —— 评测集（26 个任务、金标集 + 裁判校准）、`bun build --compile`、`scripts/install.sh`；npm 发布经决定跳过
+- [x] **P10 · 评测与发布** —— 评测集（26 个任务、金标集 + 裁判校准）、`bun build --compile`、`scripts/install.sh`
+- [ ] **P10 · 文档站** —— 托管文档站（npm 发布经决定跳过）
 
 ---
 
@@ -403,7 +404,7 @@ bun run eval --judge   # 同一套任务 + 对开放式任务引入 LLM 裁判
 
 ## 🤝 参与贡献
 
-欢迎提 issue 和 PR。如果想找切入点，路线图里唯一未完成项（**P10** —— 文档站；npm 发布经决定跳过）以及标了 *good first issue* 的都合适。
+欢迎提 issue 和 PR。如果想找切入点，路线图里剩余的一项（**P10 · 文档站**；npm 发布经决定跳过）以及标了 *good first issue* 的都合适。
 
 两件事能让 PR 更容易被合：
 

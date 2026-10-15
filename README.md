@@ -17,7 +17,7 @@
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
 </p>
 
-> 🌱 The original **minimal seed** — six files, zero dependencies, no build step, run directly by Node ≥ 22.18 — is frozen at the [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag. Read that one end to end to understand the core; this branch is the platform grown from it.
+> 🌱 The original **minimal seed** — six source files, zero dependencies, no build step, run directly by Node ≥ 22.18 — is frozen at the [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag. Read that one end to end to understand the core; this branch is the platform grown from it.
 
 ---
 
@@ -391,7 +391,8 @@ micro-harness/
 - [x] **P7 · Isolation** — git worktrees per agent, promote, merge queue
 - [x] **P8 · Interop** — MCP client, ACP server
 - [x] **P9 · Context economics** — compaction strategies, cache-prefix reuse, cost metering
-- [x] **P10 · Evaluation & release** — eval suite (26 tasks, golden set + judge calibration), `bun build --compile`, `scripts/install.sh`; npm publish skipped by choice
+- [x] **P10 · Evaluation & release** — eval suite (26 tasks, golden set + judge calibration), `bun build --compile`, `scripts/install.sh`
+- [ ] **P10 · Documentation site** — a hosted docs site (npm publish skipped by choice)
 
 ---
 
@@ -412,7 +413,7 @@ The suite covers the event loop and its streaming, parallel tool calls and appro
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's one open item (**P10** — the docs site; npm publish is skipped by choice) and anything marked *good first issue* are good entry points.
+Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's remaining item (**P10 · Documentation site**; npm publish is skipped by choice) and anything marked *good first issue* are good entry points.
 
 Two things that make a PR easy to accept:
 
