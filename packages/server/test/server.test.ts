@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { SessionStore } from '../src/store.ts'
@@ -260,5 +261,93 @@ test('a session can delegate to a sub-agent through the task tool', async () => 
   } finally {
     srv.stop(true)
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('isolation over HTTP: worktree, diff, promote and the merge queue', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-server-iso-'))
+  const sessions = mkdtempSync(path.join(tmpdir(), 'mh-server-iso-sessions-'))
+  const git = (...a: string[]): void => void execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
+  git('init', '-q')
+  git('config', 'user.email', 't@t')
+  git('config', 'user.name', 't')
+  git('config', 'commit.gpgsign', 'false')
+  writeFileSync(path.join(dir, 'base.txt'), 'base\n')
+  git('add', '-A')
+  git('commit', '-qm', 'init')
+
+  const store = new SessionStore(sessions)
+  const provider: Provider = {
+    name: 'scripted',
+    async chat(req) {
+      const user = lastUser(req.messages)
+      const hasToolResult = req.messages.some((m) => m.role === 'tool')
+      if (user.includes('delegate')) {
+        if (!hasToolResult) {
+          return {
+            message: {
+              role: 'assistant',
+              content: 'delegating',
+              tool_calls: [
+                { id: 't1', type: 'function', function: { name: 'task', arguments: JSON.stringify({ mode: 'single', prompt: 'create marker.txt' }) } },
+              ],
+            },
+          }
+        }
+        return { message: { role: 'assistant', content: 'parent done' } }
+      }
+      if (!hasToolResult) {
+        return {
+          message: {
+            role: 'assistant',
+            content: 'writing',
+            tool_calls: [
+              { id: 'w1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'marker.txt', content: 'hi\n' }) } },
+            ],
+          },
+        }
+      }
+      return { message: { role: 'assistant', content: 'child done' } }
+    },
+  }
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false, isolation: 'worktree' })
+  try {
+    const created = await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'please delegate' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await srv.idle(session.id)
+
+    const agents = (await (await fetch(`${srv.url}/api/sessions/${session.id}/agents`)).json()) as {
+      agents: Array<{ agentId: string; path: string; branch: string }>
+    }
+    expect(agents.agents.length).toBeGreaterThan(0)
+    const agentId = agents.agents[0]!.agentId
+
+    const diff = (await (
+      await fetch(`${srv.url}/api/sessions/${session.id}/agents/${encodeURIComponent(agentId)}/diff`)
+    ).json()) as { files: Array<{ path: string }> }
+    expect(diff.files.map((f) => f.path)).toContain('marker.txt')
+    // isolated: the shared workspace is untouched until we promote
+    expect(existsSync(path.join(dir, 'marker.txt'))).toBe(false)
+
+    const promoted = (await (
+      await fetch(`${srv.url}/api/sessions/${session.id}/agents/${encodeURIComponent(agentId)}/promote`, { method: 'POST' })
+    ).json()) as { ok: boolean }
+    expect(promoted.ok).toBe(true)
+    expect(existsSync(path.join(dir, 'marker.txt'))).toBe(true)
+
+    const integrate = (await (await fetch(`${srv.url}/api/sessions/${session.id}/integrate`)).json()) as { files: unknown[] }
+    expect(Array.isArray(integrate.files)).toBe(true)
+
+    // DELETE also cleans the worktrees up
+    await fetch(`${srv.url}/api/sessions/${session.id}`, { method: 'DELETE' })
+    expect(existsSync(agents.agents[0]!.path)).toBe(false)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(sessions, { recursive: true, force: true })
   }
 })

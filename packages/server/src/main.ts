@@ -41,6 +41,7 @@ const server = createServer({
   token,
   roles,
   allowBash: process.env.MICRO_ALLOW_BASH === '1',
+  isolation: process.env.MICRO_ISOLATE === '1' ? 'worktree' : 'none',
   pricing: {
     input: Number(process.env.MICRO_PRICE_INPUT ?? 0),
     output: Number(process.env.MICRO_PRICE_OUTPUT ?? 0),

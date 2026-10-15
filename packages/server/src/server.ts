@@ -23,9 +23,14 @@ import {
   Harness,
   createAgentRegistry,
   defaultSystemPrompt,
+  integrateApply,
+  integratePreview,
   makeTaskTool,
   makeTools,
+  promoteWorktree,
   reconstructMessages,
+  removeWorktree,
+  worktreeDiff,
   type AgentRole,
   type Provider,
   type TaggedEvent,
@@ -50,6 +55,8 @@ export interface ServerOptions {
   maxConcurrency?: number
   agentTimeoutMs?: number
   agentMaxTokens?: number
+  /** Run each sub-agent in its own git worktree so parallel edits never collide. */
+  isolation?: 'none' | 'worktree'
   maxSteps?: number
   systemPrompt?: string
   pricing?: { input: number; output: number }
@@ -103,6 +110,16 @@ export function createServer(options: ServerOptions): HarnessServer {
   const cwd = options.cwd
   const tools = options.tools
 
+  /** Worktree info per agent, read back from the durable event stream. */
+  const agentWorktrees = (id: string): Map<string, { path: string; branch: string; base: string }> => {
+    const map = new Map<string, { path: string; branch: string; base: string }>()
+    for (const e of store.events(id)) {
+      const ev = e.event
+      if (ev.type === 'agent.worktree') map.set(e.agentId, { path: ev.path, branch: ev.branch, base: ev.base })
+    }
+    return map
+  }
+
   const build = (meta: SessionMeta): SessionRuntime => {
     const hub = new EventHub()
     // Attach persistence *before* the Harness emits its `session.start`.
@@ -126,6 +143,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       maxConcurrency: options.maxConcurrency,
       timeoutMs: options.agentTimeoutMs,
       maxTokens: options.agentMaxTokens,
+      isolation: options.isolation,
       pricing: options.pricing,
     })
 
@@ -316,12 +334,85 @@ export function createServer(options: ServerOptions): HarnessServer {
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
         return json({ session: fork(id) }, 201)
       }
+      // --- isolation / merge queue (P7) ---
+      if (action === 'agents') {
+        const wts = agentWorktrees(id)
+        if (parts[4]) {
+          const agentId = decodeURIComponent(parts[4])
+          const wt = wts.get(agentId)
+          if (!wt) return json({ error: 'agent has no worktree' }, 404)
+          const meta = store.require(id)
+          if (parts[5] === 'diff' && req.method === 'GET') {
+            try {
+              return json({ agentId, worktree: wt, ...worktreeDiff(wt.path) })
+            } catch (err) {
+              return json({ error: String((err as Error).message) }, 500)
+            }
+          }
+          if (parts[5] === 'promote' && req.method === 'POST') {
+            try {
+              return json(promoteWorktree({ worktree: wt.path, cwd: meta.cwd || cwd }))
+            } catch (err) {
+              return json({ error: String((err as Error).message) }, 500)
+            }
+          }
+          if (parts[5] === 'cleanup' && req.method === 'POST') {
+            try {
+              removeWorktree({ cwd: meta.cwd || cwd, path: wt.path, branch: wt.branch })
+              return json({ ok: true })
+            } catch (err) {
+              return json({ error: String((err as Error).message) }, 500)
+            }
+          }
+          return json({ error: 'not found' }, 404)
+        }
+        if (req.method === 'GET') return json({ agents: [...wts.entries()].map(([agentId, w]) => ({ agentId, ...w })) })
+        return json({ error: 'method not allowed' }, 405)
+      }
+
+      if (action === 'integrate') {
+        const meta = store.require(id)
+        const wts = agentWorktrees(id)
+        if (!wts.size) return json({ error: 'no isolated agents' }, 400)
+        if (req.method === 'GET') {
+          try {
+            const agents = [...wts.entries()].map(([agentId, w]) => ({ agentId, worktree: w.path, base: w.base }))
+            return json(integratePreview({ cwd: meta.cwd || cwd, agents }))
+          } catch (err) {
+            return json({ error: String((err as Error).message) }, 500)
+          }
+        }
+        if (req.method === 'POST') {
+          let body: { files?: Array<{ path: string; content?: string; delete?: boolean; takeTheirs?: boolean; agentId?: string }> } = {}
+          try {
+            body = (await req.json()) as typeof body
+          } catch {
+            /* empty body */
+          }
+          const worktrees = Object.fromEntries([...wts.entries()].map(([agentId, w]) => [agentId, w.path]))
+          try {
+            return json(integrateApply({ cwd: meta.cwd || cwd, worktrees, files: body.files ?? [] }))
+          } catch (err) {
+            return json({ error: String((err as Error).message) }, 500)
+          }
+        }
+        return json({ error: 'method not allowed' }, 405)
+      }
+
       if (action) return json({ error: 'not found' }, 404)
       if (req.method === 'GET') {
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
         return json({ session: store.require(id), events: store.events(id) })
       }
       if (req.method === 'DELETE') {
+        const meta = store.require(id)
+        for (const w of agentWorktrees(id).values()) {
+          try {
+            removeWorktree({ cwd: meta.cwd || cwd, path: w.path, branch: w.branch })
+          } catch {
+            /* best effort */
+          }
+        }
         if (!store.delete(id)) return json({ error: 'session not found' }, 404)
         runtimes.delete(id)
         return json({ ok: true })

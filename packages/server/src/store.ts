@@ -82,24 +82,30 @@ function toMeta(row: SessionRow): SessionMeta {
 export function deriveMeta(meta: SessionMeta, event: TaggedEvent): SessionMeta {
   const ev = event.event
   const next: SessionMeta = { ...meta, updatedAt: Date.now() }
+  // Sub-agent events flow through the same stream, but only the session's own
+  // agent (`main`) may define its header or mark it finished.
+  const isMain = event.agentId === 'main'
   switch (ev.type) {
     case 'session.start':
-      next.model = ev.model
-      next.cwd = ev.cwd
+      if (isMain) {
+        next.model = ev.model
+        next.cwd = ev.cwd
+      }
       break
     case 'user.message':
       if (!next.title) next.title = ev.text.replace(/\s+/g, ' ').trim().slice(0, 100)
       break
     case 'usage':
+      // every agent's spend counts toward the session total
       next.input += ev.input
       next.output += ev.output
       next.cost += ev.cost ?? 0
       break
     case 'turn.end':
-      next.status = 'done'
+      if (isMain) next.status = 'done'
       break
     case 'error':
-      if (ev.fatal) next.status = 'error'
+      if (isMain && ev.fatal) next.status = 'error'
       break
     default:
       break
