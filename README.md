@@ -92,10 +92,17 @@ bun run typecheck
 
 A React 19 + Vite + Tailwind front end (design tokens shared with PiStudio): a
 session list, a streaming transcript with tool cards, a **multi-agent tree** with
-per-agent tokens/cost, and a **trace panel with a replay scrubber** that rebuilds
-the conversation from a slice of the event stream.
+per-agent tokens/cost, a **trace panel with a replay scrubber** that rebuilds the
+conversation from a slice of the event stream, and a **changes panel** (per-agent
+diff / promote + an integrate-all **merge queue**) when the server runs with
+`MICRO_ISOLATE=1`.
 
 ![GUI](docs/gui.png)
+
+With isolation on, each sub-agent gets its own git worktree, so parallel agents
+never overwrite each other:
+
+![merge queue](docs/gui-changes.png)
 
 ```bash
 # one command — starts the server and the GUI, and picks up an API key
