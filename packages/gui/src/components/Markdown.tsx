@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from 'react'
+import { createElement, useState, type ReactNode } from 'react'
 import { highlightCode } from '../lib/highlight.ts'
 import { cn } from '../lib/utils.ts'
 
@@ -291,21 +291,44 @@ function codeBlock(body: string, k: KeyGen): ReactNode {
   return createElement(
     'div',
     { key: `code${k.n++}`, className: 'my-2 overflow-hidden rounded-lg border border-border bg-muted/40' },
-    lang
-      ? createElement(
-          'div',
-          {
-            key: `cl${k.n++}`,
-            className: 'border-b border-border bg-muted/60 px-3 py-1 font-mono text-[11px] uppercase tracking-wide text-muted-foreground',
-          },
-          lang,
-        )
-      : null,
+    createElement(
+      'div',
+      {
+        key: `cl${k.n++}`,
+        className:
+          'flex items-center justify-between gap-2 border-b border-border bg-muted/60 px-3 py-1 font-mono text-[11px] uppercase tracking-wide text-muted-foreground',
+      },
+      createElement('span', { key: `l${k.n++}` }, lang),
+      createElement(CopyButton, { key: `cp${k.n++}`, text: code }),
+    ),
     createElement(
       'pre',
       { key: `pre${k.n++}`, className: 'overflow-x-auto p-3 font-mono text-[13px] leading-relaxed' },
       createElement('code', { key: `c${k.n++}`, dangerouslySetInnerHTML: { __html: html } }),
     ),
+  )
+}
+
+/** Copy-to-clipboard affordance on every code block. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return createElement(
+    'button',
+    {
+      type: 'button',
+      onClick: () => {
+        void navigator.clipboard
+          ?.writeText(text)
+          .then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1400)
+          })
+          .catch(() => undefined)
+      },
+      className:
+        'shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] normal-case tracking-normal text-muted-foreground transition hover:bg-muted hover:text-foreground',
+    },
+    copied ? '✓ copied' : 'copy',
   )
 }
 
