@@ -12,6 +12,7 @@
 
 import { cacheReadTokens } from './model.ts'
 import { compactMessages, DEFAULT_TOOL_OUTPUT_CHARS, estimateTokens, truncateToolOutput } from './context.ts'
+import { localFs, type FileSystem } from './fs.ts'
 import type { ChatMessage, ToolCall } from './model.ts'
 import type { Provider } from './provider.ts'
 import { dispatch, makeTools, toolDefs, type Tool, type ToolContext, type ToolResult } from './tools.ts'
@@ -37,6 +38,8 @@ export interface HarnessOptions {
   tools?: Tool[]
   /** Nesting depth of this agent (root = 0). Sub-agents get depth + 1. */
   depth?: number
+  /** Capability seam for the file tools; defaults to local disk rooted at `cwd`. */
+  fs?: FileSystem
   /** Cap on a single tool result, in characters, applied when it is appended. */
   maxToolOutput?: number
   /**
@@ -101,6 +104,9 @@ export class Harness {
       allowBash: !!opts.allowBash,
       agentId: opts.agentId ?? 'main',
       depth: opts.depth ?? 0,
+      // The filesystem the file tools run against: the injected provider, else
+      // the real disk rooted at `cwd`. Sub-agents inherit their parent's.
+      fs: opts.fs ?? localFs(opts.cwd),
     }
     this.#maxSteps = opts.maxSteps ?? 24
     this.#maxContextTokens = opts.maxContextTokens ?? 24_000

@@ -294,10 +294,3 @@ test('formats an agent tree with per-agent tokens and cost', () => {
   expect(text).toContain('worker-1 · done · 300tok · $0.002000')
   expect(text).toContain('total cost: $0.003000')
 })
-
-test('agents service registers the default and file-defined roles', async () => {
-  const { createAgentsService } = await import('../src/plugin.ts')
-  const service = createAgentsService([{ name: 'worker' }])
-  expect(service.list()).toContain('agent')
-  expect(service.get('worker')?.name).toBe('worker')
-})

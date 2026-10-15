@@ -16,3 +16,6 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 
 - 2026-10-16 · P9（部分）· 上下文经济性：工具输出写入时截断 + 保留头部的压缩策略（前缀稳定）+ 三家缓存方言归一化 + 缓存折扣计价 + GUI 命中率 · `bun test` 122/122、typecheck 干净；真 DeepSeek 三次调用命中 75%/78%/69%，成本按缓存价计（不计价会高估 ~2x）
 
+- 2026-10-16 · 架构 · **删除自研插件内核（P1 回退）** + 文件系统变成能力接缝（`FileSystem` 接口 → `localFs` provider；worktree 子 agent 变成一次 provider 替换）· `bun test` 112/112、typecheck 干净；新测试证明真工具可跑在内存文件系统上
+- 2026-10-16 · 文档 · 新增中英双语 `docs/design-comparison.{md,zh-CN.md}`：与 DeepSeek Harness / pi / Claude Code / Codex 的五轴对比、抄了什么、拒绝了什么、以及我们的不确定项
+

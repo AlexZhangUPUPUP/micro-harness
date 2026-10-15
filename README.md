@@ -11,7 +11,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-111_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-112_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -24,6 +24,7 @@
 ## 📑 Table of Contents
 
 - [✨ What is this](#-what-is-this)
+- [🆚 How it differs from other harnesses](#-how-it-differs-from-other-harnesses)
 - [📸 Preview](#-preview)
 - [🚀 Quick start](#-quick-start)
 - [🧩 How it is built](#-how-it-is-built)
@@ -59,7 +60,7 @@ flowchart LR
 | | |
 |---|---|
 | **Events are the single contract** | The loop emits one tagged event stream. The session log, the server's SSE, the CLI, the trace panel, replay, the agent tree and the Inspector are all just consumers — no side channels. |
-| **Everything is a plugin** | A self-built, ~500-line kernel: `provide`/`get`/`inject`, lifecycle `waiting → active → failed`, scopes, `fork()`/`isolate()`. Deliberately Cordis-shaped so a migration stays possible. |
+| **Seams, not a container** | The extension points are interfaces you compile against — `Provider`, `Tool`, `FileSystem`, `AgentRole`, `AgentEvent` — and composition is explicit code (`createServer`, `makeTools`). We built a DI container first, measured it (**0** runtime consumers across **25** assembly sites) and [deleted it](docs/design-comparison.md). |
 | **Multi-agent is first-class** | A `task` tool with `single`/`parallel`/`chain`/`race` modes, real context isolation, and depth/concurrency/token/cost limits. Not bolted on. |
 | **Isolation with a review step** | Each sub-agent gets its own git worktree, so parallel agents can't overwrite each other — and you apply the result **hunk by hunk**. |
 | **Observable by default** | Rolling token/cost, an agent tree, a replay scrubber, and an Inspector that shows the exact payload sent to the model. |
@@ -160,19 +161,24 @@ scripts/dev.sh                   # → http://127.0.0.1:5273
 
 ---
 
+## 🆚 How it differs from other harnesses
+
+Every harness README implies "we are the good one". This one shows its work instead:
+what we took from **DeepSeek Harness**, **pi**, **Claude Code** and **Codex**, what we
+deliberately rejected, and where we are unsure. It is also where the deleted DI container
+lives — with the measurements that justified removing it.
+
+**→ [docs/design-comparison.md](docs/design-comparison.md)**
+
+---
+
 ## 🧩 How it is built
 
-Four packages, one direction of dependency. The kernel knows nothing about agents; the core knows nothing about HTTP; the GUI only reads the event stream.
+Three packages, one direction of dependency. The core knows nothing about HTTP; the GUI only reads the event stream.
 
 ```mermaid
 flowchart TB
-  subgraph K["packages/kernel — plugin kernel"]
-    k1["provide / get / inject"]
-    k2["lifecycle waiting → active → failed"]
-    k3["scopes · fork() · isolate() · events"]
-  end
-
-  subgraph CO["packages/core — agent runtime"]
+  subgraph CO["packages/core — agent runtime · the capability seams"]
     c1["harness loop · streaming · parallel tools"]
     c2["providers · tools · context windowing"]
     c3["multi-agent runner · sessions · CLI"]
@@ -187,12 +193,11 @@ flowchart TB
     g1["React 19 · Vite · Tailwind"]
   end
 
-  K --> CO --> SV --> GU
+  CO --> SV --> GU
 ```
 
 | package | what it is |
 |---|---|
-| `packages/kernel` | The plugin kernel: service container, lifecycle, scopes, event bus, config schema validation. Self-built, no dependencies. |
 | `packages/core` | The seed, grown up: the loop, tool dispatch, context windowing, providers, the multi-agent runner, sessions, and the CLI. |
 | `packages/server` | Bun HTTP + SSE. Sessions, streaming, the FTS5 search index, worktree isolation endpoints and the merge queue. |
 | `packages/gui` | React 19 + Vite + Tailwind. Every view is derived from the event stream by pure, unit-tested functions in `lib/derive.ts`. |
@@ -265,7 +270,6 @@ Limits are enforced by the runner, not by convention: `--max-depth`, `--max-conc
 ```
 micro-harness/
 ├── packages/
-│   ├── kernel/                  # plugin kernel: DI, lifecycle, scopes, event bus
 │   ├── core/                    # agent loop, tools, context, providers, multi-agent, CLI
 │   ├── server/                  # HTTP + SSE + SQLite/FTS5 index
 │   └── gui/                     # React 19 + Vite + Tailwind web UI
@@ -284,7 +288,7 @@ micro-harness/
 ## 🗺 Roadmap
 
 - [x] **P0 · Foundation** — monorepo, Bun toolchain, CI
-- [x] **P1 · Kernel** — services/DI, lifecycle, scopes, event bus (~500 lines, self-built)
+- [x] ~~**P1 · Kernel** — services/DI, lifecycle, scopes, event bus~~ **reverted**: built (396 lines, 10 tests), measured as having 0 runtime consumers, and removed in favour of compile-time seams. See [the comparison](docs/design-comparison.md).
 - [x] **P2 · Event-driven core** — `AgentEvent`, streaming, parallel tool calls, approval modes, sessions
 - [x] **P3 · Multi-agent** — runner, `task` tool, context firewall, limits
 - [x] **P4 · Server** — HTTP + SSE, session API, SQLite/FTS5 index
@@ -301,7 +305,7 @@ micro-harness/
 
 ```bash
 bun install
-bun test              # 111 tests across 19 files
+bun test              # 112 tests across 18 files
 bun run typecheck     # tsc --noEmit, clean
 bun run verify        # scripted feature checks (no network)
 ```
