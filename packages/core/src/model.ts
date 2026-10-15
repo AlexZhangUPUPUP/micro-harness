@@ -188,7 +188,10 @@ export async function chatStream(
     }
     for (const tc of delta.tool_calls ?? []) {
       const index = tc.index ?? 0
-      const slot = (toolCalls[index] ??= { id: '', function: { name: '', arguments: '' } })
+      const slot = (toolCalls[index] ??= { id: '', type: 'function', function: { name: '', arguments: '' } })
+      // Some providers omit `type` on streamed tool-call deltas, but the value
+      // MUST be `function` when the message is sent back or the API rejects it.
+      slot.type = 'function'
       if (tc.id) slot.id = tc.id
       if (tc.function?.name) slot.function.name += tc.function.name
       if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
@@ -214,6 +217,9 @@ export async function chatStream(
     }
   }
 
+  toolCalls.forEach((c, i) => {
+    if (c && !c.id) c.id = `call_${i}_${Date.now().toString(36)}`
+  })
   const calls = toolCalls.filter((c) => c && (c.id || c.function.name || c.function.arguments))
   return {
     message: {
