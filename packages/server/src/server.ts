@@ -12,6 +12,7 @@
  *   DELETE /api/sessions/:id             delete a session
  *   POST   /api/sessions/:id/resume      continue a session        { prompt }
  *   POST   /api/sessions/:id/fork        copy a session to a new id { keep? }
+ *   POST   /api/sessions/:id/agents/:agentId/apply  apply accepted hunks of an agent's diff { hunks: number[] }
  *   GET    /api/sessions/:id/events      SSE stream (replay + live)
  *   GET    /api/search?q=…               FTS5 full-text search
  *
@@ -23,6 +24,7 @@ import {
   AgentRunner,
   EventHub,
   Harness,
+  applyHunkSelection,
   createAgentRegistry,
   defaultSystemPrompt,
   integrateApply,
@@ -38,6 +40,8 @@ import {
   type TaggedEvent,
   type Tool,
 } from '@micro-harness/core'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
 
@@ -372,6 +376,44 @@ export function createServer(options: ServerOptions): HarnessServer {
             try {
               removeWorktree({ cwd: meta.cwd || cwd, path: wt.path, branch: wt.branch })
               return json({ ok: true })
+            } catch (err) {
+              return json({ error: String((err as Error).message) }, 500)
+            }
+          }
+          if (parts[5] === 'apply' && req.method === 'POST') {
+            let body: { hunks?: number[] } = {}
+            try {
+              body = (await req.json()) as typeof body
+            } catch {
+              return json({ error: 'invalid JSON body' }, 400)
+            }
+            const hunks = body.hunks
+            if (!Array.isArray(hunks) || hunks.some((h) => !Number.isInteger(h))) {
+              return json({ error: 'hunks must be an array of integers' }, 400)
+            }
+            try {
+              const d = worktreeDiff(wt.path)
+              const root = meta.cwd || cwd
+              const files: Array<{ path: string; content?: string; delete?: boolean; agentId?: string }> = []
+              const conflicted: number[] = []
+              for (const f of d.files) {
+                let base = ''
+                try {
+                  base = readFileSync(path.join(root, f.path), 'utf8')
+                } catch {
+                  /* file does not exist yet — empty base */
+                }
+                const r = applyHunkSelection(base, d.diff, f.path, hunks)
+                if (r.applied.length === 0 && r.conflicted.length === 0) continue
+                conflicted.push(...r.conflicted)
+                files.push(
+                  r.deleted
+                    ? { path: f.path, delete: true, agentId }
+                    : { path: f.path, content: r.content, agentId },
+                )
+              }
+              const result = integrateApply({ cwd: root, worktrees: { [agentId]: wt.path }, files })
+              return json({ applied: result.applied, conflicted, backup: result.backup })
             } catch (err) {
               return json({ error: String((err as Error).message) }, 500)
             }

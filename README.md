@@ -104,6 +104,14 @@ never overwrite each other:
 
 ![merge queue](docs/gui-changes.png)
 
+Because an agent's output is a diff, the changes panel lets you review it **hunk by
+hunk** and apply exactly the parts you want (`packages/core/src/patch.ts` parses the
+diff and replays only the accepted hunks; `POST …/agents/:id/apply` writes them
+through the same integrate/apply path, so backups and conflict reporting come for
+free). A hunk whose context has already drifted is reported, never mis-applied:
+
+![hunk-level review](docs/gui-hunks.png)
+
 The UI is bilingual — **English / 简体中文** — switched in place with the `中 / EN`
 button (it follows the browser language on first visit):
 

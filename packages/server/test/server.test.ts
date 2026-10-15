@@ -1,11 +1,18 @@
 import { test, expect } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { SessionStore } from '../src/store.ts'
 import { createServer, type HarnessServer } from '../src/server.ts'
-import type { ChatMessage, Provider } from '@micro-harness/core'
+import {
+  createWorktree,
+  parseDiff,
+  removeWorktree,
+  worktreeDiff,
+  type ChatMessage,
+  type Provider,
+} from '@micro-harness/core'
 
 interface Harness {
   srv: HarnessServer
@@ -447,5 +454,129 @@ test('isolation over HTTP: worktree, diff, promote and the merge queue', async (
     srv.stop(true)
     rmSync(dir, { recursive: true, force: true })
     rmSync(sessions, { recursive: true, force: true })
+  }
+})
+
+/** A temp git repo + real worktree whose agent modified `base.txt` in two hunks. */
+function applyWorktree(): {
+  srv: HarnessServer
+  store: SessionStore
+  dir: string
+  sessions: string
+  sessionId: string
+  agentId: string
+  wt: { path: string; branch: string; base: string }
+  stop: () => void
+} {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-server-apply-'))
+  const sessions = mkdtempSync(path.join(tmpdir(), 'mh-server-apply-sessions-'))
+  const git = (...a: string[]): void => void execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
+  git('init', '-q')
+  git('config', 'user.email', 't@t')
+  git('config', 'user.name', 't')
+  git('config', 'commit.gpgsign', 'false')
+  const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`)
+  writeFileSync(path.join(dir, 'base.txt'), lines.join('\n') + '\n')
+  git('add', '-A')
+  git('commit', '-qm', 'init')
+
+  const store = new SessionStore(sessions)
+  const srv = createServer({ store, provider: echoProvider().provider, model: 'fake', cwd: dir, requireAuth: false })
+  const meta = store.create({ cwd: dir })
+  const wt = createWorktree({ cwd: dir, taskId: 'apply', agentId: 'child-1' })
+  const changed = [...lines]
+  changed[1] = 'LINE-2-CHANGED'
+  changed[18] = 'LINE-19-CHANGED'
+  writeFileSync(path.join(wt.path, 'base.txt'), changed.join('\n') + '\n')
+  // The server reads worktrees back from the durable event stream.
+  store.append(meta.id, {
+    agentId: 'child-1',
+    parentId: 'main',
+    seq: 1,
+    t: Date.now(),
+    event: { type: 'agent.worktree', path: wt.path, branch: wt.branch, base: wt.base },
+  })
+  return {
+    srv,
+    store,
+    dir,
+    sessions,
+    sessionId: meta.id,
+    agentId: 'child-1',
+    wt,
+    stop: () => {
+      srv.stop(true)
+      try {
+        removeWorktree({ cwd: dir, path: wt.path, branch: wt.branch })
+      } catch {
+        /* best effort */
+      }
+      rmSync(dir, { recursive: true, force: true })
+      rmSync(sessions, { recursive: true, force: true })
+    },
+  }
+}
+
+test('apply 404s when the agent has no worktree', async () => {
+  const h = boot()
+  try {
+    const meta = h.store.create({ cwd: h.dir })
+    const res = await fetch(`${h.srv.url}/api/sessions/${meta.id}/agents/nope/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hunks: [0] }),
+    })
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as { error: string }).error).toBe('agent has no worktree')
+  } finally {
+    h.stop()
+  }
+})
+
+test('apply 400s on a missing/invalid hunks body', async () => {
+  const w = applyWorktree()
+  try {
+    const url = `${w.srv.url}/api/sessions/${w.sessionId}/agents/${w.agentId}/apply`
+    for (const body of [undefined, 'not json', {}, { hunks: 'nope' }, { hunks: [0, 'x'] }]) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+      })
+      expect(res.status).toBe(400)
+      const { error } = (await res.json()) as { error: string }
+      expect(error).toMatch(/hunks|invalid JSON/i)
+    }
+  } finally {
+    w.stop()
+  }
+})
+
+test('apply: the accepted hunk lands on disk and the rejected hunk stays', async () => {
+  const w = applyWorktree()
+  try {
+    const d = worktreeDiff(w.wt.path)
+    expect(d.files.map((f) => f.path)).toContain('base.txt')
+    const hunks = parseDiff(d.diff).hunks.filter((h) => h.file === 'base.txt')
+    expect(hunks.length).toBe(2)
+    const bottom = hunks.find((h) => h.newLines.includes('LINE-19-CHANGED'))
+    expect(bottom).toBeDefined()
+
+    const res = await fetch(`${w.srv.url}/api/sessions/${w.sessionId}/agents/${w.agentId}/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hunks: [bottom!.index] }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { applied: string[]; conflicted: number[]; backup: string | null }
+    expect(body.applied).toContain('base.txt')
+    expect(body.conflicted).toEqual([])
+    expect(body.backup).toBeTruthy()
+
+    const after = readFileSync(path.join(w.dir, 'base.txt'), 'utf8').split('\n')
+    expect(after[1]).toBe('line-2') // rejected top hunk untouched
+    expect(after[18]).toBe('LINE-19-CHANGED') // accepted bottom hunk applied
+  } finally {
+    w.stop()
   }
 })
