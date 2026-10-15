@@ -88,8 +88,10 @@ const pricing = {
   inputCached: Number(opt('price-input-cached', process.env.MICRO_PRICE_INPUT_CACHED || '0')) || 0,
 }
 const maxToolOutput = Number(opt('max-tool-output', process.env.MICRO_MAX_TOOL_OUTPUT || '0')) || undefined
-const compact = (opt('compact', process.env.MICRO_COMPACT || 'drop-middle') === 'summarize' ? 'summarize' : 'drop-middle') as
+const compactArg = opt('compact', process.env.MICRO_COMPACT || 'drop-middle')
+const compact = (compactArg === 'summarize' || compactArg === 'tail' ? compactArg : 'drop-middle') as
   | 'drop-middle'
+  | 'tail'
   | 'summarize'
 const maxCost = Number(opt('max-cost', process.env.MICRO_MAX_COST || '0')) || undefined
 

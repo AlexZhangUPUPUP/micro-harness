@@ -25,3 +25,6 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-16 · P9（完）· 压缩策略接缝（`compactMessagesAsync` + `makeSummarizer`，失败退回丢弃）+ 预算熔断（`--max-cost`）+ `--compact=summarize` · 新增 6 个测试
 - 2026-10-16 · P10（部分）· **评测套件** `scripts/evals/`：8 个任务、确定性判分、mock 模式（CI 无网络）、逐任务 token/成本/缓存/耗时、Markdown+JSON 报告；系统提示词取自 pi（仅改名字，保证可比） · mock 16/16；真模型 exact-file + read-and-write 均 pass（$0.0009, cache 3712）
 
+- 2026-10-16 · P9 验收 · 真机长会话（31 次模型调用，带消融对照）：窗口峰值 4455/5000、0 次 API 报错；第 1 轮埋的不可猜约束在 `drop-middle` 与 `summarize` 下存活，在 `tail` 下丢失（证明是机制而非运气）；发现两条实测代价——反复压缩使缓存命中衰减到 ~66%，`summarize` 峰值更高
+- 2026-10-16 · 评测方法 · 修掉一个会让测试"假通过"的设计缺陷：刺激必须躲不掉（模型曾用 offset/limit=1 绕开 8KB bulk，导致压缩根本没触发）。教训写进 scripts/evals/README.md
+

@@ -68,3 +68,20 @@ the right thing. At least one task requires reading a file first; several requir
 Sibling note: `bunx tsc --noEmit` at the repo root only covers `packages/*`; this
 directory type-checks on its own via
 `bunx tsc -p scripts/evals/tsconfig.json --noEmit` (see that file).
+
+## A lesson this suite learned the hard way
+
+The first version of our long-session ablation (a task that plants an unguessable rule and
+then floods the context) **passed when it should have failed**: the prompt said "read
+`bulk-N.txt` and reply with its first line", and the model cheerfully called
+`read_file` with `offset: 1, limit: 1` — so the 8 KB file never entered the context, no
+compaction ran, and the control looked fine.
+
+The fix had nothing to do with compaction: make the stimulus **unavoidable** (one very
+long line instead of 90 short ones), so that any legitimate way of doing the task puts
+the bulk in the window. The general rule:
+
+> A grader must not depend on the model's incidental choices. If the model can satisfy
+> your instructions without exercising the thing you are testing, your test measures
+> nothing — and it will pass.
+
