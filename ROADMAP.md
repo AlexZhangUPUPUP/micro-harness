@@ -213,7 +213,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] `evals/`：任务集 + runner + 报告 —— 26 任务（确定性 + LLM 裁判 + rubric），`--mock` 无网确定性、CI-safe；新增**标注金标集 + 裁判校准 CLI**（`golden.ts` 10 例、`calibrate.ts`，`--min-accuracy` 门禁）
 - [x] `bun build --compile` 出单文件二进制（macOS/Linux）—— `dist/micro-harness`，`--help`/`--version` 无需 API key 即可用
 - [ ] npm/bun 发布 —— 暂不发布（已决定）；文档站 —— 未做
-- [ ] 验收：`micro-harness` 一条命令装好、跑通评测 —— 未做
+- [x] 验收：`./scripts/install.sh` 一条命令装好（→ `~/.local/bin/micro-harness`）+ `bun run eval:mock` 跑通（44 pass / 0 fail / 8 skipped）
 
 ---
 

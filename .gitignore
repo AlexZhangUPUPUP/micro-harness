@@ -13,3 +13,6 @@ traces/
 
 # compiled single-file binary (goes in releases, not in git)
 dist/
+
+# bun build --compile temp artifacts (left behind if a build is interrupted)
+*.bun-build
