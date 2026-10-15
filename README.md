@@ -9,9 +9,9 @@
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
-  <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
+  <img alt="Bun" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-120_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-153_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -399,20 +399,20 @@ micro-harness/
 
 ```bash
 bun install
-bun test              # 120 tests across 19 files
+bun test              # 153 tests across 21 files
 bun run typecheck     # tsc --noEmit, clean
 bun run verify        # scripted feature checks (no network)
 bun run eval:mock      # eval suite against a scripted provider — CI-safe, no network
 bun run eval --judge   # the same suite plus an LLM judge for open-ended tasks
 ```
 
-The suite covers the kernel's lifecycle and scoping, the loop and its streaming, approvals, session replay, the server's endpoints, worktree isolation, partial patch application against real `git diff` output, and every pure derivation the GUI renders.
+The suite covers the event loop and its streaming, parallel tool calls and approvals, session replay, multi-agent limits and the context firewall, MCP and ACP, the server's endpoints and its JSONL/SQLite store, worktree isolation and the merge queue, part-level patch application against real `git diff` output, and every pure derivation the GUI renders.
 
 ---
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's unfinished phases (**P8–P10**) and anything marked *good first issue* are good entry points.
+Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's one open item (**P10** — the docs site; npm publish is skipped by choice) and anything marked *good first issue* are good entry points.
 
 Two things that make a PR easy to accept:
 

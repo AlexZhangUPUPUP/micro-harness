@@ -9,9 +9,9 @@
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
-  <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
+  <img alt="Bun" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-120_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-153_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -124,6 +124,13 @@ bun start "创建 hello.txt 写入 'hi'，然后读回来打印内容"
 bun start --allow-bash "找出最大的 3 个文件并总结"
 bun start --isolate --tree "…"   # 每个子 agent 一个 git worktree，结束打印 agent 树
 bun start                        # 交互式 REPL：/help、提示词模板、skills
+```
+
+**安装二进制**（一条命令，无需发布）：
+
+```bash
+./scripts/install.sh                 # → ~/.local/bin/micro-harness
+micro-harness --version              # 0.1.0
 ```
 
 **跑整套**——服务端、GUI，并自动找到可用的 key：
@@ -373,9 +380,9 @@ micro-harness/
 - [x] **P5 · CLI** —— 一次性执行、REPL、斜杠命令、提示词模板、skills
 - [x] **P6 · GUI** —— 会话、对话、agent 树、轨迹 + 回放、改动
 - [x] **P7 · 隔离** —— 每个 agent 一个 git worktree、合并回主干、合并队列
-- [ ] **P8 · 互操作** —— MCP client、ACP server
-- [ ] **P9 · 上下文与经济性** —— 压缩策略、cache-prefix 复用、成本计量
-- [ ] **P10 · 评测与发布** —— 评测集、`bun build --compile`、发布
+- [x] **P8 · 互操作** —— MCP client、ACP server
+- [x] **P9 · 上下文与经济性** —— 压缩策略、cache-prefix 复用、成本计量
+- [x] **P10 · 评测与发布** —— 评测集（26 个任务、金标集 + 裁判校准）、`bun build --compile`、`scripts/install.sh`；npm 发布经决定跳过
 
 ---
 
@@ -383,20 +390,20 @@ micro-harness/
 
 ```bash
 bun install
-bun test              # 120 个测试，19 个文件
+bun test              # 153 个测试，21 个文件
 bun run typecheck     # tsc --noEmit，干净
 bun run verify        # 脚本化功能自检（不走网络）
 bun run eval:mock      # 评测套件跑脚本化 provider —— CI 友好、不走网络
 bun run eval --judge   # 同一套任务 + 对开放式任务引入 LLM 裁判
 ```
 
-测试覆盖内核的生命周期与作用域、循环与流式、审批、会话回放、服务端接口、worktree 隔离、针对真实 `git diff` 输出的部分补丁应用，以及 GUI 渲染所依赖的每一个纯函数派生。
+测试覆盖事件循环与流式、并行工具调用与审批、会话回放、多 agent 上限与上下文防火墙、MCP 与 ACP、服务端接口与 JSONL/SQLite 存储、worktree 隔离与合并队列、针对真实 `git diff` 输出的分片补丁应用，以及 GUI 渲染所依赖的每一个纯函数派生。
 
 ---
 
 ## 🤝 参与贡献
 
-欢迎提 issue 和 PR。如果想找切入点，路线图里未完成的阶段（**P8–P10**）以及标了 *good first issue* 的都合适。
+欢迎提 issue 和 PR。如果想找切入点，路线图里唯一未完成项（**P10** —— 文档站；npm 发布经决定跳过）以及标了 *good first issue* 的都合适。
 
 两件事能让 PR 更容易被合：
 
