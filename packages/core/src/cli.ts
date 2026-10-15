@@ -30,6 +30,7 @@ import { AgentRunner, createAgentRegistry, loadAgentRoles, makeTaskTool } from '
 import { Renderer } from './tui.ts'
 import { expandTemplate, loadPromptTemplates, loadSkills, skillsToPrompt, type PromptTemplate, type Skill } from './commands.ts'
 import { parseTaskFile, runAuto } from './autorun.ts'
+import { connectMcpServers, loadMcpServers, mcpInfos, mcpTools, type McpConnection } from './mcp.ts'
 
 // ------------------------------------------------------------------- argv
 
@@ -157,13 +158,34 @@ async function promptConfirm(request: { tool: string; args: unknown }): Promise<
 
 const confirm: ConfirmFn | undefined = approval === 'full-auto' ? undefined : (req) => promptConfirm(req)
 
+// --- MCP: read the config once, connect, merge the tools. A constructor, not a
+// container — a failing server is reported and skipped, never fatal.
+const mcpConfig = loadMcpServers(cwd)
+let mcpConns: McpConnection[] = []
+if (mcpConfig.servers.length) {
+  mcpConns = await connectMcpServers(mcpConfig.servers, { cwd })
+  if (!quiet) {
+    const path$ = mcpConfig.path?.replace(os.homedir(), '~') ?? ''
+    console.error(`mcp: ${mcpConfig.servers.length} server(s) from ${path$}`)
+    for (const info of mcpInfos(mcpConns)) {
+      console.error(
+        info.status === 'ready'
+          ? `  ✓ ${info.name} (${info.transport}) → ${info.tools.length} tool(s): ${info.tools.join(', ')}`
+          : `  ✗ ${info.name}: ${info.error}`,
+      )
+    }
+  }
+}
+const allTools = [...makeTools(), ...mcpTools(mcpConns)]
+if (mcpConns.length) process.on('exit', () => void Promise.all(mcpConns.map((c) => c.close())))
+
 const runner = new AgentRunner({
   provider,
   model,
   cwd,
   hub,
   roles,
-  tools: makeTools(),
+  tools: allTools,
   isolation: isolate ? 'worktree' : 'none',
   allowBash,
   approval,
@@ -198,7 +220,7 @@ const harness = new Harness({
   maxToolOutput,
   approval,
   confirm,
-  tools: [...makeTools(), makeTaskTool(runner)],
+  tools: [...allTools, makeTaskTool(runner)],
 })
 
 if (!quiet) {

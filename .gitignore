@@ -7,3 +7,6 @@ traces/
 .auto-run.log
 
 .auto-run.status
+
+# project-local MCP config
+.micro-harness/

@@ -15,7 +15,16 @@
 
 import os from 'node:os'
 import path from 'node:path'
-import { loadAgentRoles, openaiProvider } from '@micro-harness/core'
+import {
+  connectMcpServers,
+  loadAgentRoles,
+  loadMcpServers,
+  makeTools,
+  mcpInfos,
+  mcpTools,
+  openaiProvider,
+  type McpConnection,
+} from '@micro-harness/core'
 import { createServer } from './server.ts'
 import { SessionStore } from './store.ts'
 
@@ -36,11 +45,32 @@ if (!apiKey) console.error('warning: MICRO_API_KEY is not set — model calls wi
 const agentsDir = process.env.MICRO_AGENTS_DIR
 const roles = agentsDir ? loadAgentRoles(path.resolve(agentsDir)) : []
 
+// MCP: read the config once at boot, connect, merge the tools. Nothing below this
+// line knows MCP exists — they are just more `Tool`s. A failing server is reported
+// and skipped instead of taking the server down.
+const mcpConfig = loadMcpServers(process.cwd())
+const mcpConns: McpConnection[] = mcpConfig.servers.length
+  ? await connectMcpServers(mcpConfig.servers, { cwd: process.cwd() })
+  : []
+const mcpServers = mcpInfos(mcpConns)
+if (mcpServers.length) {
+  console.log(`mcp · ${mcpServers.length} server(s) from ${mcpConfig.path}`)
+  for (const info of mcpServers) {
+    console.log(
+      info.status === 'ready'
+        ? `  ✓ ${info.name} (${info.transport}) → ${info.tools.length} tool(s)`
+        : `  ✗ ${info.name}: ${info.error}`,
+    )
+  }
+}
+
 const store = new SessionStore(dataDir)
 const provider = openaiProvider({ baseUrl, apiKey })
 const server = createServer({
   store,
   provider,
+  tools: [...makeTools(), ...mcpTools(mcpConns)],
+  mcpServers,
   model,
   models,
   cwd: process.cwd(),
@@ -63,7 +93,7 @@ console.log(`micro-harness server · ${server.url} · data ${dataDir}${token ? '
 const shutdown = (): void => {
   console.log('\nshutting down…')
   server.stop(true)
-  process.exit(0)
+  void Promise.all(mcpConns.map((c) => c.close())).finally(() => process.exit(0))
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

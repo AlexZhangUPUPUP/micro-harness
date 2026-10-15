@@ -11,7 +11,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.4+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-112_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-120_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -29,6 +29,7 @@
 - [🚀 Quick start](#-quick-start)
 - [🧩 How it is built](#-how-it-is-built)
 - [🤖 Multi-agent](#-multi-agent)
+- [🔌 MCP](#-mcp)
 - [🖥 The GUI](#-the-gui)
 - [📐 Design principles](#-design-principles)
 - [📁 Repository layout](#-repository-layout)
@@ -230,6 +231,39 @@ Limits are enforced by the runner, not by convention: `--max-depth`, `--max-conc
 
 ---
 
+## 🔌 MCP
+
+MCP servers are **read from config at boot** and their tools merged into the registry.
+That is the whole integration: no container, no lifecycle manager, and nothing in the
+loop, the event contract or the GUI knows MCP exists — an MCP tool is just a `Tool`.
+
+```json
+// .micro-harness/mcp.json  (or .mcp.json, or ~/.micro-harness/mcp.json, or $MICRO_MCP_CONFIG)
+{
+  "mcpServers": {
+    "everything": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] },
+    "remote":     { "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer …" } }
+  }
+}
+```
+
+Both transports are implemented without the official SDK — **stdio** (spawn a child,
+newline-delimited JSON-RPC) and **streamable HTTP** (JSON or a one-shot SSE reply) —
+and tools are namespaced `<server>__<tool>` so two servers can both expose `search`.
+`GET /api/mcp` reports what connected, and a server that fails to start is reported and
+skipped rather than taking the session down.
+
+Verified against the official reference server, end to end: 13 tools discovered, the
+model was offered all of them alongside the built-in five, it called
+`everything__get-sum {a:17,b:25}`, and answered `42`.
+
+**What it deliberately does not do:** hot-plug a server into a running process, or
+withdraw its tools when it drops. If that ever becomes a requirement, it is the trigger
+we wrote down for bringing back the plugin container — see
+[the comparison](docs/design-comparison.md).
+
+---
+
 ## 🖥 The GUI
 
 | area | what it does |
@@ -305,7 +339,7 @@ micro-harness/
 
 ```bash
 bun install
-bun test              # 112 tests across 18 files
+bun test              # 120 tests across 19 files
 bun run typecheck     # tsc --noEmit, clean
 bun run verify        # scripted feature checks (no network)
 ```
