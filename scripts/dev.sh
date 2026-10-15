@@ -16,11 +16,13 @@ cd "$(dirname "$0")/.."
 # --no-open: do not open a browser
 SINGLE=0
 OPEN=1
+RESTART=0
 for arg in "$@"; do
   case "$arg" in
     --single|--static) SINGLE=1 ;;
     --open) OPEN=1 ;;
     --no-open) OPEN=0 ;;
+    --restart|--force) RESTART=1 ;;
   esac
 done
 
@@ -66,14 +68,32 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Refuse to start if something already serves on this port — otherwise Bun.serve
-# throws, our process dies, and an older server silently keeps answering /health
-# (the classic "why is my GUI still the old one" trap).
+# If something already serves on this port, don't silently connect to it (the
+# classic "why is my GUI the old one" trap) and don't just fail: with --restart
+# stop it, otherwise open the running GUI and exit.
 if curl -sf "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1; then
-  echo "✗ a micro-harness server is already running on port $SERVER_PORT." >&2
-  echo "  stop it:  pkill -f 'micro-harness/packages/server'; pkill -f 'scripts/dev.sh'" >&2
-  echo "  or pick another port:  MICRO_PORT=8888 $0 --single" >&2
-  exit 1
+  if [ "$RESTART" = 1 ]; then
+    echo "• --restart: stopping the server on port $SERVER_PORT…" >&2
+    oldpid="$(lsof -ti tcp:"$SERVER_PORT" 2>/dev/null | head -1)"
+    [ -n "$oldpid" ] && kill "$oldpid" 2>/dev/null || true
+    sleep 1
+  else
+    ctype="$(curl -s -o /dev/null -w '%{content_type}' "http://127.0.0.1:$SERVER_PORT/" 2>/dev/null || true)"
+    if printf '%s' "$ctype" | grep -qi 'text/html'; then
+      echo "• micro-harness is already running — http://127.0.0.1:$SERVER_PORT/" >&2
+      if [ "$OPEN" = 1 ]; then
+        if command -v open >/dev/null 2>&1; then
+          open "http://127.0.0.1:$SERVER_PORT/" >/dev/null 2>&1 || true
+        elif command -v xdg-open >/dev/null 2>&1; then
+          xdg-open "http://127.0.0.1:$SERVER_PORT/" >/dev/null 2>&1 || true
+        fi
+      fi
+      exit 0
+    fi
+    echo "✗ port $SERVER_PORT is held by a micro-harness server with no GUI (API-only or an older build)." >&2
+    echo "  restart it:  $0 --restart --single" >&2
+    exit 1
+  fi
 fi
 
 MICRO_PORT="$SERVER_PORT" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" \
