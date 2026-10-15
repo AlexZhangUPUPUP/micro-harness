@@ -126,6 +126,13 @@ bun start --isolate --tree "…"   # a git worktree per sub-agent, then print th
 bun start                        # interactive REPL: /help, prompt templates, skills
 ```
 
+**Install the binary** (one command, no publish required):
+
+```bash
+./scripts/install.sh                 # → ~/.local/bin/micro-harness
+micro-harness --version              # 0.1.0
+```
+
 **Run the whole stack** — server, GUI and a key picked up automatically:
 
 ```bash
@@ -382,9 +389,9 @@ micro-harness/
 - [x] **P5 · CLI** — one-shot, REPL, slash commands, prompt templates, skills
 - [x] **P6 · GUI** — sessions, transcript, agent tree, trace + replay, changes
 - [x] **P7 · Isolation** — git worktrees per agent, promote, merge queue
-- [ ] **P8 · Interop** — MCP client, ACP server
-- [ ] **P9 · Context economics** — compaction strategies, cache-prefix reuse, cost metering
-- [ ] **P10 · Evaluation & release** — eval suite, `bun build --compile`, publish
+- [x] **P8 · Interop** — MCP client, ACP server
+- [x] **P9 · Context economics** — compaction strategies, cache-prefix reuse, cost metering
+- [x] **P10 · Evaluation & release** — eval suite (26 tasks, golden set + judge calibration), `bun build --compile`, `scripts/install.sh`; npm publish skipped by choice
 
 ---
 
