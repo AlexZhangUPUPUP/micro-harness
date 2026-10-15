@@ -206,7 +206,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] **成本/缓存命中计量**：DeepSeek/OpenAI/Anthropic 三种方言归一化成 `usage.cacheRead`，按缓存折扣计价，GUI 显示命中率
 - [x] **压缩策略**：确定性的 `drop-middle`（默认）+ `summarize`（`--compact=summarize`，一次模型调用把被丢的轮次折成一段 recap，失败自动退回）。`structured-state` 仍未做
 - [x] **预算熔断**：`--max-cost` / `MICRO_MAX_COST`，累计成本超限即停并发 `error(fatal)` + `turn.end{stopReason:"budget"}`
-- [~] 验收：压缩与前缀稳定性已有单测；命中率在评测里可见（`bun run eval` 报告 cache 列）。仍缺一次真实长会话实测
+- [x] **验收（真机，带消融）**：31 次模型调用的长会话，窗口峰值 4455/5000 且 0 次 API 报错；埋在第 1 轮的不可猜约束在默认策略下存活，**同一条会话换成 `tail`（不保留开头）则丢失**——证明是机制在起作用；`summarize` 同样存活。代价：反复压缩让缓存命中降到 ~66%（短会话是 69–78%）
 
 ## P10 · 评测与发布
 

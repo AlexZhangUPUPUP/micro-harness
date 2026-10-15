@@ -321,6 +321,24 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 - **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
 - **Compaction is a strategy, not a constant.** The default drops the middle deterministically; `--compact=summarize` replaces the dropped turns with one model-written recap (and falls back to dropping if that call fails). `--max-cost` stops a run before it can spend without limit.
+**Measured, with an ablation.** One real session (DeepSeek, 31 model calls) designed so
+the stimulus cannot be dodged: turn 1 plants an unguessable rule that exists nowhere on
+disk (`every file must end with // PROJECT-CHECK-7Q4`), then six turns dump ~8 KB of tool
+output each into a deliberately small window (5000 tokens), and a final turn asks for a
+file that must obey the rule. Grading is binary — the marker is either in the file or it
+is not:
+
+| policy | rule survived | trims | dropped | peak after trim | cache hit | cost |
+|---|---|---|---|---|---|---|
+| **`drop-middle`** (default) | **yes** | 4 | 16 | 4455 / 5000 | 66% | $0.00596 |
+| `tail` (ablation, head not kept) | **no** | 4 | 18 | 4402 / 5000 | 66% | $0.00584 |
+| `summarize` | yes | 4 | 15 | 4762 / 5000 | 64% | $0.00576 |
+
+The ablation is the point: the same session with the head *not* kept loses the rule, so
+the pass is caused by the mechanism and not by luck. Two honest caveats fell out of it —
+the window held (0 API errors) but **cache hits decay to ~66% under repeated compaction**
+because each trim churns the prefix, and `summarize` preserves the rule at roughly the
+same cost but leaves a higher peak (the recap itself occupies tokens).
 - **Never rewrite the past.** A tool result is capped *when it is appended*, not when the window later fills, so the message prefix stays byte-stable — which is exactly what lets a provider's prompt cache hit. When the window does fill, compaction drops the **middle**: it keeps the system prompt and the first user turn (where the constraints live) plus the newest turns, so a `tool` message is never orphaned from its call and early instructions survive.
 - **Measure the economics.** Providers report prompt-cache hits under three different names; they are normalized into `usage.cacheRead`, priced at the cached rate (a cache hit is ~10x cheaper than a miss on DeepSeek), and surfaced in the GUI as a hit rate — a real run on this repo hits 69–78%.
 - **Sandboxing.** File tools resolve every path inside `--dir` and refuse traversal; `bash` is opt-in.

@@ -51,10 +51,13 @@ export interface HarnessOptions {
   /** Cap on a single tool result, in characters, applied when it is appended. */
   maxToolOutput?: number
   /**
-   * How the window is compacted when it fills: `drop-middle` (deterministic, default)
-   * or `summarize` (one model call folds the dropped turns into a recap).
+   * How the window is compacted when it fills:
+   *   `drop-middle` (default) — keep the head (constraints + cacheable prefix) and
+   *                             the newest turns, drop the middle
+   *   `tail`                  — keep only the newest turns (ablation; loses the head)
+   *   `summarize`             — fold the dropped turns into one model-written recap
    */
-  compact?: 'drop-middle' | 'summarize'
+  compact?: 'drop-middle' | 'tail' | 'summarize'
   /** Stop the run once the cumulative cost passes this many USD. */
   maxCost?: number
   /**
@@ -101,7 +104,7 @@ export class Harness {
   readonly #tools: Tool[]
   readonly #system: string
   readonly #maxToolOutput: number
-  readonly #compact: 'drop-middle' | 'summarize'
+  readonly #compact: 'drop-middle' | 'tail' | 'summarize'
   readonly #summarizer?: Summarizer
   readonly #maxCost?: number
   #spent = 0
@@ -158,7 +161,10 @@ export class Harness {
       const trim =
         this.#compact === 'summarize'
           ? await compactMessagesAsync(this.messages, { maxTokens: this.#maxContextTokens, summarizer: this.#summarizer })
-          : compactMessages(this.messages, { maxTokens: this.#maxContextTokens })
+          : compactMessages(this.messages, {
+              maxTokens: this.#maxContextTokens,
+              keepHead: this.#compact !== 'tail',
+            })
       const { messages, dropped, tokens, strategy } = trim
       if (dropped > 0) {
         this.messages.splice(0, this.messages.length, ...messages)
