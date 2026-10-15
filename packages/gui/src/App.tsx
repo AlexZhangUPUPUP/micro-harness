@@ -51,6 +51,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [models, setModels] = useState<string[]>([])
+  const [permission, setPermission] = useState('full')
   const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
   const [showSidebar, setShowSidebar] = useState(() => {
     const saved = localStorage.getItem('micro-sidebar')
@@ -124,6 +125,22 @@ export default function App() {
   const chooseModel = (m: string): void => {
     setModel(m)
     localStorage.setItem('micro-model', m)
+  }
+
+  // Permission preset: the session's own, else the server default.
+  useEffect(() => {
+    void api
+      .permission(current ?? undefined)
+      .then((d) => setPermission(d.session ?? d.default))
+      .catch(() => {})
+  }, [current])
+
+  const changePermission = (preset: string): void => {
+    setPermission(preset)
+    void api
+      .setPermission(preset, current ?? undefined)
+      .then(() => void refreshSessions())
+      .catch((err: unknown) => setError(String((err as Error).message)))
   }
 
   // ⌘K / Ctrl+K opens the command palette.
@@ -480,6 +497,8 @@ export default function App() {
             setModel={chooseModel}
             images={images}
             setImages={setImages}
+            permission={permission}
+            onPermission={changePermission}
           />
         </main>
 

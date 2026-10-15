@@ -127,6 +127,18 @@ export const api = {
     ),
   remove: (id: string) => j<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
   search: (q: string) => j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+  /** Permission presets: what the agent may touch, and whether it must ask. */
+  permission: (sessionId?: string) =>
+    j<{ default: string; session?: string; presets: { id: string; exp?: boolean }[] }>(
+      `/api/permission${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`,
+    ),
+  setPermission: (preset: string, sessionId?: string) =>
+    sessionId
+      ? j<{ ok: boolean }>(`/api/sessions/${sessionId}/permission`, {
+          method: 'POST',
+          body: JSON.stringify({ preset }),
+        })
+      : j<{ ok: boolean }>('/api/permission', { method: 'POST', body: JSON.stringify({ preset }) }),
   /** Answer a pending tool-call approval (allow/deny). */
   decidePermission: (id: string, requestId: string, allow: boolean) =>
     j<{ ok: boolean }>(`/api/sessions/${id}/permissions/${encodeURIComponent(requestId)}`, {

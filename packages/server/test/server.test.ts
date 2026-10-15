@@ -718,3 +718,52 @@ test('images on a prompt reach the provider as multimodal content parts', async 
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('permission presets gate the built-in tool set', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-perm-'))
+  const store = new SessionStore(dir)
+  const seen: string[][] = []
+  const provider: Provider = {
+    name: 'tools',
+    async chat(req) {
+      seen.push(req.tools.map((t) => String(t.function?.name ?? '')))
+      return { message: { role: 'assistant', content: 'ok' } }
+    },
+  }
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false, permission: 'read-only' })
+  try {
+    const created = await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hi' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await srv.idle(session.id)
+    expect(seen[0]).toContain('read_file')
+    expect(seen[0]).toContain('list_dir')
+    expect(seen[0]).not.toContain('write_file')
+    expect(seen[0]).not.toContain('bash')
+
+    // Widen just this session; the next run picks the new preset up.
+    const res = await fetch(`${srv.url}/api/sessions/${session.id}/permission`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preset: 'full' }),
+    })
+    expect(res.status).toBe(200)
+    await fetch(`${srv.url}/api/sessions/${session.id}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'again' }),
+    })
+    await srv.idle(session.id)
+    expect(seen[1]).toContain('write_file')
+    expect(seen[1]).toContain('bash')
+
+    const perm = (await (await fetch(`${srv.url}/api/permission?session=${session.id}`)).json()) as { session: string }
+    expect(perm.session).toBe('full')
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

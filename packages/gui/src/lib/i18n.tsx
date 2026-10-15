@@ -130,6 +130,19 @@ const en: Dict = {
   'approval.allowed': 'allowed',
   'approval.denied': 'denied',
   'approval.arguments': 'arguments',
+  'perm.title': 'permissions',
+  'perm.read-only': 'read only',
+  'perm.workspace': 'workspace write',
+  'perm.full': 'full access',
+  'perm.auto-review': 'auto review',
+  'perm.exp': 'EXP',
+  'perm.note.read-only': 'Read files only — no writes, no shell.',
+  'perm.note.workspace': 'Read and write files in the working directory — no shell.',
+  'perm.note.full': 'Runs with your full system permissions: the shell, and therefore the network.',
+  'perm.note.auto-review': 'Full access, but every shell command must be approved first.',
+  'perm.confirm': 'Switch to “{name}”?',
+  'perm.confirmCta': 'Switch',
+  'perm.cancel': 'Cancel',
 }
 
 const zh: Dict = {
@@ -253,6 +266,19 @@ const zh: Dict = {
   'approval.allowed': '已允许',
   'approval.denied': '已拒绝',
   'approval.arguments': '参数',
+  'perm.title': '权限',
+  'perm.read-only': '仅可查看',
+  'perm.workspace': '工作区内修改',
+  'perm.full': '完全权限',
+  'perm.auto-review': '自动审查',
+  'perm.exp': 'EXP',
+  'perm.note.read-only': '只读文件——不写文件、不跑 shell。',
+  'perm.note.workspace': '可在工作目录内读写文件——不跑 shell。',
+  'perm.note.full': '以你的完整系统权限运行：可用 shell，因此也能联网。',
+  'perm.note.auto-review': '完全权限，但每条 shell 命令都要先经你批准。',
+  'perm.confirm': '切换到「{name}」？',
+  'perm.confirmCta': '确认切换',
+  'perm.cancel': '取消',
 }
 
 const DICTS: Record<Lang, Dict> = { en, zh }

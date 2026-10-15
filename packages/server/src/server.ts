@@ -49,6 +49,26 @@ import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
 import { createApprovalBroker, type ApprovalBroker } from './approvals.ts'
 
+export type PermissionPreset = 'read-only' | 'workspace' | 'full' | 'auto-review'
+
+/**
+ * A permission preset bundles *what the agent may touch* with *whether it must
+ * ask*:
+ *   read-only    — read the workspace; no writes, no shell
+ *   workspace     — read + write files inside the workspace; no shell
+ *   full          — everything, including the shell (and therefore the network)
+ *   auto-review   — like full, but every shell command needs an approval
+ */
+export const PERMISSIONS: Record<
+  PermissionPreset,
+  { tools: string[]; bash: boolean; approval: 'suggest' | 'auto-edit' | 'full-auto'; exp?: boolean }
+> = {
+  'read-only': { tools: ['read_file', 'list_dir'], bash: false, approval: 'full-auto' },
+  workspace: { tools: ['read_file', 'write_file', 'list_dir'], bash: false, approval: 'full-auto' },
+  full: { tools: ['read_file', 'write_file', 'list_dir', 'bash'], bash: true, approval: 'full-auto' },
+  'auto-review': { tools: ['read_file', 'write_file', 'list_dir', 'bash'], bash: true, approval: 'auto-edit', exp: true },
+}
+
 export interface ServerOptions {
   store: SessionStore
   provider: Provider
@@ -67,6 +87,8 @@ export interface ServerOptions {
   roles?: AgentRole[]
   allowBash?: boolean
   approval?: 'suggest' | 'auto-edit' | 'full-auto'
+  /** Permission preset for new sessions (per-session overrides beat this). */
+  permission?: PermissionPreset
   maxDepth?: number
   maxConcurrency?: number
   agentTimeoutMs?: number
@@ -169,6 +191,8 @@ export function createServer(options: ServerOptions): HarnessServer {
   const guiIndex = guiRoot ? path.join(guiRoot, 'index.html') : null
 
   const runtimes = new Map<string, SessionRuntime>()
+  let defaultPermission: PermissionPreset = options.permission ?? 'workspace'
+  const sessionPermission = new Map<string, PermissionPreset>()
   const approvals = options.approvals ?? createApprovalBroker()
   const cwd = options.cwd
   const tools = options.tools
@@ -189,7 +213,13 @@ export function createServer(options: ServerOptions): HarnessServer {
     const off = hub.on((e: TaggedEvent) => store.append(meta.id, e))
     const sessionModel = meta.model || model
     const sessionCwd = meta.cwd || cwd
-    const baseTools = options.tools ?? makeTools()
+    const preset = sessionPermission.get(meta.id) ?? defaultPermission
+    const spec = PERMISSIONS[preset]
+    const baseTools = (options.tools ?? makeTools()).filter(
+      (t) => !PERMISSIONS.full.tools.includes(t.name) || spec.tools.includes(t.name),
+    )
+    const sessionBash = options.allowBash ?? spec.bash
+    const sessionApproval = options.approval ?? spec.approval
 
     // Multi-agent: every session gets its own runner (bound to this session's hub
     // so child-agent events land in the same recorded stream) and the `task` tool.
@@ -200,8 +230,8 @@ export function createServer(options: ServerOptions): HarnessServer {
       hub,
       roles: createAgentRegistry(options.roles ?? []),
       tools: baseTools,
-      allowBash: options.allowBash,
-      approval: options.approval,
+      allowBash: sessionBash,
+      approval: sessionApproval,
       confirm: (req) => approvals.ask(req),
       maxDepth: options.maxDepth,
       maxConcurrency: options.maxConcurrency,
@@ -223,7 +253,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       maxToolOutput: options.maxToolOutput,
       // Approvals: the loop emits `permission.request` and blocks until the client
       // answers through POST /api/sessions/:id/permissions/:requestId.
-      approval: options.approval,
+      approval: sessionApproval,
       confirm: (req) => approvals.ask(req),
       agentId: 'main',
       parentId: meta.parentId ?? null,
@@ -371,6 +401,36 @@ export function createServer(options: ServerOptions): HarnessServer {
       return json({ ok: true, name: 'micro-harness', version: '0.1.0' })
     }
     if (!authorized(req, url)) return json({ error: 'unauthorized' }, 401)
+
+    // /api/permission  -> the presets and the current default
+    if (parts[0] === 'api' && parts[1] === 'permission') {
+      if (req.method === 'GET') {
+        const sid = url.searchParams.get('session')
+        return json({
+          default: defaultPermission,
+          session: sid ? (sessionPermission.get(sid) ?? defaultPermission) : undefined,
+          presets: Object.entries(PERMISSIONS).map(([id, s]) => ({ id, exp: !!s.exp })),
+        })
+      }
+      if (req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as { preset?: string }
+        if (!body.preset || !(body.preset in PERMISSIONS)) return json({ error: 'unknown preset' }, 400)
+        defaultPermission = body.preset as PermissionPreset
+        return json({ ok: true, default: defaultPermission })
+      }
+      return json({ error: 'method not allowed' }, 405)
+    }
+
+    // /api/sessions/:id/permission  -> set this session's preset (next run uses it)
+    if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 4 && parts[3] === 'permission') {
+      if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+      const id = parts[2]!
+      if (!store.has(id)) return json({ error: 'session not found' }, 404)
+      const body = (await req.json().catch(() => ({}))) as { preset?: string }
+      if (!body.preset || !(body.preset in PERMISSIONS)) return json({ error: 'unknown preset' }, 400)
+      sessionPermission.set(id, body.preset as PermissionPreset)
+      return json({ ok: true, session: id, permission: body.preset })
+    }
 
     // /api/sessions
     if (parts[0] === 'api' && parts[1] === 'sessions' && parts.length === 2) {

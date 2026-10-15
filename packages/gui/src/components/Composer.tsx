@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useT } from '../lib/i18n.tsx'
+import { PermissionPicker } from './PermissionPicker.tsx'
 import type { ImageInput } from '../lib/api.ts'
 
 interface ComposerProps {
@@ -13,10 +14,13 @@ interface ComposerProps {
   /** Attached images, as base64 — pasted or dropped onto the textarea. */
   images?: ImageInput[]
   setImages?: (next: ImageInput[]) => void
+  /** Current permission preset and its setter (switching `full` asks first). */
+  permission?: string
+  onPermission?: (id: string) => void
 }
 
 /** Floating input card with keyboard hints; gradient frame while a run is busy. */
-export function Composer({ value, setValue, onSend, busy, models, model, setModel, images = [], setImages }: ComposerProps) {
+export function Composer({ value, setValue, onSend, busy, models, model, setModel, images = [], setImages, permission, onPermission }: ComposerProps) {
   const [dragging, setDragging] = useState(false)
 
   /** Files → base64 (no data-URL prefix), the shape the server and provider want. */
@@ -113,6 +117,7 @@ export function Composer({ value, setValue, onSend, busy, models, model, setMode
                   {t('composer.running')}
                 </span>
               )}
+              {onPermission && <PermissionPicker value={permission ?? 'full'} onChange={onPermission} />}
               {models && models.length > 1 && (
                 <select
                   value={model}
