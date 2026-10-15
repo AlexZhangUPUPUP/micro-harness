@@ -9,6 +9,7 @@
   "scripts": {
     "start": "bun packages/core/src/cli.ts",
     "test": "bun test",
+    "verify": "bun scripts/verify-features.ts",
     "typecheck": "tsc --noEmit",
     "build:bin": "bun build --compile --outfile dist/micro-harness packages/core/src/cli.ts"
   },
