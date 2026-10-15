@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type AgentWorktree, type AgentDiff, type IntegrateFile } from '../lib/api.ts'
 import { useT } from '../lib/i18n.tsx'
+import { DiffView } from './DiffView.tsx'
 
 /** Worktree isolation: per-agent diffs, promote, and the merge queue. */
 export function ChangesPanel({ sessionId }: { sessionId: string }) {
@@ -134,12 +135,17 @@ export function ChangesPanel({ sessionId }: { sessionId: string }) {
                 {t('changes.close')}
               </button>
             </div>
-            <div className="whitespace-pre-wrap border-b border-border/50 px-2.5 py-1.5 font-mono text-[10px] leading-5 text-muted-foreground">
-              {diff.files.map((f) => `${f.status} ${f.path} +${f.add} -${f.del}`).join('\n')}
+            <div className="border-b border-border/50">
+              {diff.files.map((f) => (
+                <div key={f.path} className="flex items-center gap-2 px-2.5 py-1 font-mono text-[10px]">
+                  <span className="w-4 shrink-0 rounded bg-muted text-center text-[9px] text-muted-foreground">{f.status}</span>
+                  <span className="min-w-0 flex-1 truncate">{f.path}</span>
+                  {f.add > 0 && <span className="shrink-0 text-teal">+{f.add}</span>}
+                  {f.del > 0 && <span className="shrink-0 text-destructive">-{f.del}</span>}
+                </div>
+              ))}
             </div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words px-2.5 py-1.5 font-mono text-[10px] leading-5">
-              {diff.diff.slice(0, 20000)}
-            </pre>
+            <DiffView text={diff.diff.slice(0, 100000)} className="max-h-72" />
           </div>
         )}
         {plan && (

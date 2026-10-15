@@ -1,4 +1,6 @@
+import { useMemo, useState } from 'react'
 import type { TaggedEvent } from '../lib/api.ts'
+import { filterTrace, traceCategory, type TraceCategory } from '../lib/derive.ts'
 import { useT } from '../lib/i18n.tsx'
 import { fmtTime } from '../lib/format.ts'
 
@@ -8,6 +10,8 @@ interface TracePanelProps {
   setReplayAt: (n: number | null) => void
 }
 
+const CATEGORIES: TraceCategory[] = ['all', 'text', 'tool', 'usage', 'error']
+
 const typeColor = (type: string): string => {
   if (type === 'error') return 'text-destructive'
   if (type.startsWith('tool')) return 'text-teal'
@@ -16,10 +20,15 @@ const typeColor = (type: string): string => {
   return 'text-muted-foreground'
 }
 
-/** Raw event stream with a replay scrubber. */
+/** Raw event stream with category filters, search and a replay scrubber. */
 export function TracePanel({ events, replayAt, setReplayAt }: TracePanelProps) {
   const { t } = useT()
+  const [category, setCategory] = useState<TraceCategory>('all')
+  const [q, setQ] = useState('')
   const at = replayAt ?? events.length
+
+  const shown = useMemo(() => filterTrace(events.slice(0, at), { category, q }), [events, at, category, q])
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2 text-[11px]">
@@ -45,16 +54,40 @@ export function TracePanel({ events, replayAt, setReplayAt }: TracePanelProps) {
           aria-label={t('trace.scrubber')}
           className="scrubber mt-2.5 w-full"
         />
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                category === c ? 'border-teal/50 bg-teal/10 text-teal' : 'border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t(`trace.${c}`)}
+            </button>
+          ))}
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('trace.search')}
+            className="ml-auto w-32 rounded border border-border bg-background/60 px-1.5 py-0.5 text-[10px] outline-none focus:border-teal/50"
+          />
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto font-mono text-[10px]">
         {events.length === 0 && <div className="px-3 py-6 text-center text-muted-foreground">{t('trace.empty')}</div>}
-        {events.slice(0, at).map((e, i) => (
+        {events.length > 0 && shown.length === 0 && (
+          <div className="px-3 py-6 text-center text-muted-foreground">{t('palette.noResults')}</div>
+        )}
+        {shown.map((e, i) => (
           <div
             key={`${e.agentId}-${e.seq}-${i}`}
             className={`flex items-center gap-2 border-b border-border/40 px-2 py-1 ${i % 2 ? 'bg-muted/20' : ''}`}
           >
             <span className="w-8 shrink-0 text-muted-foreground/70">{e.seq}</span>
-            <span className="w-20 shrink-0 truncate text-teal/80">{e.agentId}</span>
+            <span className={`w-16 shrink-0 truncate ${traceCategory(e.event.type) === 'tool' ? 'text-teal/80' : 'text-muted-foreground/70'}`}>
+              {e.agentId.split('/').pop()}
+            </span>
             <span className={`shrink-0 ${typeColor(e.event.type)}`}>{e.event.type}</span>
             <span className="min-w-0 flex-1 truncate text-muted-foreground">{summarize(e)}</span>
             <span className="shrink-0 text-muted-foreground/70">{fmtTime(e.t)}</span>

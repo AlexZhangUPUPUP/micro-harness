@@ -7,7 +7,7 @@ interface AgentsPanelProps {
   total: { input: number; output: number; cost: number }
 }
 
-/** Agent tree with per-agent usage. */
+/** Agent tree with connectors, per-agent usage and a hover detail card. */
 export function AgentsPanel({ roots, total }: AgentsPanelProps) {
   const { t } = useT()
   return (
@@ -44,8 +44,8 @@ function AgentRow({ node }: { node: AgentNode }) {
   return (
     <div role="treeitem" aria-expanded={node.children.length > 0 ? true : undefined}>
       <div
-        className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
-          node.status === 'active' ? 'border-gold/40 bg-gold/5' : 'border-border bg-card/70'
+        className={`group relative rounded-lg border px-2.5 py-1.5 text-[12px] transition ${
+          node.status === 'active' ? 'border-gold/40 bg-gold/5' : 'border-border bg-card/70 hover:border-teal/40'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -69,11 +69,41 @@ function AgentRow({ node }: { node: AgentNode }) {
             {node.errors ? <span className="text-destructive"> · {t('agents.errors', { n: node.errors })}</span> : ''}
           </div>
         )}
+
+        {/* hover detail card */}
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute left-full top-0 z-20 ml-2 hidden w-52 rounded-lg border border-border bg-popover p-2.5 font-mono text-[10px] leading-relaxed text-muted-foreground shadow-xl group-hover:block"
+        >
+          <div className="mb-1 flex items-center gap-1.5 text-foreground">
+            <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+            {label}
+          </div>
+          <div>
+            {t('agents.status')}: {node.status}
+          </div>
+          <div>
+            {t('agents.inOut', { in: fmtTokens(node.input), out: fmtTokens(node.output) })}
+          </div>
+          <div>
+            {t('agents.tools', { n: node.tools })}
+            {node.errors ? ' · ' + t('agents.errors', { n: node.errors }) : ''}
+          </div>
+          {node.cost ? <div>{fmtCost(node.cost)}</div> : null}
+          {node.worktree && <div className="mt-1 truncate text-teal">{node.worktree.branch}</div>}
+        </div>
       </div>
+
       {node.children.length > 0 && (
-        <div role="group" className="ml-3 mt-1 space-y-1 border-l border-border/70 pl-2">
+        <div role="group" className="relative ml-3.5 mt-1 space-y-1 pl-3.5">
+          {/* vertical spine */}
+          <span className="absolute bottom-3 left-0 top-0 w-px bg-border" aria-hidden="true" />
           {node.children.map((c) => (
-            <AgentRow key={c.agentId} node={c} />
+            <div key={c.agentId} className="relative">
+              {/* elbow into the child */}
+              <span className="absolute -left-3.5 top-3.5 h-px w-3.5 bg-border" aria-hidden="true" />
+              <AgentRow node={c} />
+            </div>
           ))}
         </div>
       )}

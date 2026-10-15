@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type SessionMeta, type TaggedEvent } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, truncate } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveUsageSeries, truncate } from './lib/derive.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
 import { Transcript } from './components/Transcript.tsx'
@@ -29,6 +29,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(() => window.matchMedia('(min-width: 768px)').matches)
   const [showPanel, setShowPanel] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
+  const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   // True while the user is composing a brand-new session, so the session poll
   // does not immediately re-select the newest one (that made "+ new" a no-op).
@@ -86,12 +87,29 @@ export default function App() {
   }, [current, runTick])
 
   const shown = useMemo(() => (replayAt == null ? events : truncate(events, replayAt)), [events, replayAt])
+  const usageSeries = useMemo(() => deriveUsageSeries(shown), [shown])
   const chat = useMemo(() => deriveChat(shown), [shown])
   const tree = useMemo(() => deriveAgents(shown), [shown])
 
+  // Follow the stream only while the user is parked at the bottom — scrolling up
+  // freezes the view (and surfaces a "back to bottom" pill).
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [chat.length, chat[chat.length - 1]?.kind])
+    if (!atBottom) return
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [chat.length, chat[chat.length - 1]?.kind, atBottom, current])
+
+  const onScroll = (): void => {
+    const el = scrollRef.current
+    if (!el) return
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
+  }
+
+  const scrollToBottom = (): void => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+    setAtBottom(true)
+  }
 
   const send = async (): Promise<void> => {
     const text = input.trim()
@@ -144,6 +162,7 @@ export default function App() {
         current={current}
         tokens={tree.total.input + tree.total.output}
         cost={tree.total.cost}
+        series={usageSeries}
         busy={busy}
         dark={dark}
         onToggleTheme={toggleTheme}
@@ -186,13 +205,43 @@ export default function App() {
               setEvents([])
               if (isMobile()) setShowSidebar(false)
             }}
+            onDelete={(id) => {
+              void api
+                .remove(id)
+                .then(() => {
+                  if (id === current) {
+                    composing.current = true
+                    setCurrent(null)
+                    setEvents([])
+                  }
+                  void refreshSessions()
+                })
+                .catch((err: unknown) => setError(String((err as Error).message)))
+            }}
           />
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          <div ref={scrollRef} className="bg-dots min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <main className={`relative flex min-w-0 flex-1 flex-col ${replayAt != null ? 'saturate-[0.8]' : ''}`}>
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            className={replayAt == null ? 'bg-dots min-h-0 flex-1 overflow-y-auto px-4 py-4' : 'min-h-0 flex-1 overflow-y-auto bg-gold/5 px-4 py-4'}
+          >
             <Transcript items={chat} />
           </div>
+          {replayAt != null && (
+            <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full border border-gold/50 bg-gold/15 px-2.5 py-0.5 font-mono text-[10px] font-medium tracking-widest text-gold">
+              {t('replay.badge')}
+            </div>
+          )}
+          {!atBottom && (
+            <button
+              onClick={scrollToBottom}
+              className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-border bg-card/90 px-3 py-1 text-[11px] font-medium shadow-lg backdrop-blur transition hover:border-teal/50 hover:text-teal"
+            >
+              ↓ {t('chat.toBottom')}
+            </button>
+          )}
           <Composer value={input} setValue={setInput} onSend={() => void send()} busy={busy} />
         </main>
 

@@ -19,7 +19,7 @@ export function Transcript({ items }: { items: ChatItem[] }) {
     )
   }
   return (
-    <div role="log" aria-live="polite" aria-label={t('a11y.transcript')} className="mx-auto w-full max-w-[760px] space-y-3">
+    <div role="log" aria-live="polite" aria-label={t('a11y.transcript')} className="stagger mx-auto w-full max-w-[760px] space-y-3">
       {items.map((item) => (
         <TranscriptItem key={item.id} item={item} />
       ))}
