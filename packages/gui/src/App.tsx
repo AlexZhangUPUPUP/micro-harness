@@ -16,6 +16,7 @@ import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
 
 type View = 'chat' | 'trace' | 'changes' | 'inspector'
 const VIEWS: View[] = ['chat', 'trace', 'changes', 'inspector']
+const NEW_KEY = '__new__'
 
 export default function App() {
   const { t, lang, setLang } = useT()
@@ -24,7 +25,7 @@ export default function App() {
   const [events, setEvents] = useState<TaggedEvent[]>([])
   const [input, setInput] = useState('')
   const [images, setImages] = useState<ImageInput[]>([])
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<Record<string, boolean>>({})
   const [error, setError] = useState('')
   const [view, setView] = useState<View>('chat')
   const [replayAt, setReplayAt] = useState<number | null>(null)
@@ -34,13 +35,27 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [models, setModels] = useState<string[]>([])
   const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
-  const [showSidebar, setShowSidebar] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+  const [showSidebar, setShowSidebar] = useState(() => {
+    const saved = localStorage.getItem('micro-sidebar')
+    return saved === null ? window.matchMedia('(min-width: 768px)').matches : saved === '1'
+  })
   const [showPanel, setShowPanel] = useState(() => window.matchMedia('(min-width: 1024px)').matches)
   const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   // True while the user is composing a brand-new session, so the session poll
   // does not immediately re-select the newest one (that made "+ new" a no-op).
   const composing = useRef(false)
+
+  // "Busy" is per session, not one global switch: several sessions can run in
+  // parallel. Derived from the server's status (polled) plus a local pending flag
+  // while the POST is in flight.
+  const currentMeta = sessions.find((s) => s.id === current)
+  const busy = current ? pending[current] === true || currentMeta?.status === 'active' : pending[NEW_KEY] === true
+
+  // Remember whether the session rail is open.
+  useEffect(() => {
+    localStorage.setItem('micro-sidebar', showSidebar ? '1' : '0')
+  }, [showSidebar])
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -172,11 +187,12 @@ export default function App() {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       void Notification.requestPermission()
     }
-    setBusy(true)
     setError('')
     setInput('')
     const attached = images
     setImages([])
+    const key = current ?? NEW_KEY
+    setPending((p) => ({ ...p, [key]: true }))
     try {
       if (current) {
         await api.resume(current, text, attached)
@@ -190,7 +206,11 @@ export default function App() {
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
-      setBusy(false)
+      setPending((p) => {
+        const next = { ...p }
+        delete next[key]
+        return next
+      })
     }
   }
 
@@ -209,7 +229,8 @@ export default function App() {
    */
   const editResend = async (at: number, text: string): Promise<void> => {
     if (!current) return
-    setBusy(true)
+    const key = current
+    setPending((p) => ({ ...p, [key]: true }))
     setError('')
     try {
       const forked = await api.fork(current, at)
@@ -223,7 +244,11 @@ export default function App() {
     } catch (err) {
       setError(String((err as Error).message))
     } finally {
-      setBusy(false)
+      setPending((p) => {
+        const next = { ...p }
+        delete next[key]
+        return next
+      })
     }
   }
 
@@ -252,8 +277,6 @@ export default function App() {
     },
     [current],
   )
-
-  const isMobile = (): boolean => window.matchMedia('(max-width: 767px)').matches
 
   const paletteActions: PaletteAction[] = useMemo(
     () => [
@@ -296,18 +319,12 @@ export default function App() {
       )}
 
       <div className="relative flex min-h-0 flex-1">
-        {/* mobile backdrop for the session drawer */}
-        {showSidebar && (
-          <div
-            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
-            aria-hidden="true"
-            onClick={() => setShowSidebar(false)}
-          />
-        )}
+        {/* Persistent rail: inline, never an overlay — so interacting with the
+            composer (or anything in main) can't dismiss it. */}
         <aside
           className={`${
             showSidebar ? 'flex' : 'hidden'
-          } fixed inset-y-0 left-0 z-40 w-[260px] shrink-0 flex-col border-r border-border bg-background shadow-xl md:static md:z-auto md:shadow-none`}
+          } w-[260px] shrink-0 flex-col border-r border-border bg-background`}
         >
           <Sidebar
             sessions={sessions}
@@ -316,13 +333,11 @@ export default function App() {
               composing.current = false
               setCurrent(id)
               setReplayAt(null)
-              if (isMobile()) setShowSidebar(false)
             }}
             onNew={() => {
               composing.current = true
               setCurrent(null)
               setEvents([])
-              if (isMobile()) setShowSidebar(false)
             }}
             onRename={renameSession}
             onDelete={(id) => {
