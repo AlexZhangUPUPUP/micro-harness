@@ -16,6 +16,7 @@ platform built on the same design. The platform's P0 moved the seed into
 > agent: it runs the loop, executes tools, manages the context window and talks to
 > the model.
 
+```
         ┌──────────────────────────────────────────────────────┐
         │                      harness                         │
         │                                                      │
@@ -26,6 +27,7 @@ platform built on the same design. The platform's P0 moved the seed into
         │                     │                                │
         │              context.trim() when the window fills    │
         └──────────────────────────────────────────────────────┘
+```
 
 ## Run it
 
