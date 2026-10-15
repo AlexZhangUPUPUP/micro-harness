@@ -29,6 +29,26 @@ export interface Usage {
   prompt_tokens?: number
   completion_tokens?: number
   total_tokens?: number
+  /** Provider-specific prompt-cache reporting; use `cacheReadTokens()` to read it. */
+  prompt_cache_hit_tokens?: number // DeepSeek
+  prompt_cache_miss_tokens?: number // DeepSeek
+  prompt_tokens_details?: { cached_tokens?: number } // OpenAI
+  cache_read_input_tokens?: number // Anthropic-shaped
+}
+
+/**
+ * How many of this request's input tokens were served from the provider's prompt
+ * cache. Providers report this under different names, so normalize here rather than
+ * making every caller know three dialects.
+ */
+export function cacheReadTokens(usage?: Usage): number {
+  if (!usage) return 0
+  return (
+    usage.prompt_cache_hit_tokens ??
+    usage.prompt_tokens_details?.cached_tokens ??
+    usage.cache_read_input_tokens ??
+    0
+  )
 }
 
 export interface ModelConfig {

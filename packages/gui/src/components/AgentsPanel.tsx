@@ -1,10 +1,11 @@
 import type { AgentNode } from '../lib/derive.ts'
+import { cacheHitRate } from '../lib/derive.ts'
 import { useT } from '../lib/i18n.tsx'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
 
 interface AgentsPanelProps {
   roots: AgentNode[]
-  total: { input: number; output: number; cost: number }
+  total: { input: number; output: number; cacheRead: number; cost: number }
 }
 
 /** Agent tree with connectors, per-agent usage and a hover detail card. */
@@ -12,8 +13,19 @@ export function AgentsPanel({ roots, total }: AgentsPanelProps) {
   const { t } = useT()
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-3 py-2 font-mono text-[11px] text-muted-foreground">
-        {t('agents.title', { tok: fmtTokens(total.input + total.output), cost: fmtCost(total.cost) })}
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2 font-mono text-[11px] text-muted-foreground">
+        <span>{t('agents.title', { tok: fmtTokens(total.input + total.output), cost: fmtCost(total.cost) })}</span>
+        {total.cacheRead > 0 && (
+          <span
+            className="ml-auto shrink-0 rounded-full border border-teal/40 bg-teal/10 px-1.5 py-0.5 text-[10px] text-teal"
+            title={t('agents.cache', { tok: fmtTokens(total.cacheRead), pct: 0 })}
+          >
+            ⚡ {t('agents.cache', {
+              tok: fmtTokens(total.cacheRead),
+              pct: Math.round(cacheHitRate(total) * 100),
+            })}
+          </span>
+        )}
       </div>
       <div role="tree" aria-label={t('a11y.agentTree')} className="min-h-0 flex-1 overflow-y-auto p-2">
         {roots.length === 0 && (

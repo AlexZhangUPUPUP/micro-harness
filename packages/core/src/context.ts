@@ -1,10 +1,19 @@
 /**
- * Context windowing — the third leg of a harness.
+ * Context windowing and compaction — the third leg of a harness.
  *
- * Models have a finite context window, so a long run must be trimmed. This is a
- * deliberately simple policy: keep the system prompt and the newest "units",
- * where a unit is a user message plus everything the assistant/tools produced
- * for it (a tool message must never be orphaned from its tool call).
+ * Two policies matter here, and they are related:
+ *
+ *  1. **Never rewrite the past.** A tool output is capped *when it is appended*, never
+ *     later, so the message prefix stays byte-stable across turns. Providers cache on
+ *     the prefix, so rewriting history (for example trimming from the front) throws
+ *     the cache away on every single turn.
+ *  2. **When the window does fill, drop the middle — not the front.** The first user
+ *     turn usually carries the constraints ("don't touch the public API"), and the
+ *     system prompt plus that head is exactly the part of the prefix a provider can
+ *     keep cached.
+ *
+ * A "unit" is a user message plus everything the assistant and its tools produced for
+ * it, so a tool message is never orphaned from the tool call that produced it.
  */
 
 import type { ChatMessage } from './model.ts'
@@ -23,35 +32,92 @@ export function estimateTokens(messages: ChatMessage[]): number {
   return Math.ceil(chars / 4)
 }
 
-export interface TrimResult {
-  messages: ChatMessage[]
-  dropped: number
+/** Cap applied to a tool result before it becomes a message (~3k tokens by default). */
+export const DEFAULT_TOOL_OUTPUT_CHARS = 12_000
+
+export interface Truncated {
+  text: string
+  /** Characters removed; 0 means the text was already within the cap. */
+  elided: number
 }
 
-export function trimMessages(messages: ChatMessage[], maxTokens: number): TrimResult {
-  if (estimateTokens(messages) <= maxTokens) return { messages, dropped: 0 }
+/**
+ * Keep the head and the tail of an oversized tool result and say what was cut, so the
+ * model can ask for the rest instead of silently missing it.
+ */
+export function truncateToolOutput(text: string, max: number = DEFAULT_TOOL_OUTPUT_CHARS): Truncated {
+  if (max <= 0 || text.length <= max) return { text, elided: 0 }
+  const head = Math.floor(max * 0.6)
+  const tail = Math.max(0, max - head)
+  const elided = text.length - head - tail
+  const marker = `\n\n… [${elided} of ${text.length} characters elided — call the tool again with narrower arguments to read the rest] …\n\n`
+  return { text: text.slice(0, head) + marker + (tail ? text.slice(text.length - tail) : ''), elided }
+}
 
-  const system = messages.filter((m) => m.role === 'system')
-  const rest = messages.filter((m) => m.role !== 'system')
+export interface CompactOptions {
+  maxTokens: number
+  /**
+   * Keep the first user unit in addition to the newest ones. Default true: it
+   * preserves early constraints and keeps a cacheable prefix.
+   */
+  keepHead?: boolean
+}
 
-  // Group into units: a new unit starts at every user message.
+export interface TrimResult {
+  messages: ChatMessage[]
+  /** Messages dropped from the middle of the conversation. */
+  dropped: number
+  /** Estimated tokens after compaction. */
+  tokens: number
+  strategy: 'none' | 'keep-head+tail' | 'tail'
+}
+
+/** Group messages into units: each user message starts a new one. */
+function groupUnits(messages: ChatMessage[]): ChatMessage[][] {
   const units: ChatMessage[][] = []
-  for (const m of rest) {
+  for (const m of messages) {
     if (m.role === 'user' || units.length === 0) units.push([m])
     else units[units.length - 1]!.push(m)
   }
+  return units
+}
 
-  // Keep whole units from the end until the budget would be exceeded (always
-  // keep at least the last unit).
+/** Trim a conversation to a token budget, dropping the middle when possible. */
+export function compactMessages(messages: ChatMessage[], options: CompactOptions): TrimResult {
+  const { maxTokens } = options
+  const estimated = estimateTokens(messages)
+  if (estimated <= maxTokens) return { messages, dropped: 0, tokens: estimated, strategy: 'none' }
+
+  const system = messages.filter((m) => m.role === 'system')
+  const rest = messages.filter((m) => m.role !== 'system')
+  const units = groupUnits(rest)
+
+  // Keep the head only when there is something to separate it from the tail.
+  const headCount = (options.keepHead ?? true) && units.length > 1 ? 1 : 0
+  const head = units.slice(0, headCount).flat()
+  const tailUnits = units.slice(headCount)
+
   const kept: ChatMessage[][] = []
-  for (let i = units.length - 1; i >= 0; i--) {
-    kept.unshift(units[i]!)
-    if (estimateTokens([...system, ...kept.flat()]) > maxTokens && kept.length > 1) {
+  for (let i = tailUnits.length - 1; i >= 0; i--) {
+    kept.unshift(tailUnits[i]!)
+    // Always keep at least the newest unit, even if it alone blows the budget.
+    if (estimateTokens([...system, ...head, ...kept.flat()]) > maxTokens && kept.length > 1) {
       kept.shift()
       break
     }
   }
 
-  const flat = kept.flat()
-  return { messages: [...system, ...flat], dropped: rest.length - flat.length }
+  const flat = [...head, ...kept.flat()]
+  const compacted = [...system, ...flat]
+  return {
+    messages: compacted,
+    dropped: rest.length - flat.length,
+    tokens: estimateTokens(compacted),
+    strategy: headCount ? 'keep-head+tail' : 'tail',
+  }
+}
+
+/** Backwards-compatible entry point: trim with the default (head-preserving) policy. */
+export function trimMessages(messages: ChatMessage[], maxTokens: number): TrimResult {
+  return compactMessages(messages, { maxTokens })
 }

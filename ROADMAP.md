@@ -186,10 +186,11 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 ## P9 · 上下文与经济性
 
-- [ ] 压缩策略插件：`window` / `summarize` / `structured-state`
-- [ ] **缓存前缀保全**（稳定前缀 + 检查点式压缩）
-- [ ] 成本/缓存命中计量 + 预算熔断
-- [ ] 验收：长会话不爆窗口；报告 cache 命中率
+- [x] **缓存前缀保全**：工具输出在*写入时*截断（前缀不再被事后重写）+ 压缩保留头部而非砍头——实测真 DeepSeek 命中 69–78%
+- [x] **成本/缓存命中计量**：DeepSeek/OpenAI/Anthropic 三种方言归一化成 `usage.cacheRead`，按缓存折扣计价，GUI 显示命中率
+- [ ] 压缩策略插件：`summarize` / `structured-state`（当前是 `keep-head+tail`，接缝已留：`compactMessages(messages, { keepHead })`）
+- [ ] 预算熔断（交互式运行；`run --auto` 已有 `--max-cost`）
+- [ ] 验收：长会话不爆窗口 + 命中率报告（单测已覆盖压缩与前缀稳定性，缺真实长会话实测）
 
 ## P10 · 评测与发布
 

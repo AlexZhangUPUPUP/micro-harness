@@ -67,7 +67,9 @@ export interface ServerOptions {
   isolation?: 'none' | 'worktree'
   maxSteps?: number
   systemPrompt?: string
-  pricing?: { input: number; output: number }
+  pricing?: { input: number; output: number; inputCached?: number }
+  /** Cap on a single tool result, in characters (~3k tokens by default). */
+  maxToolOutput?: number
   /** Bind host; defaults to loopback. Non-loopback requires a token. */
   hostname?: string
   port?: number
@@ -164,6 +166,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       maxSteps: options.maxSteps,
       systemPrompt: options.systemPrompt,
       pricing: options.pricing,
+      maxToolOutput: options.maxToolOutput,
       agentId: 'main',
       parentId: meta.parentId ?? null,
     })

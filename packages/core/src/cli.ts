@@ -35,7 +35,8 @@ import { parseTaskFile, runAuto } from './autorun.ts'
 
 const VALUE_FLAGS = new Set([
   'dir', 'model', 'max-steps', 'max-context', 'base-url', 'approval', 'max-depth', 'max-concurrency',
-  'agent-timeout', 'agent-max-tokens', 'agent-max-cost', 'price-input', 'price-output', 'session',
+  'agent-timeout', 'agent-max-tokens', 'agent-max-cost', 'price-input', 'price-output', 'price-input-cached',
+  'max-tool-output', 'session',
   'tasks', 'max-iterations', 'max-cost', 'max-tokens', 'timeout', 'role', 'system',
 ])
 
@@ -82,7 +83,9 @@ const approval = (opt('approval', 'full-auto') as ApprovalMode) ?? 'full-auto'
 const pricing = {
   input: Number(opt('price-input', process.env.MICRO_PRICE_INPUT || '0')) || 0,
   output: Number(opt('price-output', process.env.MICRO_PRICE_OUTPUT || '0')) || 0,
+  inputCached: Number(opt('price-input-cached', process.env.MICRO_PRICE_INPUT_CACHED || '0')) || 0,
 }
+const maxToolOutput = Number(opt('max-tool-output', process.env.MICRO_MAX_TOOL_OUTPUT || '0')) || undefined
 
 if (!apiKey) {
   console.error('missing API key: set MICRO_API_KEY (or OPENAI_API_KEY)')
@@ -192,6 +195,7 @@ const harness = new Harness({
   systemPrompt,
   hub,
   pricing,
+  maxToolOutput,
   approval,
   confirm,
   tools: [...makeTools(), makeTaskTool(runner)],

@@ -9,6 +9,8 @@
  *   MICRO_MODEL / MICRO_BASE_URL / MICRO_API_KEY   model provider
  *   MICRO_MODELS                  comma-separated model list (defaults to MICRO_MODEL alone)
  *   MICRO_PRICE_INPUT / MICRO_PRICE_OUTPUT         USD per 1M tokens
+ *   MICRO_PRICE_INPUT_CACHED                       USD per 1M cached input tokens
+ *   MICRO_MAX_TOOL_OUTPUT                          cap on one tool result, in characters
  */
 
 import os from 'node:os'
@@ -51,7 +53,9 @@ const server = createServer({
   pricing: {
     input: Number(process.env.MICRO_PRICE_INPUT ?? 0),
     output: Number(process.env.MICRO_PRICE_OUTPUT ?? 0),
+    inputCached: Number(process.env.MICRO_PRICE_INPUT_CACHED ?? 0),
   },
+  maxToolOutput: Number(process.env.MICRO_MAX_TOOL_OUTPUT ?? 0) || undefined,
 })
 
 console.log(`micro-harness server · ${server.url} · data ${dataDir}${token ? ' · auth on' : ''}`)

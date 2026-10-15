@@ -231,7 +231,7 @@ Limits are enforced by the runner, not by convention: `--max-depth`, `--max-conc
 |---|---|
 | **Sessions** | grouped Today / Yesterday / Earlier, inline rename, two-step delete, live status dots |
 | **Transcript** | streaming Markdown + highlighted code with copy buttons; hover a user message to **edit & resend** (forks the session to that point, runs the edit, leaves the original untouched) |
-| **Agents** | the sub-agent tree with connectors, per-node tokens/cost/hover card, worktree badges |
+| **Agents** | the sub-agent tree with connectors, per-node tokens/cost/hover card, worktree badges, and a prompt-cache hit chip (`⚡ cache 2.6k (78%)`) |
 | **Trace** | the raw event stream with category chips, a text filter and a replay scrubber (REPLAY mode desaturates the view) |
 | **Changes** | per-agent diff, **hunk-level accept/reject**, promote, and an integrate-all merge queue |
 | **Inspector** | the exact payload of every model call: system prompt, tool schemas, messages, token estimate |
@@ -252,7 +252,8 @@ Limits are enforced by the runner, not by convention: `--max-depth`, `--max-conc
 
 - **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
-- **Trimming keeps turns intact.** A `tool` message is never separated from the assistant `tool_calls` that produced it.
+- **Never rewrite the past.** A tool result is capped *when it is appended*, not when the window later fills, so the message prefix stays byte-stable — which is exactly what lets a provider's prompt cache hit. When the window does fill, compaction drops the **middle**: it keeps the system prompt and the first user turn (where the constraints live) plus the newest turns, so a `tool` message is never orphaned from its call and early instructions survive.
+- **Measure the economics.** Providers report prompt-cache hits under three different names; they are normalized into `usage.cacheRead`, priced at the cached rate (a cache hit is ~10x cheaper than a miss on DeepSeek), and surfaced in the GUI as a hit rate — a real run on this repo hits 69–78%.
 - **Sandboxing.** File tools resolve every path inside `--dir` and refuse traversal; `bash` is opt-in.
 - **Share capabilities, isolate state.** Providers, tools and the store are shared; messages, cwd and policy are per session and per sub-agent.
 - **Small, testable pure functions.** Diff parsing, hunk selection, transcript derivation, session grouping and the usage series are pure and unit-tested — the UI just renders them.
