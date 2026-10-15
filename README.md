@@ -142,6 +142,8 @@ bun run dev                      # two processes (server + Vite preview)    → 
 
 Both open a browser (`scripts/dev.sh --no-open` to skip it); `MICRO_ISOLATE=1` gives every sub-agent its own git worktree.
 
+Run either from **any folder**: the agent works in the folder you launch from, a free port is picked automatically (several terminals can each run their own), and closing the terminal stops everything. `microh` is the same thing from anywhere (installed by `scripts/install.sh`).
+
 <details>
 <summary>All CLI flags and environment variables</summary>
 
