@@ -148,3 +148,39 @@ test('records real harness events through the hub and reconstructs history', asy
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('sub-agent events do not overwrite the session header', () => {
+  const base: SessionMeta = {
+    id: 's1',
+    title: '',
+    model: 'main-model',
+    cwd: '/repo',
+    parentId: null,
+    status: 'active',
+    createdAt: 0,
+    updatedAt: 0,
+    input: 0,
+    output: 0,
+    cost: 0,
+  }
+  const child = (seq: number, event: Record<string, unknown>): TaggedEvent => ({
+    agentId: 'main/agent-1',
+    parentId: 'main',
+    seq,
+    t: seq,
+    event: event as TaggedEvent['event'],
+  })
+
+  const afterStart = deriveMeta(base, child(1, { type: 'session.start', model: 'child-model', cwd: '/worktree' }))
+  expect(afterStart.model).toBe('main-model')
+  expect(afterStart.cwd).toBe('/repo')
+
+  // but a child's spend still counts toward the session total
+  expect(deriveMeta(afterStart, child(2, { type: 'usage', input: 10, output: 5 })).input).toBe(10)
+
+  // and a child finishing does not mark the whole session done
+  expect(deriveMeta(afterStart, child(3, { type: 'turn.end', stopReason: 'stop', text: '' })).status).toBe('active')
+
+  const mainEnd: TaggedEvent = { agentId: 'main', parentId: null, seq: 4, t: 4, event: { type: 'turn.end', stopReason: 'stop', text: '' } }
+  expect(deriveMeta(afterStart, mainEnd).status).toBe('done')
+})

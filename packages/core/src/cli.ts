@@ -71,6 +71,7 @@ const allowBash = flag('allow-bash')
 const traceOn = flag('trace')
 const autoMode = flag('auto')
 const yes = flag('yes')
+const isolate = flag('isolate')
 const cwd = path.resolve(opt('dir', process.cwd())!)
 const maxSteps = Number(opt('max-steps', '24')) || 24
 const maxContextTokens = Number(opt('max-context', '24000')) || 24_000
@@ -160,6 +161,7 @@ const runner = new AgentRunner({
   hub,
   roles,
   tools: makeTools(),
+  isolation: isolate ? 'worktree' : 'none',
   allowBash,
   approval,
   confirm,
@@ -170,6 +172,15 @@ const runner = new AgentRunner({
   maxTokens: opt('agent-max-tokens') ? Number(opt('agent-max-tokens')) : undefined,
   maxCost: opt('agent-max-cost') ? Number(opt('agent-max-cost')) : undefined,
 })
+
+if (isolate) process.on('exit', () => void runner.cleanupWorktrees())
+
+function reportWorktrees(): void {
+  const wts = [...runner.worktrees().entries()]
+  if (!wts.length) return
+  console.error('\nworktrees (each agent ran in isolation; removed on exit):')
+  for (const [id, w] of wts) console.error(`  ${id} → ${w.branch}`)
+}
 
 const harness = new Harness({
   provider,
@@ -225,6 +236,7 @@ if (args.length) {
   renderer?.endStream()
   if (quiet) console.log(await lastAnswer())
   printAgentTree()
+  reportWorktrees()
   process.exit(0)
 }
 

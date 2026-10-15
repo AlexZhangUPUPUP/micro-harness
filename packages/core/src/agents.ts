@@ -20,6 +20,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { Harness, type ApprovalMode, type ConfirmFn } from './harness.ts'
 import type { EventHub } from './events.ts'
+import { createWorktree, isGitRepo, removeWorktree, type Worktree } from './isolation.ts'
 import type { Provider } from './provider.ts'
 import type { Tool, ToolContext, ToolResult } from './tools.ts'
 
@@ -131,6 +132,8 @@ export interface AgentResult {
   cost: number
   durationMs: number
   error?: string
+  /** Set when the agent ran in its own git worktree (isolation: 'worktree'). */
+  worktree?: Worktree | null
 }
 
 export interface AgentRunnerOptions {
@@ -154,6 +157,10 @@ export interface AgentRunnerOptions {
   maxTokens?: number
   /** USD a single child may spend before being aborted. */
   maxCost?: number
+  /** Run each child in its own git worktree (needs a git repo). Default 'none'. */
+  isolation?: 'none' | 'worktree'
+  /** Task id used to name worktree branches; defaults to a random id. */
+  taskId?: string
   pricing?: { input: number; output: number }
 }
 
@@ -187,17 +194,40 @@ export class AgentRunner {
   readonly roles: AgentRegistry
   readonly #opts: AgentRunnerOptions
   readonly #semaphore: SimpleSemaphore
+  readonly #taskId: string
+  readonly #worktrees = new Map<string, Worktree>()
   #counter = 0
 
   constructor(opts: AgentRunnerOptions) {
     this.#opts = opts
     this.roles = opts.roles
+    this.#taskId = opts.taskId ?? Math.random().toString(36).slice(2, 10)
     this.#semaphore = createSemaphore(Math.max(1, opts.maxConcurrency ?? 4))
     if (!this.roles.has(DEFAULT_ROLE.name)) this.roles.register(DEFAULT_ROLE)
   }
 
   get active(): number {
     return this.#semaphore.active
+  }
+
+  /** Worktrees created for isolated agents (agentId → worktree). */
+  worktrees(): Map<string, Worktree> {
+    return new Map(this.#worktrees)
+  }
+
+  /** Remove every worktree this runner created. Returns how many were removed. */
+  cleanupWorktrees(): number {
+    let n = 0
+    for (const wt of this.#worktrees.values()) {
+      try {
+        removeWorktree({ cwd: this.#opts.cwd, path: wt.path, branch: wt.branch })
+        n++
+      } catch {
+        /* best effort */
+      }
+    }
+    this.#worktrees.clear()
+    return n
   }
 
   async run(roleName: string, prompt: string, parentId: string, depth: number): Promise<AgentResult> {
@@ -227,10 +257,23 @@ export class AgentRunner {
     const timer = setTimeout(() => controller.abort(new Error(`agent timed out after ${timeoutMs}ms`)), timeoutMs)
 
     const childTools = this.#childTools(role)
+
+    // Isolation: when enabled and the workspace is a git repo, each agent runs in
+    // its own worktree so parallel agents never overwrite each other.
+    let worktree: Worktree | null = null
+    if (this.#opts.isolation === 'worktree' && isGitRepo(this.#opts.cwd)) {
+      try {
+        worktree = createWorktree({ cwd: this.#opts.cwd, taskId: this.#taskId, agentId })
+        this.#worktrees.set(agentId, worktree)
+      } catch {
+        worktree = null // fall back to the shared workspace
+      }
+    }
+
     const harness = new Harness({
       provider: this.#opts.provider,
       model: role.model ?? this.#opts.model,
-      cwd: this.#opts.cwd,
+      cwd: worktree?.path ?? this.#opts.cwd,
       allowBash: this.#opts.allowBash,
       maxSteps: role.maxSteps,
       systemPrompt: role.systemPrompt ?? DEFAULT_AGENT_PROMPT,
@@ -243,6 +286,9 @@ export class AgentRunner {
       parentId,
       depth: depth + 1,
     })
+    if (worktree) {
+      harness.log.emit({ type: 'agent.worktree', path: worktree.path, branch: worktree.branch, base: worktree.base })
+    }
 
     let input = 0
     let output = 0
@@ -261,12 +307,12 @@ export class AgentRunner {
 
     try {
       const text = await harness.send(prompt, controller.signal)
-      return { agentId, role: roleName, ok: true, text, input, output, cost, durationMs: Date.now() - started }
+      return { agentId, role: roleName, ok: true, text, input, output, cost, durationMs: Date.now() - started, worktree }
     } catch (err) {
       const message = controller.signal.aborted
         ? String(controller.signal.reason?.message ?? controller.signal.reason ?? 'aborted')
         : String((err as Error)?.message || err)
-      return { agentId, role: roleName, ok: false, text: '', input, output, cost, durationMs: Date.now() - started, error: message }
+      return { agentId, role: roleName, ok: false, text: '', input, output, cost, durationMs: Date.now() - started, error: message, worktree }
     } finally {
       off()
       clearTimeout(timer)
