@@ -1,19 +1,25 @@
 import { useRef, useState } from 'react'
 import type { ChatItem } from '../lib/derive.ts'
+import type { PendingApproval } from '../lib/approvals.ts'
 import { useT } from '../lib/i18n.tsx'
 import Markdown from './Markdown.tsx'
+import { ApprovalCard } from './ApprovalCard.tsx'
 import { fmtTime } from '../lib/format.ts'
 
 /** The conversation stream: user bubbles, assistant blocks, tool timeline, notices. */
 export function Transcript({
   items,
   onEditResend,
+  approvals,
+  onDecide,
 }: {
   items: ChatItem[]
   onEditResend?: (at: number, text: string) => void
+  approvals?: PendingApproval[]
+  onDecide?: (id: string, allow: boolean) => void
 }) {
   const { t } = useT()
-  if (items.length === 0) {
+  if (items.length === 0 && (!approvals || approvals.length === 0)) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <span className="relative flex h-10 w-10 items-center justify-center" aria-hidden="true">
@@ -29,6 +35,13 @@ export function Transcript({
       {items.map((item) => (
         <TranscriptItem key={item.id} item={item} onEditResend={onEditResend} />
       ))}
+      {approvals && approvals.length > 0 && (
+        <div className="space-y-3" aria-label={t('approval.title')}>
+          {approvals.map((a) => (
+            <ApprovalCard key={a.id} approval={a} onDecide={onDecide} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

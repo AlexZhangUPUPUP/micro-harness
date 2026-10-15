@@ -452,3 +452,106 @@ export function messagePreview(m: RequestMessage, max = 120): string {
   if (m.role === 'tool') return `${m.name ?? 'tool'}: ${body.slice(0, max)}`
   return body.slice(0, max)
 }
+
+export interface SessionTreeNode {
+  session: SessionMeta
+  depth: number
+  children: SessionTreeNode[]
+}
+
+/**
+ * Sessions nested by `parentId`. Roots are sessions whose parent is absent
+ * (null, or pointing at a session that is not in the list). Malformed links
+ * (self-parent, parent cycles) are demoted to roots so a broken tree can never
+ * hang the UI.
+ */
+export function sessionForest(sessions: SessionMeta[]): SessionTreeNode[] {
+  const byId = new Map<string, SessionMeta>()
+  for (const s of sessions) byId.set(s.id, s)
+
+  const nodes = new Map<string, SessionTreeNode>()
+  for (const s of sessions) nodes.set(s.id, { session: s, depth: 0, children: [] })
+
+  // Find the nodes that participate in a parent cycle (or point at themselves).
+  // The parent graph is a functional graph (each node has at most one parent),
+  // so a single walk with an on-path index map finds every cycle member.
+  const cyclic = new Set<string>()
+  const done = new Set<string>()
+  const limit = sessions.length + 1
+  for (const s of sessions) {
+    if (done.has(s.id)) continue
+    const path: string[] = []
+    const at = new Map<string, number>()
+    let cur: string | null = s.id
+    while (cur !== null && path.length < limit) {
+      if (done.has(cur) || cyclic.has(cur)) break
+      const pos = at.get(cur)
+      if (pos !== undefined) {
+        // Revisited a node we are already walking → path[pos..] is a cycle.
+        for (let i = pos; i < path.length; i++) cyclic.add(path[i])
+        break
+      }
+      at.set(cur, path.length)
+      path.push(cur)
+      const meta = byId.get(cur)
+      const pid = meta?.parentId
+      if (!pid || pid === cur || !byId.has(pid)) break
+      cur = pid
+    }
+    for (const id of path) done.add(id)
+  }
+
+  const roots: SessionTreeNode[] = []
+  for (const s of sessions) {
+    const node = nodes.get(s.id)
+    if (!node) continue
+    const pid = s.parentId
+    const parent = pid ? byId.get(pid) : undefined
+    if (!pid || !parent || pid === s.id || cyclic.has(s.id)) {
+      roots.push(node)
+    } else {
+      nodes.get(pid)!.children.push(node)
+    }
+  }
+
+  const assignDepth = (node: SessionTreeNode, depth: number): void => {
+    node.depth = depth
+    for (const child of node.children) assignDepth(child, depth + 1)
+  }
+  for (const root of roots) assignDepth(root, 0)
+
+  return roots
+}
+
+/** Root → … → the given session; empty when it is unknown. */
+export function ancestry(sessions: SessionMeta[], id: string | null): SessionMeta[] {
+  if (!id) return []
+  const byId = new Map<string, SessionMeta>()
+  for (const s of sessions) byId.set(s.id, s)
+  const chain: SessionMeta[] = []
+  const seen = new Set<string>()
+  let cur = byId.get(id)
+  while (cur && !seen.has(cur.id) && chain.length <= sessions.length) {
+    seen.add(cur.id)
+    chain.push(cur)
+    const pid = cur.parentId
+    if (!pid || pid === cur.id) break
+    cur = byId.get(pid)
+  }
+  chain.reverse()
+  return chain
+}
+
+/** Descendant count, for a "+N" badge. */
+export function descendantCount(node: SessionTreeNode): number {
+  let count = 0
+  const stack = [...node.children]
+  while (stack.length > 0) {
+    const child = stack.pop()!
+    count += 1
+    stack.push(...child.children)
+  }
+  return count
+}
+
+import type { SessionMeta } from './api.ts'

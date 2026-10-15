@@ -153,6 +153,7 @@ scripts/dev.sh                   # → http://127.0.0.1:5273
 | `MICRO_MODELS` | comma-separated ids advertised by `GET /api/models` (the GUI model picker) |
 | `MICRO_DATA_DIR` | session + index directory (default `~/.micro-harness`) |
 | `MICRO_ISOLATE` | `1` → each sub-agent gets a git worktree |
+| `MICRO_APPROVAL` | `full-auto` (default) / `auto-edit` / `suggest` — anything but `full-auto` asks through the GUI or the ACP client |
 | `MICRO_PORT` / `MICRO_HOST` / `MICRO_SERVER_TOKEN` | server bind + auth |
 | `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` | USD per 1M tokens, for cost tracking |
 | `MICRO_ALLOW_BASH` | `1` → enable `bash` on the server too |
@@ -304,6 +305,9 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 | **Changes** | per-agent diff, **hunk-level accept/reject**, promote, and an integrate-all merge queue |
 | **Inspector** | the exact payload of every model call: system prompt, tool schemas, messages, token estimate |
 | **Palette** | `⌘K` — app actions plus full-text search across every saved session |
+| **Attachments** | paste or drop an image into the composer — it travels as a multimodal content part |
+| **Approvals** | when the server runs `--approval suggest`/`auto-edit`, a mutating tool call blocks and the transcript shows an Allow / Deny card |
+| **Session tree** | flip the sidebar to tree mode to see forks nested under their origin |
 | **Composer** | model picker fed by `/api/models`, desktop notification when a run finishes in a background tab |
 
 | key | action |
@@ -339,6 +343,7 @@ the pass is caused by the mechanism and not by luck. Two honest caveats fell out
 the window held (0 API errors) but **cache hits decay to ~66% under repeated compaction**
 because each trim churns the prefix, and `summarize` preserves the rule at roughly the
 same cost but leaves a higher peak (the recap itself occupies tokens).
+- **The budget holds even inside one long turn.** Compaction normally drops whole *turns*, but a coding run is often a single user message followed by dozens of tool calls — there is no older turn to drop. Measured on a real 24-turn audit: before this was handled the context peaked at **52,700 tokens against a 24,000 budget** with **zero** compactions; the fallback now drops *steps* (an assistant message plus the tool results it produced, never separated) and the same run peaks at **23,685 / 24,000** with 7 compactions.
 - **Never rewrite the past.** A tool result is capped *when it is appended*, not when the window later fills, so the message prefix stays byte-stable — which is exactly what lets a provider's prompt cache hit. When the window does fill, compaction drops the **middle**: it keeps the system prompt and the first user turn (where the constraints live) plus the newest turns, so a `tool` message is never orphaned from its call and early instructions survive.
 - **Measure the economics.** Providers report prompt-cache hits under three different names; they are normalized into `usage.cacheRead`, priced at the cached rate (a cache hit is ~10x cheaper than a miss on DeepSeek), and surfaced in the GUI as a hit rate — a real run on this repo hits 69–78%.
 - **Sandboxing.** File tools resolve every path inside `--dir` and refuse traversal; `bash` is opt-in.

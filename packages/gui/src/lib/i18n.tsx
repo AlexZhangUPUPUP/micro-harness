@@ -86,6 +86,8 @@ const en: Dict = {
   'sessions.rename': 'rename',
   'sessions.renameTitle': 'Rename session',
   'composer.model': 'model',
+  'composer.dropImage': 'drop an image…',
+  'composer.removeImage': 'Remove image',
   'chat.edit': 'edit & resend',
   'chat.editTitle': 'Edit this message and branch the conversation',
   'chat.save': 'resend',
@@ -121,6 +123,13 @@ const en: Dict = {
   'tool.hideOutput': 'hide output',
   'trace.scrubber': 'Replay position',
   'trace.empty': 'no events yet',
+  'approval.title': 'approval needed',
+  'approval.allow': 'Allow',
+  'approval.deny': 'Deny',
+  'approval.waiting': 'waiting for answer…',
+  'approval.allowed': 'allowed',
+  'approval.denied': 'denied',
+  'approval.arguments': 'arguments',
 }
 
 const zh: Dict = {
@@ -200,6 +209,8 @@ const zh: Dict = {
   'sessions.rename': '重命名',
   'sessions.renameTitle': '重命名会话',
   'composer.model': '模型',
+  'composer.dropImage': '松开以添加图片…',
+  'composer.removeImage': '移除图片',
   'chat.edit': '编辑并重发',
   'chat.editTitle': '修改这条消息，并从这一点分叉出新会话',
   'chat.save': '重发',
@@ -235,6 +246,13 @@ const zh: Dict = {
   'tool.hideOutput': '收起输出',
   'trace.scrubber': '回放位置',
   'trace.empty': '还没有事件',
+  'approval.title': '需要批准',
+  'approval.allow': '允许',
+  'approval.deny': '拒绝',
+  'approval.waiting': '等待应答…',
+  'approval.allowed': '已允许',
+  'approval.denied': '已拒绝',
+  'approval.arguments': '参数',
 }
 
 const DICTS: Record<Lang, Dict> = { en, zh }

@@ -11,6 +11,7 @@
  *   MICRO_PRICE_INPUT / MICRO_PRICE_OUTPUT         USD per 1M tokens
  *   MICRO_PRICE_INPUT_CACHED                       USD per 1M cached input tokens
  *   MICRO_MAX_TOOL_OUTPUT                          cap on one tool result, in characters
+ *   MICRO_APPROVAL                                 full-auto (default) | auto-edit | suggest
  */
 
 import os from 'node:os'
@@ -80,6 +81,9 @@ const server = createServer({
   roles,
   allowBash: process.env.MICRO_ALLOW_BASH === '1',
   isolation: process.env.MICRO_ISOLATE === '1' ? 'worktree' : 'none',
+  approval: (['suggest', 'auto-edit', 'full-auto'].includes(process.env.MICRO_APPROVAL ?? '')
+    ? process.env.MICRO_APPROVAL
+    : 'full-auto') as 'suggest' | 'auto-edit' | 'full-auto',
   pricing: {
     input: Number(process.env.MICRO_PRICE_INPUT ?? 0),
     output: Number(process.env.MICRO_PRICE_OUTPUT ?? 0),

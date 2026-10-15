@@ -10,7 +10,7 @@
  * message so the model can recover.
  */
 
-import { cacheReadTokens } from './model.ts'
+import { cacheReadTokens, userContent } from './model.ts'
 import {
   compactMessages,
   compactMessagesAsync,
@@ -149,9 +149,13 @@ export class Harness {
   }
 
   /** Run one user turn to completion; returns the final assistant text. */
-  async send(prompt: string, signal?: AbortSignal): Promise<string> {
+  async send(
+    prompt: string,
+    signal?: AbortSignal,
+    images?: Array<{ mimeType: string; data: string }>,
+  ): Promise<string> {
     this.#toolCtx.signal = signal
-    this.messages.push({ role: 'user', content: prompt })
+    this.messages.push({ role: 'user', content: userContent(prompt, images) })
     this.log.emit({ type: 'user.message', text: prompt })
 
     for (let step = 1; step <= this.#maxSteps; step++) {

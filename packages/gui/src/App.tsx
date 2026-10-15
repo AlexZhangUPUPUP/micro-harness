@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type SessionMeta, type TaggedEvent } from './lib/api.ts'
+import { api, type ImageInput, type SessionMeta, type TaggedEvent } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
 import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
+import { pendingApprovals, decidePermission } from './lib/approvals.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
 import { Transcript } from './components/Transcript.tsx'
@@ -22,6 +23,7 @@ export default function App() {
   const [current, setCurrent] = useState<string | null>(null)
   const [events, setEvents] = useState<TaggedEvent[]>([])
   const [input, setInput] = useState('')
+  const [images, setImages] = useState<ImageInput[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [view, setView] = useState<View>('chat')
@@ -116,6 +118,7 @@ export default function App() {
   const chat = useMemo(() => deriveChat(shown), [shown])
   const tree = useMemo(() => deriveAgents(shown), [shown])
   const requests = useMemo(() => deriveInspector(shown), [shown])
+  const approvals = useMemo(() => pendingApprovals(events), [events])
 
   // Follow the stream only while the user is parked at the bottom — scrolling up
   // freezes the view (and surfaces a "back to bottom" pill).
@@ -172,12 +175,14 @@ export default function App() {
     setBusy(true)
     setError('')
     setInput('')
+    const attached = images
+    setImages([])
     try {
       if (current) {
-        await api.resume(current, text)
+        await api.resume(current, text, attached)
         setRunTick((t) => t + 1)
       } else {
-        const meta = await api.create(text, { model: model || undefined })
+        const meta = await api.create(text, { model: model || undefined, images: attached })
         composing.current = false
         setCurrent(meta.id)
       }
@@ -228,6 +233,25 @@ export default function App() {
     document.documentElement.classList.toggle('dark', next)
     localStorage.setItem('micro-theme', next ? 'dark' : 'light')
   }
+
+  /** Answer a pending approval, then refresh so the `permission.result` shows up. */
+  const onDecide = useCallback(
+    (id: string, allow: boolean): Promise<void> => {
+      if (!current) return Promise.resolve()
+      return decidePermission(current, id, allow)
+        .then(() => {
+          // The SSE stream usually delivers the result already; re-fetch to be sure.
+          void api
+            .get(current)
+            .then((d) => setEvents(d.events))
+            .catch(() => {})
+        })
+        .catch((err: unknown) => {
+          setError(String((err as Error).message))
+        })
+    },
+    [current],
+  )
 
   const isMobile = (): boolean => window.matchMedia('(max-width: 767px)').matches
 
@@ -323,7 +347,12 @@ export default function App() {
             onScroll={onScroll}
             className={replayAt == null ? 'bg-dots min-h-0 flex-1 overflow-y-auto px-4 py-4' : 'min-h-0 flex-1 overflow-y-auto bg-gold/5 px-4 py-4'}
           >
-            <Transcript items={chat} onEditResend={(at, text) => void editResend(at, text)} />
+            <Transcript
+              items={chat}
+              onEditResend={(at, text) => void editResend(at, text)}
+              approvals={approvals}
+              onDecide={(id, allow) => void onDecide(id, allow)}
+            />
           </div>
           {replayAt != null && (
             <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-full border border-gold/50 bg-gold/15 px-2.5 py-0.5 font-mono text-[10px] font-medium tracking-widest text-gold">
@@ -346,6 +375,8 @@ export default function App() {
             models={models}
             model={model}
             setModel={chooseModel}
+            images={images}
+            setImages={setImages}
           />
         </main>
 

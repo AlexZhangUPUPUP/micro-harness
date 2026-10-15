@@ -30,3 +30,8 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 
 - 2026-10-16 · P10（完）· **LLM 裁判 + 任务集扩到 18 个**（8 原确定性 + 4 新确定性 + 6 rubric；`both` 任务同时喂确定性判分与校准）；mock 全绿（36/36，exit 0）；真机校准第一次就抓到确定性判分漏掉的真 bug（`value.trim()` 漏 TypeError）——而我两次"加固"都失败，第二次因为按引擎相关的错误措辞匹配（V8 vs Bun/JSC），最终改为断言语义并双向验证
 
+- 2026-10-16 · 附件/多模态 · 图片走 OpenAI 兼容的 content parts（`userContent`），`estimateTokens` 计入图片；GUI 输入框支持粘贴/拖拽；server 的 create/resume 接受 `images` · 153 测试
+- 2026-10-16 · GUI 审批闭环 · `createApprovalBroker` + `POST /api/sessions/:id/permissions/:requestId`，循环发 `permission.request` 后阻塞等待，GUI 出现「允许/拒绝」卡片（`MICRO_APPROVAL`）· 3 个新集成测试（允许→文件写入、拒绝→工具不执行、重复应答 404）
+- 2026-10-16 · 会话树 · 侧栏 list/tree 切换，`sessionForest`/`ancestry`/`descendantCount`（防环）· 4 个纯函数测试
+- 2026-10-16 · **真实长跑抓到并修掉一个严重 bug**：压缩只能丢「整个回合」，而一次编码运行常常只有 1 个 user 消息 → 单轮长任务**上下文预算完全不被执行**（实测峰值 52700 / 预算 24000，0 次压缩）。新增**步骤级裁剪**（丢 assistant+其工具结果，绝不拆散、保留任务陈述与最新一步）后同一条运行峰值 23685 / 24000、7 次压缩。多 agent 长跑另测：3 个 agent、2 个 worktree、各自独立上下文、70233 tokens、$0.0102
+
