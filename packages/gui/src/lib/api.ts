@@ -45,6 +45,13 @@ export interface ImageInput {
   data: string
 }
 
+/** A non-image file the user attached; its text rides along with the prompt. */
+export interface FileAttachment {
+  name: string
+  size: number
+  text: string
+}
+
 export interface AgentWorktree {
   agentId: string
   path: string
@@ -125,6 +132,12 @@ export const api = {
     j<{ session: SessionMeta }>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }).then(
       (d) => d.session,
     ),
+  /** Change which model a session uses, from its next run on. */
+  setModel: (id: string, model: string) =>
+    j<{ session: SessionMeta }>(`/api/sessions/${id}/model`, {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    }).then((d) => d.session),
   remove: (id: string) => j<{ ok: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' }),
   search: (q: string) => j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
   /** Permission presets: what the agent may touch, and whether it must ask. */

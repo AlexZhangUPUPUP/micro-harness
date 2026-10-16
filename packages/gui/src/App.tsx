@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type ImageInput, type SessionMeta, type TaggedEvent } from './lib/api.ts'
+import { api, type FileAttachment, type ImageInput, type SessionMeta, type TaggedEvent } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
 import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
@@ -39,10 +39,12 @@ export default function App() {
   const [events, setEvents] = useState<TaggedEvent[]>([])
   const [input, setInput] = useState('')
   const [images, setImages] = useState<ImageInput[]>([])
+  // Non-image files, read as text and sent with the prompt.
+  const [files, setFiles] = useState<FileAttachment[]>([])
   const [pending, setPending] = useState<Record<string, boolean>>({})
   // Locally echoed user messages, shown before the server's `user.message` event
   // arrives so sending feels instant.
-  const [optimistic, setOptimistic] = useState<Array<{ id: string; text: string; t: number }>>([])
+  const [optimistic, setOptimistic] = useState<Array<{ id: string; text: string; sent: string; t: number }>>([])
   const [error, setError] = useState('')
   const [view, setView] = useState<View>('chat')
   const [replayAt, setReplayAt] = useState<number | null>(null)
@@ -125,6 +127,13 @@ export default function App() {
   const chooseModel = (m: string): void => {
     setModel(m)
     localStorage.setItem('micro-model', m)
+    // If a session is open, switch its model too (takes effect on the next run).
+    if (current) {
+      void api
+        .setModel(current, m)
+        .then(() => void refreshSessions())
+        .catch((err: unknown) => setError(String((err as Error).message)))
+    }
   }
 
   // Permission preset: the session's own, else the server default.
@@ -176,7 +185,7 @@ export default function App() {
           const ev = e.event as { content?: unknown; text?: unknown }
           const text = String(ev.content ?? ev.text ?? '')
           setOptimistic((prev) => {
-            const i = prev.findIndex((o) => o.text === text)
+            const i = prev.findIndex((o) => o.sent === text || o.text === text)
             if (i === -1) return prev
             const next = prev.slice()
             next.splice(i, 1)
@@ -265,16 +274,23 @@ export default function App() {
     setInput('')
     const attached = images
     setImages([])
+    // Non-image attachments ride along as <file> blocks the agent can read.
+    const typed = text
+    const withFiles =
+      files.length > 0
+        ? typed + '\n\n' + files.map((f) => `<file name="${f.name}">\n${f.text}\n</file>`).join('\n\n')
+        : typed
+    setFiles([])
     const key = current ?? NEW_KEY
     setPending((p) => ({ ...p, [key]: true }))
     const optId = `opt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
-    setOptimistic((prev) => [...prev, { id: optId, text, t: Date.now() }])
+    setOptimistic((prev) => [...prev, { id: optId, text: typed, sent: withFiles, t: Date.now() }])
     try {
       if (current) {
-        await api.resume(current, text, attached)
+        await api.resume(current, withFiles, attached)
         setRunTick((t) => t + 1)
       } else {
-        const meta = await api.create(text, { model: model || undefined, images: attached })
+        const meta = await api.create(withFiles, { model: model || undefined, images: attached })
         composing.current = false
         setCurrent(meta.id)
       }
@@ -380,7 +396,7 @@ export default function App() {
 
   const paletteActions: PaletteAction[] = useMemo(
     () => [
-      { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]); setOptimistic([]) } },
+      { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]); setOptimistic([]); setFiles([]) } },
       { id: 'chat', label: t('tabs.chat'), run: () => setView('chat') },
       { id: 'trace', label: t('tabs.trace'), run: () => setView('trace') },
       { id: 'changes', label: t('tabs.changes'), run: () => setView('changes') },
@@ -435,12 +451,14 @@ export default function App() {
               setCurrent(id)
               setReplayAt(null)
               setOptimistic([])
+              setFiles([])
             }}
             onNew={() => {
               composing.current = true
               setCurrent(null)
               setEvents([])
               setOptimistic([])
+              setFiles([])
             }}
             onRename={renameSession}
             onDelete={(id) => {
@@ -497,6 +515,8 @@ export default function App() {
             setModel={chooseModel}
             images={images}
             setImages={setImages}
+            files={files}
+            setFiles={setFiles}
             permission={permission}
             onPermission={changePermission}
           />
