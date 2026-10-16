@@ -11,7 +11,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-153_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-155_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -21,31 +21,32 @@
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
-- [✨ What is this](#-what-is-this)
-- [🆚 How it differs from other harnesses](#-how-it-differs-from-other-harnesses)
-- [📸 Preview](#-preview)
-- [🚀 Quick start](#-quick-start)
-- [🧩 How it is built](#-how-it-is-built)
-- [🤖 Multi-agent](#-multi-agent)
-- [🔌 MCP](#-mcp)
-- [🧩 ACP — editors drive us](#-acp--editors-drive-us)
-- [🖥 The GUI](#-the-gui)
-- [📐 Design principles](#-design-principles)
-- [📁 Repository layout](#-repository-layout)
-- [🗺 Roadmap](#-roadmap)
-- [🧪 Development](#-development)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
+- [What is this](#what-is-this)
+- [Preview](#preview)
+- [Quick start](#quick-start)
+- [How it differs from other harnesses](#how-it-differs-from-other-harnesses)
+- [How it is built](#how-it-is-built)
+- [Multi-agent](#multi-agent)
+- [MCP](#mcp)
+- [ACP: editors drive us](#acp-editors-drive-us)
+- [The GUI](#the-gui)
+- [Design principles](#design-principles)
+- [Repository layout](#repository-layout)
+- [Roadmap](#roadmap)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+- [Star history](#star-history)
 
 ---
 
-## ✨ What is this
+## What is this
 
 An **agent harness** is the runtime that turns an LLM into an agent: it runs the loop, executes tools, manages the context window and talks to the model. Most of the behaviour people attribute to "the model" actually lives here.
 
-This repository is one, grown into a platform — and it stays readable while doing it:
+This repository is one, grown into a platform:
 
 ```mermaid
 flowchart LR
@@ -63,15 +64,15 @@ flowchart LR
 |---|---|
 | **Events are the single contract** | The loop emits one tagged event stream. The session log, the server's SSE, the CLI, the trace panel, replay, the agent tree and the Inspector are all just consumers — no side channels. |
 | **Seams, not a container** | The extension points are interfaces you compile against — `Provider`, `Tool`, `FileSystem`, `AgentRole`, `AgentEvent` — and composition is explicit code (`createServer`, `makeTools`). We built a DI container first, measured it (**0** runtime consumers across **25** assembly sites) and [deleted it](docs/design-comparison.md). |
-| **Multi-agent is first-class** | A `task` tool with `single`/`parallel`/`chain`/`race` modes, real context isolation, and depth/concurrency/token/cost limits. Not bolted on. |
+| **Multi-agent is first-class** | A `task` tool with `single`/`parallel`/`chain`/`race` modes, real context isolation, and depth/concurrency/token/cost limits. |
 | **Isolation with a review step** | Each sub-agent gets its own git worktree, so parallel agents can't overwrite each other — and you apply the result **hunk by hunk**. |
 | **Observable by default** | Rolling token/cost, an agent tree, a replay scrubber, and an Inspector that shows the exact payload sent to the model. |
 
 ---
 
-## 📸 Preview
+## Preview
 
-### 💬 Chat — streaming, Markdown, live usage
+### Chat — streaming, Markdown, live usage
 
 > Assistant messages render as Markdown with syntax-highlighted code and a copy button. Live usage rolls up next to a sparkline, sessions are grouped by day, and `⌘K` opens a command palette that also full-text searches every saved session.
 
@@ -79,13 +80,13 @@ flowchart LR
 
 ![Command palette](docs/gui-palette.png)
 
-### 🌏 Bilingual
+### Bilingual
 
 > English and 简体中文, switched in place with the `中 / EN` button (it follows the browser language on first visit).
 
 ![Simplified Chinese](docs/gui-zh.png)
 
-### 🤝 Isolation and hunk-level review
+### Isolation and hunk-level review
 
 > With `MICRO_ISOLATE=1` every sub-agent works in its own git worktree, so parallel agents never collide. When a diff comes back you review it hunk by hunk and apply exactly the parts you want; a hunk whose context has drifted is reported instead of silently mis-applied.
 
@@ -93,7 +94,7 @@ flowchart LR
 
 ![Hunk-level review](docs/gui-hunks.png)
 
-### 🔍 Trace, replay and the Inspector
+### Trace, replay and the Inspector
 
 > The raw event stream with category filters and a replay scrubber that rebuilds the conversation from any slice — and the Inspector, which shows the exact system prompt, tool schemas and messages that went out on each turn.
 
@@ -103,7 +104,7 @@ flowchart LR
 
 ---
 
-## 🚀 Quick start
+## Quick start
 
 **Requirements:** [Bun](https://bun.sh) ≥ 1.1 (the platform), or just Node ≥ 22.18 (the [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag). Any OpenAI-compatible endpoint works.
 
@@ -176,18 +177,17 @@ Run either from **any folder**: the agent works in the folder you launch from, a
 
 ---
 
-## 🆚 How it differs from other harnesses
+## How it differs from other harnesses
 
-Every harness README implies "we are the good one". This one shows its work instead:
-what we took from **DeepSeek Harness**, **pi**, **Claude Code** and **Codex**, what we
-deliberately rejected, and where we are unsure. It is also where the deleted DI container
-lives — with the measurements that justified removing it.
+A design comparison, with sources: what we took from **DeepSeek Harness**, **pi**,
+**Claude Code** and **Codex**, what we chose not to take, and where we are still unsure.
+It is also where the deleted DI container lives, with the measurements behind it.
 
 **→ [docs/design-comparison.md](docs/design-comparison.md)**
 
 ---
 
-## 🧩 How it is built
+## How it is built
 
 Three packages, one direction of dependency. The core knows nothing about HTTP; the GUI only reads the event stream.
 
@@ -219,7 +219,7 @@ flowchart TB
 
 ---
 
-## 🤖 Multi-agent
+## Multi-agent
 
 Sub-agents are isolated on purpose: a sub-agent starts with a fresh context, receives only the prompt you give it, and returns only its final answer. The parent never inherits its noise.
 
@@ -245,7 +245,7 @@ Limits are enforced by the runner, not by convention: `--max-depth`, `--max-conc
 
 ---
 
-## 🔌 MCP
+## MCP
 
 MCP servers are **read from config at boot** and their tools merged into the registry.
 That is the whole integration: no container, no lifecycle manager, and nothing in the
@@ -278,7 +278,7 @@ we wrote down for bringing back the plugin container — see
 
 ---
 
-## 🧩 ACP — editors drive *us*
+## ACP: editors drive us
 
 The mirror image of MCP: `micro-harness acp` speaks the **Agent Client Protocol** on
 stdio, so an editor (Zed, or anything with an ACP client) can drive this harness
@@ -306,7 +306,7 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 
 ---
 
-## 🖥 The GUI
+## The GUI
 
 | area | what it does |
 |---|---|
@@ -332,7 +332,7 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 
 ---
 
-## 📐 Design principles
+## Design principles
 
 - **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
@@ -364,7 +364,7 @@ same cost but leaves a higher peak (the recap itself occupies tokens).
 
 ---
 
-## 📁 Repository layout
+## Repository layout
 
 ```
 micro-harness/
@@ -384,7 +384,7 @@ micro-harness/
 
 ---
 
-## 🗺 Roadmap
+## Roadmap
 
 - [x] **P0 · Foundation** — monorepo, Bun toolchain, CI
 - [x] ~~**P1 · Kernel** — services/DI, lifecycle, scopes, event bus~~ **reverted**: built (396 lines, 10 tests), measured as having 0 runtime consumers, and removed in favour of compile-time seams. See [the comparison](docs/design-comparison.md).
@@ -401,11 +401,11 @@ micro-harness/
 
 ---
 
-## 🧪 Development
+## Development
 
 ```bash
 bun install
-bun test              # 153 tests across 21 files
+bun test              # 155 tests across 21 files
 bun run typecheck     # tsc --noEmit, clean
 bun run verify        # scripted feature checks (no network)
 bun run eval:mock      # eval suite against a scripted provider — CI-safe, no network
@@ -416,7 +416,7 @@ The suite covers the event loop and its streaming, parallel tool calls and appro
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's remaining item (**P10 · Documentation site**; npm publish is skipped by choice) and anything marked *good first issue* are good entry points.
 
@@ -427,7 +427,7 @@ Two things that make a PR easy to accept:
 
 ---
 
-## 📄 License
+## License
 
 [MIT](LICENSE).
 
@@ -435,7 +435,7 @@ The seed at the `seed-v1` tag grew out of [PiStudio](https://github.com/AlexZhan
 
 ---
 
-## ⭐ Star history
+## Star history
 
 <a href="https://star-history.com/#AlexZhangUPUPUP/micro-harness&Date">
   <img src="https://api.star-history.com/svg?repos=AlexZhangUPUPUP/micro-harness&type=Date" alt="Star history" width="640">
