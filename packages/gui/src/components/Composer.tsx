@@ -206,10 +206,40 @@ export function Composer({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onPaste={(e) => {
-                const pasted = e.clipboardData?.files
-                if (pasted?.length) {
+                const dt = e.clipboardData
+                if (!dt) return
+                if (dt.files?.length) {
                   e.preventDefault()
-                  addFiles(pasted)
+                  addFiles(dt.files)
+                  return
+                }
+                // Some sources only put an image in the text flavours (a data URL
+                // or a `{data, mimeType}` JSON); attach it instead of pasting the
+                // base64 as the prompt.
+                const html = dt.getData('text/html') || ''
+                const text = dt.getData('text/plain') || ''
+                const m =
+                  /data:(image\/[\w.+-]+);base64,([A-Za-z0-9+/=\s]+)/i.exec(html) ??
+                  /data:(image\/[\w.+-]+);base64,([A-Za-z0-9+/=\s]+)/i.exec(text)
+                let data: string | null = null
+                let mime: string | null = null
+                if (m) {
+                  mime = m[1] ?? null
+                  data = (m[2] ?? '').replace(/\s+/g, '')
+                } else {
+                  try {
+                    const j = JSON.parse(text) as { data?: unknown; mimeType?: unknown }
+                    if (typeof j.data === 'string' && typeof j.mimeType === 'string' && j.mimeType.startsWith('image/')) {
+                      mime = j.mimeType
+                      data = j.data.replace(/\s+/g, '')
+                    }
+                  } catch {
+                    /* ordinary text paste */
+                  }
+                }
+                if (data && mime) {
+                  e.preventDefault()
+                  setImages?.([...images, { mimeType: mime, data }])
                 }
               }}
               onKeyDown={(e) => {
