@@ -480,6 +480,18 @@ export function createServer(options: ServerOptions): HarnessServer {
         }
         return json({ session: fork(id, body.keep) }, 201)
       }
+      if (action === 'model') {
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        let body: { model?: string } = {}
+        try {
+          body = (await req.json()) as typeof body
+        } catch {
+          /* empty */
+        }
+        if (!body.model) return json({ error: 'model is required' }, 400)
+        return json({ session: store.update(id, { model: body.model }) })
+      }
       // --- isolation / merge queue (P7) ---
       if (action === 'agents') {
         const wts = agentWorktrees(id)

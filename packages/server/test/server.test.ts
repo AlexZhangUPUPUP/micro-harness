@@ -767,3 +767,40 @@ test('permission presets gate the built-in tool set', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('a session can switch its model for the next run', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-model-'))
+  const store = new SessionStore(dir)
+  const { provider } = echoProvider()
+  const srv = createServer({
+    store,
+    provider,
+    model: 'model-a',
+    cwd: dir,
+    requireAuth: false,
+    models: ['model-a', 'model-b'],
+  })
+  try {
+    const list = (await (await fetch(`${srv.url}/api/models`)).json()) as { models: string[]; default: string }
+    expect(list.models).toEqual(['model-a', 'model-b'])
+
+    const created = await fetch(`${srv.url}/api/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hi' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await srv.idle(session.id)
+
+    const res = await fetch(`${srv.url}/api/sessions/${session.id}/model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'model-b' }),
+    })
+    expect(res.status).toBe(200)
+    expect(store.require(session.id).model).toBe('model-b')
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

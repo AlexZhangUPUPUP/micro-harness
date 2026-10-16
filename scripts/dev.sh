@@ -38,7 +38,7 @@ SERVER_PORT="${MICRO_PORT:-8787}"
 GUI_PORT="${MICRO_GUI_PORT:-5273}"
 MODEL="${MICRO_MODEL:-deepseek-chat}"
 ISOLATE="${MICRO_ISOLATE:-0}"
-MODELS="${MICRO_MODELS:-}"
+MODELS="${MICRO_MODELS:-deepseek-chat,deepseek-reasoner}"
 DATA_DIR="${MICRO_DATA_DIR:-$HOME/.micro-harness}"
 CWD="${MICRO_CWD:-$CALLER_PWD}"
 # Permission preset for new sessions: read-only | workspace | full | auto-review.
