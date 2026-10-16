@@ -85,13 +85,13 @@ So we kept the **seams**, deleted the **container**, and wrote the revival condi
 
 ### We let the core own the loop
 
-"No privileged core" is self-consistent for a runtime that must carry arbitrary models, loops and UIs. Our loop is 268 lines, and it is precisely the file we want read. Turning it into a plugin would hide it. That is a stated preference, not a verdict.
+"No privileged core" is self-consistent for a runtime that must carry arbitrary models, loops and UIs. Our loop is 344 lines, and it is precisely the file we want read. Turning it into a plugin would hide it. That is a stated preference, not a verdict.
 
 ---
 
 ## Where we think we differ
 
-1. **A readable seed, and a platform provably grown from it.** `seed-v1` is a tag on this repo: 17 files, zero dependencies, no build step, `node src/cli.ts "…"` runs. `main` is its direct descendant (the seed's files moved into `packages/core` at P0, still the same four modules).
+1. **A readable seed, and a platform provably grown from it.** `seed-v1` is a tag on this repo: 17 files, zero dependencies, no build step, `node src/cli.ts "…"` runs. `main` is its direct descendant (the seed's files moved into `packages/core` at P0, still the same six source files).
 
 2. **"Model-visible means recorded" as something you can open, not a sentence in a doc.** Every model call emits `model.request` with the exact payload — system prompt, tool schemas, the trimmed message array, and the harness's own token estimate. It is deliberately kept out of the search index so context dumps don't pollute `/api/search`; the GUI's **Inspector** renders it turn by turn. Its twin is replay: the whole view can be rebuilt from any slice of the event stream.
 
