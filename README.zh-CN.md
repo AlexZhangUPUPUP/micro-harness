@@ -71,29 +71,23 @@ flowchart LR
 
 ## 📸 效果预览
 
-### 💬 对话——流式、Markdown、实时用量
+**💬 对话** —— Markdown 渲染与一键复制、实时 token/成本、会话按天分组，English / 简体中文 原地切换。
 
-> Markdown 渲染、代码块语法高亮与一键复制；实时 token/成本配迷你折线；会话按天分组。English 与 简体中文 用 `中 / EN` 按钮原地切换。
+| | |
+|---|---|
+| <img alt="对话" src="docs/gui.png" width="420"> | <img alt="简体中文界面" src="docs/gui-zh.png" width="420"> |
 
-<img alt="对话" src="docs/gui.png" width="640">
+**🤝 隔离与逐 hunk 审阅** —— `MICRO_ISOLATE=1` 下每个子 agent 各用一个 git worktree；回来的 diff 逐 hunk 应用，上下文已漂移的 hunk 会被报告出来，绝不悄悄误应用。
 
-<img alt="简体中文界面" src="docs/gui-zh.png" width="640">
+| | |
+|---|---|
+| <img alt="合并队列" src="docs/gui-changes.png" width="420"> | <img alt="逐 hunk 审阅" src="docs/gui-hunks.png" width="420"> |
 
-### 🤝 隔离与逐 hunk 审阅
+**🔍 轨迹、回放与检视** —— 原始事件流配回放拖动条，可从任意切片重建对话；检视面板展示每次调用实际发出的系统提示词、工具 schema 与消息。
 
-> 打开 `MICRO_ISOLATE=1` 后，每个子 agent 在自己的 git worktree 里干活，并行不会打架。diff 回来时逐 hunk 审阅，只应用你要的部分；上下文已经漂移的 hunk 会被报告出来，而不是被悄悄错误应用。
-
-<img alt="合并队列" src="docs/gui-changes.png" width="640">
-
-<img alt="逐 hunk 审阅" src="docs/gui-hunks.png" width="640">
-
-### 🔍 轨迹、回放与检视
-
-> 原始事件流带分类过滤和回放拖动条，可以从任意切片重建对话；检视面板则展示每一次调用实际发出的系统提示词、工具 schema 和消息。
-
-<img alt="轨迹面板" src="docs/gui-trace.png" width="640">
-
-<img alt="检视面板" src="docs/gui-inspector.png" width="640">
+| | |
+|---|---|
+| <img alt="轨迹面板" src="docs/gui-trace.png" width="420"> | <img alt="检视面板" src="docs/gui-inspector.png" width="420"> |
 
 ---
 

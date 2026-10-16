@@ -71,29 +71,23 @@ flowchart LR
 
 ## 📸 Preview
 
-### 💬 Chat — streaming, Markdown, live usage
+**💬 Chat** — streaming Markdown with copy buttons, live token/cost, day-grouped sessions, and English / 简体中文 switched in place.
 
-> Markdown with syntax-highlighted code and copy buttons; live token/cost next to a sparkline; sessions grouped by day. English and 简体中文 switch in place with the `中 / EN` button.
+| | |
+|---|---|
+| <img alt="Chat" src="docs/gui.png" width="420"> | <img alt="Simplified Chinese" src="docs/gui-zh.png" width="420"> |
 
-<img alt="Chat" src="docs/gui.png" width="640">
+**🤝 Isolation & hunk-level review** — with `MICRO_ISOLATE=1` every sub-agent gets its own git worktree, and a returned diff is applied hunk by hunk; a hunk whose context has drifted is reported, never mis-applied.
 
-<img alt="Simplified Chinese" src="docs/gui-zh.png" width="640">
+| | |
+|---|---|
+| <img alt="Merge queue" src="docs/gui-changes.png" width="420"> | <img alt="Hunk-level review" src="docs/gui-hunks.png" width="420"> |
 
-### 🤝 Isolation and hunk-level review
+**🔍 Trace, replay & Inspector** — the raw event stream with a replay scrubber that rebuilds the conversation from any slice, plus the exact system prompt, tool schemas and messages sent on each turn.
 
-> With `MICRO_ISOLATE=1` every sub-agent works in its own git worktree, so parallel agents never collide. When a diff comes back you review it hunk by hunk and apply exactly the parts you want; a hunk whose context has drifted is reported instead of silently mis-applied.
-
-<img alt="Merge queue" src="docs/gui-changes.png" width="640">
-
-<img alt="Hunk-level review" src="docs/gui-hunks.png" width="640">
-
-### 🔍 Trace, replay and the Inspector
-
-> The raw event stream with category filters and a replay scrubber that rebuilds the conversation from any slice — and the Inspector, which shows the exact system prompt, tool schemas and messages that went out on each turn.
-
-<img alt="Trace panel" src="docs/gui-trace.png" width="640">
-
-<img alt="Inspector" src="docs/gui-inspector.png" width="640">
+| | |
+|---|---|
+| <img alt="Trace panel" src="docs/gui-trace.png" width="420"> | <img alt="Inspector" src="docs/gui-inspector.png" width="420"> |
 
 ---
 
