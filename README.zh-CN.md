@@ -5,7 +5,7 @@
   <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/ZH-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
 </p>
 
-<p align="center"><strong>一个基于插件的编码 agent 平台 —— 自带 agent 循环、多 agent 编排、HTTP/SSE 服务端、CLI 与 Web GUI。</strong></p>
+<p align="center"><strong>一个建立在编译期接缝上的编码 agent 平台 —— 自带 agent 循环、多 agent 编排、HTTP/SSE 服务端、CLI 与 Web GUI。</strong></p>
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
@@ -38,7 +38,6 @@
 - [开发](#开发)
 - [参与贡献](#参与贡献)
 - [许可](#许可)
-- [Star 历史](#star-历史)
 
 ---
 
@@ -74,15 +73,9 @@ flowchart LR
 
 ### 对话——流式、Markdown、实时用量
 
-> 助手消息按 Markdown 渲染，代码块带语法高亮和一键复制。实时用量以滚动数字 + 迷你折线展示，会话按天分组，`⌘K` 打开命令面板并对所有已保存会话做全文检索。
+> Markdown 渲染、代码块语法高亮与一键复制；实时 token/成本配迷你折线；会话按天分组。English 与 简体中文 用 `中 / EN` 按钮原地切换。
 
 ![对话](docs/gui.png)
-
-![命令面板](docs/gui-palette.png)
-
-### 中英双语
-
-> English 与 简体中文，用 `中 / EN` 按钮原地切换（首次访问跟随浏览器语言）。
 
 ![简体中文界面](docs/gui-zh.png)
 
@@ -312,7 +305,8 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 | **改动** | 每个 agent 的 diff、**逐 hunk 接受/拒绝**、合并回主干，以及整合全部合并队列 |
 | **检视** | 每一次模型调用实际发出的载荷：系统提示词、工具 schema、消息、token 估算 |
 | **命令面板** | `⌘K` —— 应用动作 + 所有已保存会话的全文检索 |
-| **附件** | 往输入框里粘贴或拖入图片，它会作为多模态内容部分一起发出去 |
+| **附件** | 往输入框里粘贴 / 拖入 / 点击上传文件：图片作为多模态内容部分发出，文本文件随 prompt 一起发 |
+| **权限** | 四档预设 —— 仅可查看 / 工作区内修改 / 完全权限 / 自动审查 —— 授予 shell 之前会先要你确认；`--approval` 仍负责逐次调用是否征求批准 |
 | **审批** | 服务端以 `--approval suggest`/`auto-edit` 运行时，改文件的工具调用会阻塞，并在对话里出现「允许 / 拒绝」卡片 |
 | **会话树** | 侧栏可切到树形模式，分叉会话嵌在其来源之下 |
 | **输入框** | 由 `/api/models` 驱动的模型选择器；一次运行在你没看这个标签页时结束会弹桌面通知 |
@@ -332,7 +326,7 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 - **种子零依赖，平台不是。** `seed-v1` 只用 Node 内置模块。当前分支是 Bun 单体仓库——Bun 做工具链、`bun:sqlite` 做索引、React + Vite + Tailwind 做 GUI——不过根 `package.json` 依然没有声明任何运行时依赖。
 - **错误也是数据。** 工具失败返回 `{ output, isError: true }`，作为一条普通的 `tool` 消息追加进去，模型看得到失败原因并可以恢复。这正是循环能稳住的关键。
 - **压缩是策略，不是常量。** 默认确定性地丢中间；`--compact=summarize` 把被丢掉的轮次换成一段由模型写的摘要（这次调用失败就退回丢弃）。`--max-cost` 让一次运行在无限花钱之前停下。
-**实测，带消融对照。** 一次真实会话（DeepSeek，31 次模型调用），刺激设计成躲不掉：第 1 轮埋下
+- **实测，带消融对照。** 一次真实会话（DeepSeek，31 次模型调用），刺激设计成躲不掉：第 1 轮埋下
 一条磁盘上不存在的不可猜规则（`每个文件都必须以 // PROJECT-CHECK-7Q4 结尾`），随后 6 轮各往
 故意设小的窗口（5000 tokens）里灌约 8KB 工具输出，最后一轮要求建一个必须遵守该规则的文件。
 判分是二值的——标记在文件里或不在：
@@ -368,7 +362,7 @@ micro-harness/
 │   ├── dev.sh                   # 一条命令：服务端 + GUI + key 解析
 │   ├── verify-features.ts       # 脚本化端到端功能自检（不走网络）
 │   └── auto-run.sh              # 无人值守驱动
-├── docs/                        # 本 README 用到的截图
+├── docs/                        # 截图 + 设计笔记
 ├── ARCHITECTURE.md              # 设计基线
 ├── ROADMAP.md                   # P0–P10 规划
 └── PROGRESS.md                  # 构建日志
@@ -388,8 +382,7 @@ micro-harness/
 - [x] **P7 · 隔离** —— 每个 agent 一个 git worktree、合并回主干、合并队列
 - [x] **P8 · 互操作** —— MCP client、ACP server
 - [x] **P9 · 上下文与经济性** —— 压缩策略、cache-prefix 复用、成本计量
-- [x] **P10 · 评测与发布** —— 评测集（26 个任务、金标集 + 裁判校准）、`bun build --compile`、`scripts/install.sh`
-- [ ] **P10 · 文档站** —— 托管文档站（npm 发布经决定跳过）
+- [x] **P10 · 评测与发布** —— 评测集（26 个任务、金标集 + 裁判校准）、`bun build --compile`、`scripts/install.sh`；文档站待做，npm 发布经决定跳过
 
 ---
 
@@ -424,11 +417,3 @@ bun run eval --judge   # 同一套任务 + 对开放式任务引入 LLM 裁判
 [MIT](LICENSE)。
 
 `seed-v1` 上的种子源自 [PiStudio](https://github.com/AlexZhangUPUPUP/PiStudio)；`packages/core/src` 里 worktree 与合并队列的移植仍带着这层血脉。
-
----
-
-## Star 历史
-
-<a href="https://star-history.com/#AlexZhangUPUPUP/micro-harness&Date">
-  <img src="https://api.star-history.com/svg?repos=AlexZhangUPUPUP/micro-harness&type=Date" alt="Star history" width="640">
-</a>

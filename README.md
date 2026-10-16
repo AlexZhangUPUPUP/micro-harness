@@ -5,7 +5,7 @@
   <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/ZH-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
 </p>
 
-<p align="center"><strong>A plugin-based coding-agent platform — its own agent loop, multi-agent orchestration, an HTTP/SSE server, a CLI and a web GUI.</strong></p>
+<p align="center"><strong>A coding-agent platform built on compile-time seams — its own agent loop, multi-agent orchestration, an HTTP/SSE server, a CLI and a web GUI.</strong></p>
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
@@ -38,7 +38,6 @@
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
-- [Star history](#star-history)
 
 ---
 
@@ -74,15 +73,9 @@ flowchart LR
 
 ### Chat — streaming, Markdown, live usage
 
-> Assistant messages render as Markdown with syntax-highlighted code and a copy button. Live usage rolls up next to a sparkline, sessions are grouped by day, and `⌘K` opens a command palette that also full-text searches every saved session.
+> Markdown with syntax-highlighted code and copy buttons; live token/cost next to a sparkline; sessions grouped by day. English and 简体中文 switch in place with the `中 / EN` button.
 
 ![Chat](docs/gui.png)
-
-![Command palette](docs/gui-palette.png)
-
-### Bilingual
-
-> English and 简体中文, switched in place with the `中 / EN` button (it follows the browser language on first visit).
 
 ![Simplified Chinese](docs/gui-zh.png)
 
@@ -317,7 +310,8 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 | **Changes** | per-agent diff, **hunk-level accept/reject**, promote, and an integrate-all merge queue |
 | **Inspector** | the exact payload of every model call: system prompt, tool schemas, messages, token estimate |
 | **Palette** | `⌘K` — app actions plus full-text search across every saved session |
-| **Attachments** | paste or drop an image into the composer — it travels as a multimodal content part |
+| **Attachments** | paste, drop or click-upload files into the composer: images travel as multimodal content parts, text files ride along with the prompt |
+| **Permissions** | four presets — read-only / workspace / full / auto-review — with a confirmation before granting shell access; `--approval` still controls per-call prompts |
 | **Approvals** | when the server runs `--approval suggest`/`auto-edit`, a mutating tool call blocks and the transcript shows an Allow / Deny card |
 | **Session tree** | flip the sidebar to tree mode to see forks nested under their origin |
 | **Composer** | model picker fed by `/api/models`, desktop notification when a run finishes in a background tab |
@@ -337,7 +331,7 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 - **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
 - **Compaction is a strategy, not a constant.** The default drops the middle deterministically; `--compact=summarize` replaces the dropped turns with one model-written recap (and falls back to dropping if that call fails). `--max-cost` stops a run before it can spend without limit.
-**Measured, with an ablation.** One real session (DeepSeek, 31 model calls) designed so
+- **Measured, with an ablation.** One real session (DeepSeek, 31 model calls) designed so
 the stimulus cannot be dodged: turn 1 plants an unguessable rule that exists nowhere on
 disk (`every file must end with // PROJECT-CHECK-7Q4`), then six turns dump ~8 KB of tool
 output each into a deliberately small window (5000 tokens), and a final turn asks for a
@@ -376,7 +370,7 @@ micro-harness/
 │   ├── dev.sh                   # one command: server + GUI + key resolution
 │   ├── verify-features.ts       # scripted end-to-end feature checks (no network)
 │   └── auto-run.sh              # unattended driver
-├── docs/                        # screenshots used by this README
+├── docs/                        # screenshots + design notes
 ├── ARCHITECTURE.md              # design baseline (zh)
 ├── ROADMAP.md                   # P0–P10 plan (zh)
 └── PROGRESS.md                  # build log
@@ -396,8 +390,7 @@ micro-harness/
 - [x] **P7 · Isolation** — git worktrees per agent, promote, merge queue
 - [x] **P8 · Interop** — MCP client, ACP server
 - [x] **P9 · Context economics** — compaction strategies, cache-prefix reuse, cost metering
-- [x] **P10 · Evaluation & release** — eval suite (26 tasks, golden set + judge calibration), `bun build --compile`, `scripts/install.sh`
-- [ ] **P10 · Documentation site** — a hosted docs site (npm publish skipped by choice)
+- [x] **P10 · Evaluation & release** — eval suite (26 tasks, golden set + judge calibration), `bun build --compile`, `scripts/install.sh`; docs site pending, npm publish skipped by choice
 
 ---
 
@@ -433,10 +426,3 @@ Two things that make a PR easy to accept:
 
 The seed at the `seed-v1` tag grew out of [PiStudio](https://github.com/AlexZhangUPUPUP/PiStudio); the worktree and merge-queue ports in `packages/core/src` still carry that lineage.
 
----
-
-## Star history
-
-<a href="https://star-history.com/#AlexZhangUPUPUP/micro-harness&Date">
-  <img src="https://api.star-history.com/svg?repos=AlexZhangUPUPUP/micro-harness&type=Date" alt="Star history" width="640">
-</a>
