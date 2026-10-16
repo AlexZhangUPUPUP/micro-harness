@@ -16,9 +16,6 @@
       "bin": {
         "micro-harness": "./src/cli.ts",
       },
-      "dependencies": {
-        "@micro-harness/kernel": "workspace:*",
-      },
     },
     "packages/gui": {
       "name": "@micro-harness/gui",
@@ -38,10 +35,6 @@
         "vite": "^7.1.0",
       },
     },
-    "packages/kernel": {
-      "name": "@micro-harness/kernel",
-      "version": "0.1.0",
-    },
     "packages/server": {
       "name": "@micro-harness/server",
       "version": "0.1.0",
@@ -50,7 +43,6 @@
       },
       "dependencies": {
         "@micro-harness/core": "workspace:*",
-        "@micro-harness/kernel": "workspace:*",
       },
     },
   },
@@ -160,8 +152,6 @@
     "@micro-harness/core": ["@micro-harness/core@workspace:packages/core"],
 
     "@micro-harness/gui": ["@micro-harness/gui@workspace:packages/gui"],
-
-    "@micro-harness/kernel": ["@micro-harness/kernel@workspace:packages/kernel"],
 
     "@micro-harness/server": ["@micro-harness/server@workspace:packages/server"],
 

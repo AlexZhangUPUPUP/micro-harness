@@ -10,7 +10,6 @@
     "micro-harness-server": "./src/main.ts"
   },
   "dependencies": {
-    "@micro-harness/core": "workspace:*",
-    "@micro-harness/kernel": "workspace:*"
+    "@micro-harness/core": "workspace:*"
   }
 }
