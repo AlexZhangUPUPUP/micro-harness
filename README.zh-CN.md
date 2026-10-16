@@ -21,27 +21,27 @@
 
 ---
 
-## 目录
+## 📑 目录
 
-- [这是什么](#这是什么)
-- [效果预览](#效果预览)
-- [快速开始](#快速开始)
-- [与其他 harness 的区别](#与其他-harness-的区别)
-- [架构](#架构)
-- [多 agent](#多-agent)
-- [MCP](#mcp)
-- [ACP：让编辑器驱动我们](#acp让编辑器驱动我们)
-- [GUI](#gui)
-- [设计原则](#设计原则)
-- [仓库结构](#仓库结构)
-- [路线图](#路线图)
-- [开发](#开发)
-- [参与贡献](#参与贡献)
-- [许可](#许可)
+- [✨ 这是什么](#-这是什么)
+- [📸 效果预览](#-效果预览)
+- [🚀 快速开始](#-快速开始)
+- [🆚 与其他 harness 的区别](#-与其他-harness-的区别)
+- [🧩 架构](#-架构)
+- [🤖 多 agent](#-多-agent)
+- [🔌 MCP](#-mcp)
+- [🧩 ACP：让编辑器驱动我们](#-acp让编辑器驱动我们)
+- [🖥️ GUI](#-gui)
+- [📐 设计原则](#-设计原则)
+- [📁 仓库结构](#-仓库结构)
+- [🗺️ 路线图](#-路线图)
+- [🧪 开发](#-开发)
+- [🙌 参与贡献](#-参与贡献)
+- [📄 许可](#-许可)
 
 ---
 
-## 这是什么
+## ✨ 这是什么
 
 **agent harness**（agent 运行时）是把 LLM 变成 agent 的那层：它跑循环、执行工具、管理上下文窗口、跟模型对话。很多被归功于「模型」的行为，其实发生在这里。
 
@@ -69,35 +69,35 @@ flowchart LR
 
 ---
 
-## 效果预览
+## 📸 效果预览
 
-### 对话——流式、Markdown、实时用量
+### 💬 对话——流式、Markdown、实时用量
 
 > Markdown 渲染、代码块语法高亮与一键复制；实时 token/成本配迷你折线；会话按天分组。English 与 简体中文 用 `中 / EN` 按钮原地切换。
 
-![对话](docs/gui.png)
+<img alt="对话" src="docs/gui.png" width="640">
 
-![简体中文界面](docs/gui-zh.png)
+<img alt="简体中文界面" src="docs/gui-zh.png" width="640">
 
-### 隔离与逐 hunk 审阅
+### 🤝 隔离与逐 hunk 审阅
 
 > 打开 `MICRO_ISOLATE=1` 后，每个子 agent 在自己的 git worktree 里干活，并行不会打架。diff 回来时逐 hunk 审阅，只应用你要的部分；上下文已经漂移的 hunk 会被报告出来，而不是被悄悄错误应用。
 
-![合并队列](docs/gui-changes.png)
+<img alt="合并队列" src="docs/gui-changes.png" width="640">
 
-![逐 hunk 审阅](docs/gui-hunks.png)
+<img alt="逐 hunk 审阅" src="docs/gui-hunks.png" width="640">
 
-### 轨迹、回放与检视
+### 🔍 轨迹、回放与检视
 
 > 原始事件流带分类过滤和回放拖动条，可以从任意切片重建对话；检视面板则展示每一次调用实际发出的系统提示词、工具 schema 和消息。
 
-![轨迹面板](docs/gui-trace.png)
+<img alt="轨迹面板" src="docs/gui-trace.png" width="640">
 
-![检视面板](docs/gui-inspector.png)
+<img alt="检视面板" src="docs/gui-inspector.png" width="640">
 
 ---
 
-## 快速开始
+## 🚀 快速开始
 
 **环境要求：** [Bun](https://bun.sh) ≥ 1.1（平台），或者只要 Node ≥ 22.18（[`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) 那份种子）。任意 OpenAI 兼容端点都行。
 
@@ -170,7 +170,7 @@ bun run dev                      # 两进程（server + Vite preview）→ http:
 
 ---
 
-## 与其他 harness 的区别
+## 🆚 与其他 harness 的区别
 
 一份带出处的设计对比：我们从 **DeepSeek Harness**、**pi**、**Claude Code**、**Codex**
 分别借鉴了什么、有意没有采用什么、以及仍未确定的地方。被删掉的那个 DI 容器也在那里，
@@ -180,7 +180,7 @@ bun run dev                      # 两进程（server + Vite preview）→ http:
 
 ---
 
-## 架构
+## 🧩 架构
 
 三个包，依赖单向。core 不知道 HTTP 是什么，GUI 只读事件流。
 
@@ -212,7 +212,7 @@ flowchart TB
 
 ---
 
-## 多 agent
+## 🤖 多 agent
 
 子 agent 是刻意隔离的：它以全新的上下文启动，只拿到你给它的提示词，只返回最终答案。父 agent 不会继承它的噪声。
 
@@ -238,7 +238,7 @@ flowchart LR
 
 ---
 
-## MCP
+## 🔌 MCP
 
 MCP server 是**启动时从配置读进来**的，工具合并进注册表。整个集成就这么多：没有容器、
 没有生命周期管理器，循环、事件契约、GUI 都不知道 MCP 的存在——一个 MCP 工具就只是一个
@@ -267,7 +267,7 @@ HTTP**（JSON 或一次性 SSE 回复）；工具按 `<server>__<tool>` 加命�
 
 ---
 
-## ACP：让编辑器驱动我们
+## 🧩 ACP：让编辑器驱动我们
 
 MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**，于是编辑器
 （Zed，或任何带 ACP 客户端的工具）可以直接驱动这个 harness。协议版本 1，JSON-RPC，
@@ -294,7 +294,7 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 
 ---
 
-## GUI
+## 🖥️ GUI
 
 | 区域 | 它能做什么 |
 |---|---|
@@ -321,7 +321,7 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 
 ---
 
-## 设计原则
+## 📐 设计原则
 
 - **种子零依赖，平台不是。** `seed-v1` 只用 Node 内置模块。当前分支是 Bun 单体仓库——Bun 做工具链、`bun:sqlite` 做索引、React + Vite + Tailwind 做 GUI——不过根 `package.json` 依然没有声明任何运行时依赖。
 - **错误也是数据。** 工具失败返回 `{ output, isError: true }`，作为一条普通的 `tool` 消息追加进去，模型看得到失败原因并可以恢复。这正是循环能稳住的关键。
@@ -350,7 +350,7 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 
 ---
 
-## 仓库结构
+## 📁 仓库结构
 
 ```
 micro-harness/
@@ -370,7 +370,7 @@ micro-harness/
 
 ---
 
-## 路线图
+## 🗺️ 路线图
 
 - [x] **P0 · 基座** —— monorepo、Bun 工具链、CI
 - [x] ~~**P1 · 内核** —— 服务/DI、生命周期、作用域、事件总线~~ **已回退**：做出来了（396 行 + 10 个测试），量出**0** 个运行时消费者，于是删除，改用编译期接缝。见[对比文档](docs/design-comparison.zh-CN.md)。
@@ -386,7 +386,7 @@ micro-harness/
 
 ---
 
-## 开发
+## 🧪 开发
 
 ```bash
 bun install
@@ -401,7 +401,7 @@ bun run eval --judge   # 同一套任务 + 对开放式任务引入 LLM 裁判
 
 ---
 
-## 参与贡献
+## 🙌 参与贡献
 
 欢迎提 issue 和 PR。如果想找切入点，路线图里剩余的一项（**P10 · 文档站**；npm 发布经决定跳过）以及标了 *good first issue* 的都合适。
 
@@ -412,7 +412,7 @@ bun run eval --judge   # 同一套任务 + 对开放式任务引入 LLM 裁判
 
 ---
 
-## 许可
+## 📄 许可
 
 [MIT](LICENSE)。
 

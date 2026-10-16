@@ -21,27 +21,27 @@
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-- [What is this](#what-is-this)
-- [Preview](#preview)
-- [Quick start](#quick-start)
-- [How it differs from other harnesses](#how-it-differs-from-other-harnesses)
-- [How it is built](#how-it-is-built)
-- [Multi-agent](#multi-agent)
-- [MCP](#mcp)
-- [ACP: editors drive us](#acp-editors-drive-us)
-- [The GUI](#the-gui)
-- [Design principles](#design-principles)
-- [Repository layout](#repository-layout)
-- [Roadmap](#roadmap)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+- [✨ What is this](#-what-is-this)
+- [📸 Preview](#-preview)
+- [🚀 Quick start](#-quick-start)
+- [🆚 How it differs from other harnesses](#-how-it-differs-from-other-harnesses)
+- [🧩 How it is built](#-how-it-is-built)
+- [🤖 Multi-agent](#-multi-agent)
+- [🔌 MCP](#-mcp)
+- [🧩 ACP: editors drive us](#-acp-editors-drive-us)
+- [🖥️ The GUI](#-the-gui)
+- [📐 Design principles](#-design-principles)
+- [📁 Repository layout](#-repository-layout)
+- [🗺️ Roadmap](#-roadmap)
+- [🧪 Development](#-development)
+- [🙌 Contributing](#-contributing)
+- [📄 License](#-license)
 
 ---
 
-## What is this
+## ✨ What is this
 
 An **agent harness** is the runtime that turns an LLM into an agent: it runs the loop, executes tools, manages the context window and talks to the model. Most of the behaviour people attribute to "the model" actually lives here.
 
@@ -69,35 +69,35 @@ flowchart LR
 
 ---
 
-## Preview
+## 📸 Preview
 
-### Chat — streaming, Markdown, live usage
+### 💬 Chat — streaming, Markdown, live usage
 
 > Markdown with syntax-highlighted code and copy buttons; live token/cost next to a sparkline; sessions grouped by day. English and 简体中文 switch in place with the `中 / EN` button.
 
-![Chat](docs/gui.png)
+<img alt="Chat" src="docs/gui.png" width="640">
 
-![Simplified Chinese](docs/gui-zh.png)
+<img alt="Simplified Chinese" src="docs/gui-zh.png" width="640">
 
-### Isolation and hunk-level review
+### 🤝 Isolation and hunk-level review
 
 > With `MICRO_ISOLATE=1` every sub-agent works in its own git worktree, so parallel agents never collide. When a diff comes back you review it hunk by hunk and apply exactly the parts you want; a hunk whose context has drifted is reported instead of silently mis-applied.
 
-![Merge queue](docs/gui-changes.png)
+<img alt="Merge queue" src="docs/gui-changes.png" width="640">
 
-![Hunk-level review](docs/gui-hunks.png)
+<img alt="Hunk-level review" src="docs/gui-hunks.png" width="640">
 
-### Trace, replay and the Inspector
+### 🔍 Trace, replay and the Inspector
 
 > The raw event stream with category filters and a replay scrubber that rebuilds the conversation from any slice — and the Inspector, which shows the exact system prompt, tool schemas and messages that went out on each turn.
 
-![Trace panel](docs/gui-trace.png)
+<img alt="Trace panel" src="docs/gui-trace.png" width="640">
 
-![Inspector](docs/gui-inspector.png)
+<img alt="Inspector" src="docs/gui-inspector.png" width="640">
 
 ---
 
-## Quick start
+## 🚀 Quick start
 
 **Requirements:** [Bun](https://bun.sh) ≥ 1.1 (the platform), or just Node ≥ 22.18 (the [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) tag). Any OpenAI-compatible endpoint works.
 
@@ -170,7 +170,7 @@ Run either from **any folder**: the agent works in the folder you launch from, a
 
 ---
 
-## How it differs from other harnesses
+## 🆚 How it differs from other harnesses
 
 A design comparison, with sources: what we took from **DeepSeek Harness**, **pi**,
 **Claude Code** and **Codex**, what we chose not to take, and where we are still unsure.
@@ -180,7 +180,7 @@ It is also where the deleted DI container lives, with the measurements behind it
 
 ---
 
-## How it is built
+## 🧩 How it is built
 
 Three packages, one direction of dependency. The core knows nothing about HTTP; the GUI only reads the event stream.
 
@@ -212,7 +212,7 @@ flowchart TB
 
 ---
 
-## Multi-agent
+## 🤖 Multi-agent
 
 Sub-agents are isolated on purpose: a sub-agent starts with a fresh context, receives only the prompt you give it, and returns only its final answer. The parent never inherits its noise.
 
@@ -238,7 +238,7 @@ Limits are enforced by the runner, not by convention: `--max-depth`, `--max-conc
 
 ---
 
-## MCP
+## 🔌 MCP
 
 MCP servers are **read from config at boot** and their tools merged into the registry.
 That is the whole integration: no container, no lifecycle manager, and nothing in the
@@ -271,7 +271,7 @@ we wrote down for bringing back the plugin container — see
 
 ---
 
-## ACP: editors drive us
+## 🧩 ACP: editors drive us
 
 The mirror image of MCP: `micro-harness acp` speaks the **Agent Client Protocol** on
 stdio, so an editor (Zed, or anything with an ACP client) can drive this harness
@@ -299,7 +299,7 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 
 ---
 
-## The GUI
+## 🖥️ The GUI
 
 | area | what it does |
 |---|---|
@@ -326,7 +326,7 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 
 ---
 
-## Design principles
+## 📐 Design principles
 
 - **The seed is dependency-free; the platform is not.** `seed-v1` uses only Node built-ins. This branch is a Bun monorepo — Bun for the toolchain, `bun:sqlite` for the index, React + Vite + Tailwind for the GUI — though the root `package.json` still declares no runtime dependencies.
 - **Errors are data.** A failed tool returns `{ output, isError: true }` and is appended as a normal `tool` message, so the model sees the failure and can recover. That is what makes a loop robust.
@@ -358,7 +358,7 @@ same cost but leaves a higher peak (the recap itself occupies tokens).
 
 ---
 
-## Repository layout
+## 📁 Repository layout
 
 ```
 micro-harness/
@@ -378,7 +378,7 @@ micro-harness/
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
 - [x] **P0 · Foundation** — monorepo, Bun toolchain, CI
 - [x] ~~**P1 · Kernel** — services/DI, lifecycle, scopes, event bus~~ **reverted**: built (396 lines, 10 tests), measured as having 0 runtime consumers, and removed in favour of compile-time seams. See [the comparison](docs/design-comparison.md).
@@ -394,7 +394,7 @@ micro-harness/
 
 ---
 
-## Development
+## 🧪 Development
 
 ```bash
 bun install
@@ -409,7 +409,7 @@ The suite covers the event loop and its streaming, parallel tool calls and appro
 
 ---
 
-## Contributing
+## 🙌 Contributing
 
 Issues and pull requests are welcome. If you are looking for a place to start, the roadmap's remaining item (**P10 · Documentation site**; npm publish is skipped by choice) and anything marked *good first issue* are good entry points.
 
@@ -420,7 +420,7 @@ Two things that make a PR easy to accept:
 
 ---
 
-## License
+## 📄 License
 
 [MIT](LICENSE).
 
