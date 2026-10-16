@@ -1,199 +1,123 @@
-# How micro-harness differs from other harnesses
+# Design notes: the trade-offs behind micro-harness
 
-> **The one-sentence version:** we are not the most capable harness. We are the one you
-> can read end to end in one sitting — and then watch grow into a platform without the
-> readable core being thrown away.
+> This is a **design comparison**, not a benchmark. Everything about other tools is drawn from their public docs or source, listed at the end; those projects move quickly, so treat this as a dated snapshot and send corrections. Everything about ours points at code you can open right now.
 
-This is a design comparison, not a benchmarks page. Where it describes someone else's
-harness it cites their public documentation (see [Sources](#sources)); where it
-describes ours it points at code you can open right now.
+In one line: micro-harness is not trying to be the most capable harness. It is trying to **keep a complete harness at a size you can read and verify** — where the core is not replaced by the platform, and every decision can be checked in the repository.
 
 ---
 
-## The five axes that actually distinguish harnesses
+## Five questions that separate harnesses
 
-Feature lists make every harness look the same. These five questions separate designs:
+Feature lists make every harness look alike. These five questions separate the designs:
 
-| # | The question | Why it decides things |
+| # | Question | What it decides |
 |---|---|---|
-| 1 | **Does the core own capabilities?** | If the agent loop itself is replaceable, you are building a *runtime*. If not, you are building an *application*. |
-| 2 | **What is the unit of extension, and when does it load?** | A DI container, a registration API, and a constructor call are three different products with three different costs. |
-| 3 | **What are events *for*?** | A debug log, an observability contract, or the extension surface itself. |
-| 4 | **How is history managed?** | Compaction, branching, replay — and whether the full record survives what the model actually saw. |
-| 5 | **How does generated code land?** | Sandbox or worktree, and who decides what gets applied. |
+| 1 | Does the core own the agent loop? | If the loop is replaceable you are building a **runtime**; otherwise an **application**. |
+| 2 | What is the unit of extension, and when does it load? | A DI container, a registry API and a compile-time interface are three different cost structures. |
+| 3 | What are events for? | Logging, an observability contract, or the **extension surface itself**. |
+| 4 | How is history managed? | Compaction, branching, replay — and whether what the model actually saw is kept. |
+| 5 | How does generated code land? | Sandbox or worktree, and **who decides what gets applied**. |
 
 ---
 
 ## Side by side
 
-| | **micro-harness** | **DeepSeek Harness** (dsh) | **pi** | **Claude Code** | **Codex** |
+`—` means we did **not find a description in the other project's public material**; it does not mean the capability is absent. This is a snapshot — see the date and sources below.
+
+| | micro-harness | DeepSeek Harness (dsh) | pi | Claude Code | Codex |
 |---|---|---|---|---|---|
-| Shape | platform in a monorepo, plus a frozen readable seed | standalone runtime | minimal terminal harness | product | product |
-| **Core owns capabilities?** | **Yes.** `Harness` owns the loop and the tools. | **No.** "Every part of the product is a plugin, including the model adapter, the tool registry, the session log, and the agent loop itself"; "there is no privileged core to patch". | Mostly: a small core with a large extension surface. | *n/a (closed)* | *n/a (closed)* |
-| **Extension unit / load time** | **Compile-time seams** — `Provider`, `Tool`, `FileSystem`, `AgentRole` — plus **config-driven MCP servers** (tools read from `mcp.json` at boot) | Cordis plugins, at runtime | TypeScript extensions registered at startup (`registerTool`, `on(...)`), shipped as npm/git packages | hooks | `AGENTS.md` + repository conventions |
-| **Events** | **The single contract.** CLI, GUI, trace, replay, agent tree and Inspector are all consumers of one tagged stream. | Event pipeline with plugin-visible extension points (`turn/*`, `step/*`, `agent/request`, `llm/stream`, `tools/*`) | RPC + SDK + JSON output | hooks | — |
-| **"Model-visible means logged"** | **Implemented**: a `model.request` event carries the exact payload per turn (system prompt, tool schemas, messages, token estimate). | Stated architectural invariant. | Append-only session JSONL. | — | — |
-| **History** | Prefix-preserving compaction (drop the *middle*), replay from any event slice | Append-only session event log | Summarize-based compaction (`/compact`), session **tree** (`/tree`, `/fork`, `/clone`) | Four-layer memory, five-level compaction | Repository as source of truth |
-| **Isolation** | Git worktree per sub-agent | Sandbox providers (Local FS / E2B / Remote) behind a seam | Via extensions (SSH, sandboxes) | Sub-agent isolation | Worktree isolation |
-| **Applying results** | **Hunk-level accept/reject**; a drifted hunk is reported, never mis-applied | — | `git` | `git` | `git` |
-| **Being integrated** | **ACP server** — an editor drives the harness (`micro-harness acp`); approvals route to the editor's UI, and its filesystem is used as a `FileSystem` provider | — | Extension territory (pi runs inside an editor as a CLI) | Native (it *is* the editor's agent) | IDE integration |
-| **Multi-agent** | **First-class**: `single`/`parallel`/`chain`/`race`, context firewall, depth/concurrency/token/cost limits | A plugin | **Deliberately absent** — "ships with powerful defaults but skips features like sub agents"; you add them in an extension | Sub-agents | — |
-| **Cost & cache accounting** | Cache reads normalized across providers, priced at the cached rate, surfaced as a hit rate | Telemetry seam | — | Usage display | — |
-
-A `—` means the public documentation I read does not state it. That is not a claim that
-the feature is absent.
+| Shape | a platform in one repo, plus a frozen readable seed | a standalone runtime | a minimal terminal harness | closed-source product | open-source CLI (`openai/codex`) |
+| Core owns the loop | **yes** — `Harness` runs the loop and dispatches tools | the docs describe the whole chain as pluggable, including the loop | small core + large extension surface | — | — |
+| Unit of extension / load time | **compile-time seams** (`Provider`/`Tool`/`FileSystem`/`AgentRole`) + config-driven MCP | Cordis plugins, loaded at runtime | TypeScript extensions registered at startup | hooks | `AGENTS.md` + repo conventions |
+| Events | **the single contract** — log, SSE, trace, replay, agent tree and inspector are all consumers of one stream | staged event points (`turn/*`, `step/*`, `llm/stream`, `tools/*`) | RPC + SDK + JSON output | hooks | — |
+| "Model-visible means recorded" | **implemented**: every call emits `model.request` with the system prompt, tool schemas, message array and token estimate | an architectural invariant in the docs | append-only session JSONL | — | — |
+| History | prefix-preserving compaction (drops the middle), replay from any event slice | append-only event log | summary compaction + session tree (`/tree`, `/fork`, `/clone`) | layered memory + compaction | the repo is the truth |
+| Isolation | one git worktree per sub-agent | sandbox provider (Local/E2B/Remote) | via extensions | sub-agent isolation | worktree isolation |
+| How changes land | hunk-by-hunk accept/reject; drifted hunks are reported, never mis-applied | — | `git` | `git` | `git` |
+| Being integrated | ACP server — an editor can drive this harness | — | extension territory | native (the editor's agent) | IDE integration |
+| Multi-agent | `single`/`parallel`/`chain`/`race`, context firewall + depth/concurrency/token/cost limits | a plugin | not in the core; extensions add it | sub-agents | — |
+| Cost & cache | three dialects normalised, priced at cache rates, hit rate shown in the UI | telemetry seam | — | usage display | — |
 
 ---
 
-## What we took, and from whom
+## What we took from the field
 
-**From dsh — the event pipeline.** dsh treats every stage as an event point plugins can
-observe. We arrived at the same shape independently and it is now the load-bearing idea
-in our repo: one tagged `AgentEvent` stream, and every view is a pure function of a
-slice of it. The GUI's replay scrubber and the agent tree are not features bolted onto
-the loop; they are two more consumers.
+Designs are not invented in a vacuum. Each item below credits its source and says where we used it.
 
-**From dsh — capability seams.** Their formulation is precise and worth repeating: a
-seam is *a swappable capability with three roles — a Service Definition declaring the
-interface, a Service Provider implementing it, and a Consumer using it, commonly a
-model-facing tool*. We adopted it literally for the filesystem:
+**Event-driven loop (from dsh).** dsh makes every stage of the pipeline an observable event point. We converged on the same shape independently, and made it the load-bearing idea in the repo: one tagged `AgentEvent` stream, where every view is a pure function of a slice of it. The GUI's replay scrubber and agent tree are not features bolted onto the loop; they are two more consumers.
+
+**The three-role capability seam (from dsh).** Its docs define a seam precisely: a replaceable capability with a Service Definition, a Service Provider and a Consumer. We applied it to the filesystem:
 
 ```
-FileSystem (interface)  →  localFs | worktree | remote sandbox | in-memory test double
-                                    ↓
-                    read_file / write_file / list_dir   (the tool surface the model sees)
+FileSystem (interface) → localFs | worktree | remote sandbox | in-memory test double
+                                ↓
+              read_file / write_file / list_dir (the tool surface the model sees)
 ```
 
-The payoff is testable: `packages/core/test/fs.test.ts` runs the **real** `read_file`,
-`write_file` and `list_dir` tools against an in-memory filesystem with no disk at all,
-and the sandbox rule keeps coming from the provider rather than the tool. A worktree
-sub-agent is now a *provider swap*, not a special case in the tools.
+The payoff is testable: `packages/core/test/fs.test.ts` runs the **real** `read_file`/`write_file`/`list_dir` on a pure in-memory filesystem, and sandboxing comes from the provider rather than the tools. "Worktree sub-agents" therefore became *swap the provider*, not a special case inside a tool.
 
-**From pi — "adapt it, don't fork it".** pi's stated goal is to be extended without
-patching its internals, and its extension surface (tools, commands, event handlers, UI,
-npm packages) is the product. We took the goal, and the honest version of the
-constraint: pi achieves it with a registration API loaded at startup; we achieve it with
-interfaces you compile against. Different cost profiles, same promise.
+**"Adapt it, don't fork it" (from pi).** pi's extension surface — tools, commands, event handlers, UI, npm packages — is the product. We adopted the goal and its honest constraint: pi achieves it with an API registered at startup, we with compile-time interfaces. Different cost structures, same promise.
 
-**From pi — compaction is lossy, keep the full record.** `/compact` summarizes and is
-explicit that "the full history remains in the JSONL file". Our JSONL is append-only
-too, and compaction never rewrites what a provider has already been sent — that is also
-what keeps the prompt cache valid.
+**Compaction is lossy; keep the full record (from pi).** `/compact` summarises and says plainly that the full history stays in the JSONL. Ours is append-only too, and compaction **never rewrites what was already sent to the provider** — which is also why prompt cache keeps hitting.
 
-**From Codex — worktree isolation.** One working copy per agent, so parallel agents
-cannot overwrite each other.
+**Worktree isolation (from Codex among others).** One working copy per agent, so parallel agents cannot overwrite each other.
 
 ---
 
-## What we deliberately did not take
+## Deliberate trade-offs
 
-### A DI container — we built one, measured it, and deleted it
+### We built a DI container, measured it, and deleted it
 
-P1 was a self-built plugin kernel: **396 lines of code and 10 tests** — `provide` /
-`get` / `inject`, a lifecycle (`waiting → active → failed`), scopes with `fork()` and
-`isolate()`, an event bus, and config-schema validation. It was Cordis-shaped on
-purpose, to keep a migration path open.
-
-Then we measured whether it was load-bearing:
+P1 was a plugin kernel of our own: 396 lines and 10 tests — `provide`/`get`/`inject`, lifecycle, scopes, an event bus and config validation, deliberately Cordis-shaped to keep a migration path. Then we measured whether it carried weight:
 
 | Measurement | Result |
 |---|---|
-| External references to `@micro-harness/kernel` | **1**, and it was `import type` |
-| Runtime consumers of the plugin objects and registries | **0** (each was referenced only by its own test) |
-| Assembly sites in the repo | **25** (`new Harness(` ×14, `new AgentRunner(` ×4, `createServer(` ×7) |
-| Edits those 25 sites needed when a new capability was added | **0** — because every dependency is optional with a sensible default |
+| External references to `@micro-harness/kernel` | 1, and it was `import type` |
+| Runtime consumers of the plugin objects and registry | 0 (each referenced only by its own tests) |
+| Assembly sites in the repo | 25 |
+| Of those, how many a new capability had to touch | 0 — every dependency is optional with a sane default |
 
-A container buys exactly one thing: **runtime composition** — capabilities that appear
-and disappear while the process is alive, so that adding one is a config change instead
-of a code change. Every other benefit is downstream of that. Our honest answer to
-"would anyone add a capability without recompiling?" was no.
+A container buys exactly one thing: **runtime assembly**. The rest is derivative. And the honest answer to "will anyone add capability without recompiling?" was: not in our setting.
 
-The usual counter-argument is MCP. But an MCP client is *read the config at boot, connect,
-merge the tool list, close on exit* — a constructor handles that in ten lines. If MCP
-servers had to be hot-pluggable, with a dropped server withdrawing its tools from a
-running agent, the container would earn its keep. That is a real requirement, and we
-did not have it.
+The usual counter-argument is MCP. But an MCP client is *read config at boot → connect → merge tools → close on exit*; ten lines in a constructor. A container only pays off once an MCP server must be **hot-swapped** and its tools withdrawn from a running agent. That is a real need — we just didn't have it.
 
-So we kept the **seams** and dropped the **container**, and wrote the trigger condition
-into the ROADMAP rather than keeping speculative code: *if capabilities must come and go
-at runtime, restore commit `5df4ba9` and rewrite the kernel against that requirement
-instead of against an imagined one.*
+So we kept the **seams**, deleted the **container**, and wrote the revival condition into the ROADMAP instead of leaving speculative code behind.
 
-### A core that owns nothing
+### We let the core own the loop
 
-dsh's "there is no privileged core to patch" is coherent for a runtime that must host
-arbitrary models, loops and UIs. Our loop is 268 lines and it is the thing people come
-to read. Making it a plugin would hide the one file we most want visible.
+"No privileged core" is self-consistent for a runtime that must carry arbitrary models, loops and UIs. Our loop is 268 lines, and it is precisely the file we want read. Turning it into a plugin would hide it. That is a stated preference, not a verdict.
 
 ---
 
-## What is ours
+## Where we think we differ
 
-1. **A readable seed, and the platform that grew out of it — provably not forked.**
-   `seed-v1` is a tag on this repo: 17 files, zero dependencies, no build step,
-   `node src/cli.ts "…"` works. `main` is a strict descendant of it (the seed's files
-   were *moved* into `packages/core` in P0, and are still the same four modules). Nothing
-   else in this comparison offers "read the whole harness in one sitting" **and** "the
-   same code is the floor of a running platform".
+1. **A readable seed, and a platform provably grown from it.** `seed-v1` is a tag on this repo: 17 files, zero dependencies, no build step, `node src/cli.ts "…"` runs. `main` is its direct descendant (the seed's files moved into `packages/core` at P0, still the same four modules).
 
-2. **"Model-visible means logged" as a feature you can open, not an invariant on paper.**
-   dsh states the rule; we implement it as a first-class event. Every model call emits
-   `model.request` with the exact payload — system prompt, tool schemas, the message
-   array *after* trimming, and the harness's own token estimate. It is deliberately
-   excluded from the search index so context dumps never pollute `/api/search`, and the
-   GUI's **Inspector** tab renders it per turn. Its sibling is replay: the whole view can
-   be rebuilt from any slice of the stream.
+2. **"Model-visible means recorded" as something you can open, not a sentence in a doc.** Every model call emits `model.request` with the exact payload — system prompt, tool schemas, the trimmed message array, and the harness's own token estimate. It is deliberately kept out of the search index so context dumps don't pollute `/api/search`; the GUI's **Inspector** renders it turn by turn. Its twin is replay: the whole view can be rebuilt from any slice of the event stream.
 
-3. **Hunk-level review that cannot silently mis-apply.** Isolation gives each agent a
-   worktree; the review step is the more interesting half. `packages/core/src/patch.ts`
-   parses a unified diff into globally-numbered hunks and replays **only the accepted
-   ones** onto the file's *current* content. A hunk whose old side no longer matches
-   comes back as `conflicted` and is left untouched — it refuses rather than guesses —
-   and the result is written through the same integrate path as a full promote, so
-   backups and conflict reporting come for free. Verified against real `git diff` output
-   for new files, deleted files, multi-file diffs and drifted context.
+3. **Hunk-by-hunk review that never silently mis-applies.** Isolation gives each agent its own worktree; **review is the more interesting half**. `packages/core/src/patch.ts` parses a unified diff into globally numbered hunks and replays only the **accepted** ones onto the file's **current** content; a hunk whose old side no longer matches comes back `conflicted` and untouched — it refuses rather than guesses. Verified against real `git diff` output: new files, deletions, multi-file diffs, context drift.
 
-4. **Seams, not a container — with the receipt.** The deleted kernel is documented above
-   with numbers, and the trigger that would bring it back. Most projects ship the
-   speculative abstraction and never revisit it; we published the measurement and the
-   reversal.
-
-5. **Economics as a first-class concern.** Providers report prompt-cache hits under
-   three different names; they are normalized into `usage.cacheRead`, priced at the
-   cached rate, and surfaced in the UI as a hit rate. Two related decisions make the
-   cache actually hit: a tool result is capped **when it is appended** (never rewritten
-   later), and compaction drops the **middle** rather than the front, so the head stays a
-   stable prefix. Measured on real runs in this repo: **75% / 78% / 69%** hit rate across
-   three calls, with cache-aware accounting coming out **~2× cheaper** than the naive
-   "every input token is a miss" calculation it replaced.
+4. **Economics as a first-class concern.** Three vendors report prompt-cache hits under three different field names; we normalise them into `usage.cacheRead`, price them at cache rates and show the hit rate in the UI. Two companion decisions make caching actually work: tool results are truncated **on write** (never rewritten later), and compaction drops the **middle** rather than the front. Measured on real runs in this repo: 75% / 78% / 69%.
 
 ---
 
-## Open questions
+## What we are unsure about
 
-We would rather write down what we are unsure about than imply we are not.
-
-| Question | What would settle it |
+| Question | What would answer it |
 |---|---|
-| Do compile-time seams satisfy a real third party who wants to add a capability without forking? | ~~The MCP round.~~ **Answered: yes, for our case.** MCP landed as read-config-at-boot: `connectMcpServers()` in `main.ts`, tools merged into the existing array, **zero changes** to the loop, the tool registry, the event contract or the GUI. Verified against the official reference server (13 tools discovered, the model called `everything__get-sum` and answered `42`). A container is only needed if servers must hot-plug into a running process and withdraw their tools on disconnect — which is now the documented trigger rather than a guess. |
-| Is "drop the middle deterministically" better than "summarize the old turns"? | **Measured, with an ablation.** Both preserve an unguessable early constraint across a 31-call session; dropping the head loses it. `summarize` matches on cost ($0.0058 vs $0.0060) but leaves a higher context peak (4762 vs 4455 of 5000). We keep `drop-middle` as the default because it is deterministic and spends no model call — `--compact=summarize` is there if a task needs the meaning preserved rather than the tokens. |
-| Does a frozen seed keep its value as the platform grows? | Can a newcomer still read `seed-v1` in one sitting *and* recognise the platform in it? If those drift apart, the tag becomes archaeology. |
-| Is hunk-level review worth the surface area versus "just review the diff in git"? | Usage. It is the feature we are least sure is worth its weight. |
+| Can compile-time seams serve a real "add capability without touching code" need? | Partly answered: for our setting, yes. MCP is *read config at boot* — one `connectMcpServers()` in `main.ts`, with zero changes to the loop, tool registry, event contract or GUI; verified against the reference server (13 tools, model called `everything__get-sum` and answered `42`). If hot-swapping is ever needed, the revival condition is in the ROADMAP. |
+| Is deterministic "drop the middle" better than summarising old turns? | Measured, with an ablation: both preserve a constraint planted early in a long session, while dropping the front loses it. `summarize` costs about the same but peaks higher; we keep deterministic `drop-middle` as the default and offer `--compact=summarize` when semantics matter more than tokens. |
+| Does the frozen seed hold up as the platform grows? | Whether a newcomer can still read `seed-v1` in one sitting **and** recognise today's platform in it. If the two drift apart, the tag is only archaeology. |
+| Is hunk-level review worth its surface area (versus just reading `git diff`)? | Usage. This is the feature we are least sure is worth it. |
 
 ---
 
 ## Sources
 
-- **DeepSeek Harness** (`dsh`, developer preview 2026): its `architecture.md` — "every
-  part of the product is a plugin", "there is no privileged core to patch", the turn-flow
-  event pipeline, the three roles of capability seams, "model-visible means logged", and
-  the append-only session event log. Summarized in
-  [`learn-harness-engineering` → DeepSeek breakdown](https://github.com/walkinglabs/learn-harness-engineering/blob/main/docs/en/harness-designs/deepseek/index.md)
-- **pi**: its own README and docs (`Extensions`, `Compaction`, `Branching` sections).
-- **Claude Code / Codex**: as summarized in
-  [`learn-harness-engineering`](https://github.com/walkinglabs/learn-harness-engineering)
-  (four-layer memory, five-level compaction, hooks, sub-agent isolation; repository as
-  source of truth, `AGENTS.md`, worktree isolation).
-- **Our own claims**: everything in the *What is ours* section is checkable in this repo —
-  `packages/core/src/{patch,context,fs,harness}.ts`, `packages/gui/src/`, and the test
-  suite (`bun test`).
+- **DeepSeek Harness (dsh)**: its `architecture.md` (everything is a plugin; no privileged core to patch; the turn-flow event pipeline; the three roles of a capability seam; "model-visible means recorded"; append-only session event log).
+- **pi**: its README and docs (Extensions, Compaction, Branching).
+- **Codex**: [`openai/codex`](https://github.com/openai/codex) (Apache-2.0, an open-source CLI).
+- **Claude Code**: public docs on hooks, sub-agents, and its memory/compaction model.
+- **Our own claims**: every item under "Where we think we differ" can be checked in this repo — `packages/core/src/{harness,patch,context,fs}.ts`, `packages/gui/src/`, and the test suite (`bun test`).
+
+> Snapshot date: 2026-10-16.
