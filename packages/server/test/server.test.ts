@@ -906,3 +906,46 @@ test('/api/web reports and flips the runtime toggle', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('a prompt during an active run aborts the old run instead of interleaving history', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-interrupt-'))
+  const store = new SessionStore(dir)
+  let aborted = false
+  const provider: Provider = {
+    name: 'blocking',
+    chat(req) {
+      return new Promise((_resolve, reject) => {
+        const stop = (): void => {
+          aborted = true
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        }
+        if (req.signal?.aborted) stop()
+        else req.signal?.addEventListener('abort', stop, { once: true })
+      })
+    },
+  }
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+  try {
+    const created = (await (
+      await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'go' }),
+      })
+    ).json()) as { session: { id: string } }
+    const id = created.session.id
+    expect(srv.runtime(id)).toBeDefined()
+    const resumed = await fetch(`${srv.url}/api/sessions/${id}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    })
+    expect(resumed.status).toBe(202)
+    expect(aborted).toBe(true)
+    srv.runtime(id)?.controller.abort() // the replacement run is intentionally blocked too
+    await srv.idle(id)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

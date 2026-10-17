@@ -68,12 +68,27 @@ export function reconstructMessages(
   agentId = 'main',
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }]
-  let pendingCalls: NonNullable<ChatMessage['tool_calls']> = []
+  let calls: NonNullable<ChatMessage['tool_calls']> = []
+  const results = new Map<string, { name: string; output: string }>()
 
-  const flushCalls = (): void => {
-    if (!pendingCalls.length) return
-    messages.push({ role: 'assistant', content: null, tool_calls: pendingCalls })
-    pendingCalls = []
+  // Providers require *every* tool_call in an assistant message to be answered
+  // immediately after it. Group the calls with their results, and synthesize an
+  // answer for a call that never got one (the run was interrupted, or the
+  // process died mid-tool) instead of emitting history the API will reject.
+  const flush = (): void => {
+    if (!calls.length) return
+    messages.push({ role: 'assistant', content: null, tool_calls: calls })
+    for (const call of calls) {
+      const result = results.get(call.id)
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        name: result?.name ?? call.function?.name ?? '',
+        content: result?.output ?? 'aborted: no result recorded',
+      })
+    }
+    calls = []
+    results.clear()
   }
 
   for (const tagged of events) {
@@ -81,11 +96,11 @@ export function reconstructMessages(
     const event = tagged.event
     switch (event.type) {
       case 'user.message':
-        flushCalls()
+        flush()
         messages.push({ role: 'user', content: event.text })
         break
       case 'tool.call':
-        pendingCalls.push({
+        calls.push({
           id: event.id,
           // The API rejects a replayed assistant message whose tool calls lack
           // `type`, so a reconstructed history must carry it too.
@@ -94,17 +109,19 @@ export function reconstructMessages(
         })
         break
       case 'tool.result':
-        flushCalls()
-        messages.push({ role: 'tool', tool_call_id: event.id, name: event.name, content: event.output })
+        if (calls.some((c) => c.id === event.id)) {
+          results.set(event.id, { name: event.name, output: event.output })
+          if (calls.every((c) => results.has(c.id))) flush()
+        }
         break
       case 'turn.end':
-        flushCalls()
+        flush()
         if (event.stopReason === 'stop' && event.text) messages.push({ role: 'assistant', content: event.text })
         break
       default:
         break
     }
   }
-  flushCalls()
+  flush()
   return messages
 }

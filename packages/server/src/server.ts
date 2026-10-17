@@ -305,13 +305,21 @@ export function createServer(options: ServerOptions): HarnessServer {
       try {
         await runtime.harness.send(prompt, runtime.controller.signal, images)
       } catch (err) {
-        store.update(runtime.meta.id, { status: 'error' })
+        // A user interrupt is not a failure: stop quietly and record why.
+        const aborted = runtime.controller.signal.aborted || (err as Error)?.name === 'AbortError'
+        try {
+          store.update(runtime.meta.id, { status: aborted ? 'done' : 'error' })
+        } catch {
+          /* the store may already be closed during shutdown */
+        }
         runtime.hub.forward({
           agentId: 'main',
           parentId: null,
           seq: 0,
           t: Date.now(),
-          event: { type: 'error', message: String((err as Error)?.message || err), fatal: true },
+          event: aborted
+            ? { type: 'turn.end', stopReason: 'aborted', text: '' }
+            : { type: 'error', message: String((err as Error)?.message || err), fatal: true },
         })
       } finally {
         runtime.off()
@@ -331,8 +339,18 @@ export function createServer(options: ServerOptions): HarnessServer {
     return meta
   }
 
-  const resume = (id: string, prompt: string, images?: ImageInput[]): SessionRuntime => {
+  const resume = async (id: string, prompt: string, images?: ImageInput[]): Promise<SessionRuntime> => {
     const meta = store.require(id)
+    // A prompt while the run is still active *interrupts* it. Letting both loops
+    // write to one session used to interleave events and reconstruct history
+    // whose tool_calls had no results yet — history the provider rejects.
+    const active = runtimes.get(id)
+    if (active) {
+      active.controller.abort()
+      // A tool that ignores the signal can delay this; the reconstruction below
+      // synthesizes a result for anything still unanswered, so cap the wait.
+      await Promise.race([active.done.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))])
+    }
     const system = options.systemPrompt ?? defaultSystemPrompt(meta.cwd || cwd)
     const reconstructed = reconstructMessages(store.events(id), system, 'main')
     const runtime = build({ ...meta, status: 'active' })
@@ -542,7 +560,7 @@ export function createServer(options: ServerOptions): HarnessServer {
           /* empty */
         }
         if (!body.prompt) return json({ error: 'prompt is required' }, 400)
-        resume(id, body.prompt, body.images)
+        await resume(id, body.prompt, body.images)
         return json({ session: store.require(id) }, 202)
       }
       if (action === 'fork') {
