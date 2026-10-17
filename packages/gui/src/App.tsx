@@ -54,6 +54,7 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [models, setModels] = useState<string[]>([])
   const [permission, setPermission] = useState('full')
+  const [webEnabled, setWebEnabled] = useState(true)
   const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
   const [showSidebar, setShowSidebar] = useState(() => {
     const saved = localStorage.getItem('micro-sidebar')
@@ -150,6 +151,26 @@ export default function App() {
       .setPermission(preset, current ?? undefined)
       .then(() => void refreshSessions())
       .catch((err: unknown) => setError(String((err as Error).message)))
+  }
+
+  // The runtime web switch; the web MCP server re-reads the file per call.
+  useEffect(() => {
+    void api
+      .web()
+      .then((d) => setWebEnabled(d.enabled))
+      .catch(() => {})
+  }, [])
+
+  const toggleWeb = (): void => {
+    const next = !webEnabled
+    setWebEnabled(next)
+    void api
+      .setWeb(next)
+      .then((d) => setWebEnabled(d.enabled))
+      .catch((err: unknown) => {
+        setWebEnabled(!next)
+        setError(String((err as Error).message))
+      })
   }
 
   // ⌘K / Ctrl+K opens the command palette.
@@ -423,7 +444,9 @@ export default function App() {
         series={usageSeries}
         busy={busy}
         dark={dark}
+        webEnabled={webEnabled}
         onToggleTheme={toggleTheme}
+        onToggleWeb={toggleWeb}
         onToggleSessions={() => setShowSidebar((v) => !v)}
         onTogglePanel={() => setShowPanel((v) => !v)}
       />

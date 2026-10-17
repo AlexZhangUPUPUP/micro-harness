@@ -99,6 +99,8 @@ So we kept the **seams**, deleted the **container**, and wrote the revival condi
 
 4. **Economics as a first-class concern.** Three vendors report prompt-cache hits under three different field names; we normalise them into `usage.cacheRead`, price them at cache rates and show the hit rate in the UI. Two companion decisions make caching actually work: tool results are truncated **on write** (never rewritten later), and compaction drops the **middle** rather than the front. Measured on real runs in this repo: 75% / 78% / 69%.
 
+5. **Web access as a first-party MCP server, not a built-in tool.** `MICRO_WEB` adds a bundled MCP server exposing `web_search` and `web_fetch`; the loop, tool registry and event contract do not know it exists. The same permission presets that gate the shell gate the network, and a runtime file (the GUI's 🌐 button) turns it off live without a restart. The fetcher is SSRF-guarded: it resolves the host, refuses non-public addresses, and pins the validated IP for the connection.
+
 ---
 
 ## What we are unsure about

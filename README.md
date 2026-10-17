@@ -258,6 +258,10 @@ Verified against the official reference server, end to end: 13 tools discovered,
 model was offered all of them alongside the built-in five, it called
 `everything__get-sum {a:17,b:25}`, and answered `42`.
 
+**First-party web tools.** `MICRO_WEB=off|fetch|search|all` (default `all`) connects a bundled MCP server exposing `web_search` and `web_fetch` — no config file needed. Search defaults to `bing` (no key, reachable where the global engines are blocked); `MICRO_SEARCH_PROVIDER` switches to `baidu`, `bocha` (博查, needs `BOCHA_API_KEY`) or `searxng` (`MICRO_SEARXNG_URL`). `web_fetch` is SSRF-guarded: it refuses non-public addresses and pins the validated IP for the connection.
+
+Web is a permission capability: `read-only` and `workspace` never get these tools, `full` uses them freely, and `auto-review` asks before every call. A runtime switch at `~/.micro-harness/web.json` (the 🌐 button in the GUI) turns them off live — the server re-reads it per call, so no restart.
+
 **What it deliberately does not do:** hot-plug a server into a running process, or
 withdraw its tools when it drops. If that ever becomes a requirement, it is the trigger
 we wrote down for bringing back the plugin container — see
@@ -305,6 +309,7 @@ with the fs capability withheld the file really landed on disk (`hello from acp`
 | **Inspector** | the exact payload of every model call: system prompt, tool schemas, messages, token estimate |
 | **Palette** | `⌘K` — app actions plus full-text search across every saved session |
 | **Attachments** | paste, drop or click-upload files into the composer: images travel as multimodal content parts, text files ride along with the prompt |
+| **Web** | 🌐 toggles live web access (`web_search` / `web_fetch` via the bundled MCP server) |
 | **Permissions** | four presets — read-only / workspace / full / auto-review — with a confirmation before granting shell access; `--approval` still controls per-call prompts |
 | **Approvals** | when the server runs `--approval suggest`/`auto-edit`, a mutating tool call blocks and the transcript shows an Allow / Deny card |
 | **Session tree** | flip the sidebar to tree mode to see forks nested under their origin |

@@ -147,6 +147,8 @@ const en: Dict = {
   'perm.confirm': 'Switch to “{name}”?',
   'perm.confirmCta': 'Switch',
   'perm.cancel': 'Cancel',
+  'web.on': 'Web access on — click to disable',
+  'web.off': 'Web access off — click to enable',
 }
 
 const zh: Dict = {
@@ -287,6 +289,8 @@ const zh: Dict = {
   'perm.confirm': '切换到「{name}」？',
   'perm.confirmCta': '确认切换',
   'perm.cancel': '取消',
+  'web.on': '联网已开——点击关闭',
+  'web.off': '联网已关——点击开启',
 }
 
 const DICTS: Record<Lang, Dict> = { en, zh }

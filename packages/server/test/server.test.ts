@@ -7,6 +7,7 @@ import { SessionStore } from '../src/store.ts'
 import { createServer, type HarnessServer } from '../src/server.ts'
 import {
   createWorktree,
+  makeTools,
   parseDiff,
   removeWorktree,
   worktreeDiff,
@@ -801,6 +802,82 @@ test('a session can switch its model for the next run', async () => {
     expect(store.require(session.id).model).toBe('model-b')
   } finally {
     srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('permission presets gate network tools', async () => {
+  const netTool = {
+    name: 'web__demo',
+    description: 'network',
+    parameters: { type: 'object', properties: {} },
+    network: true,
+    run: async () => ({ output: 'ok' }),
+  }
+  for (const [preset, expected] of [
+    ['read-only', false],
+    ['workspace', false],
+    ['full', true],
+  ] as const) {
+    const dir = mkdtempSync(path.join(tmpdir(), 'mh-net-'))
+    const store = new SessionStore(dir)
+    const seen: string[][] = []
+    const provider: Provider = {
+      name: 't',
+      async chat(req) {
+        seen.push(req.tools.map((t) => String(t.function?.name ?? '')))
+        return { message: { role: 'assistant', content: 'ok' } }
+      },
+    }
+    const srv = createServer({
+      store,
+      provider,
+      model: 'fake',
+      cwd: dir,
+      requireAuth: false,
+      permission: preset,
+      tools: [...makeTools(), netTool],
+    })
+    try {
+      const created = await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'hi' }),
+      })
+      const { session } = (await created.json()) as { session: { id: string } }
+      await srv.idle(session.id)
+      expect(seen[0]!.includes('web__demo')).toBe(expected)
+    } finally {
+      srv.stop(true)
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('/api/web reports and flips the runtime toggle', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-web-'))
+  const toggle = path.join(dir, 'web.json')
+  const prev = process.env.MICRO_WEB_TOGGLE_FILE
+  process.env.MICRO_WEB_TOGGLE_FILE = toggle
+  const store = new SessionStore(dir)
+  const { provider } = echoProvider()
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+  try {
+    const before = (await (await fetch(`${srv.url}/api/web`)).json()) as { enabled: boolean }
+    expect(before.enabled).toBe(true)
+    const res = await fetch(`${srv.url}/api/web`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    })
+    expect(res.status).toBe(200)
+    const after = (await (await fetch(`${srv.url}/api/web`)).json()) as { enabled: boolean }
+    expect(after.enabled).toBe(false)
+    expect((JSON.parse(readFileSync(toggle, 'utf8')) as { enabled: boolean }).enabled).toBe(false)
+  } finally {
+    srv.stop(true)
+    if (prev === undefined) delete process.env.MICRO_WEB_TOGGLE_FILE
+    else process.env.MICRO_WEB_TOGGLE_FILE = prev
     rmSync(dir, { recursive: true, force: true })
   }
 })

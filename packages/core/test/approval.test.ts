@@ -72,3 +72,50 @@ test('full-auto never asks', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('auto-edit asks before a network tool', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-approve-net-'))
+  try {
+    const events: { type: string; tool?: string; decision?: string }[] = []
+    const hub = new EventHub()
+    hub.on((e) =>
+      events.push({
+        type: e.event.type,
+        ...(('tool' in e.event ? { tool: e.event.tool } : {}) as object),
+        ...(('decision' in e.event ? { decision: e.event.decision } : {}) as object),
+      }),
+    )
+    let i = 0
+    const responses: ChatResponse[] = [
+      { message: assistantTool('n1', 'web_demo', {}) },
+      { message: { role: 'assistant', content: 'done' } },
+    ]
+    const harness = new Harness({
+      provider: {
+        name: 'fake',
+        async chat() {
+          return responses[Math.min(i++, 1)]!
+        },
+      },
+      model: 'fake',
+      cwd: dir,
+      hub,
+      approval: 'auto-edit',
+      confirm: (async () => true) as never,
+      tools: [
+        {
+          name: 'web_demo',
+          description: 'a network tool',
+          parameters: { type: 'object', properties: {} },
+          network: true,
+          run: async () => ({ output: 'ok' }),
+        },
+      ],
+    })
+    await harness.send('search')
+    expect(events.some((e) => e.type === 'permission.request' && e.tool === 'web_demo')).toBe(true)
+    expect(events.find((e) => e.type === 'permission.result')?.decision).toBe('allow')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

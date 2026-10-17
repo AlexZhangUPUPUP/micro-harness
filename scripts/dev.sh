@@ -19,6 +19,14 @@ set -euo pipefail
 CALLER_PWD="$PWD"
 cd "$(dirname "$0")/.."
 
+# Optional local secrets/config (e.g. BOCHA_API_KEY). Never committed.
+if [ -f "$HOME/.micro-harness/env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$HOME/.micro-harness/env"
+  set +a
+fi
+
 # --single   : serve the built GUI from the server (one process, one port)
 # --no-open  : do not open a browser
 # --restart  : stop whatever holds the base port, then start

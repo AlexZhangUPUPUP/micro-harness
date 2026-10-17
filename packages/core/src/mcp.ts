@@ -33,6 +33,12 @@ export interface McpServerConfig {
   /** streamable-HTTP transport: the endpoint. */
   url?: string
   headers?: Record<string, string>
+  /**
+   * Mark every tool from this server as a network capability. The permission
+   * presets use it to keep `read-only`/`workspace` offline, and `auto-review`
+   * asks before each call.
+   */
+  network?: boolean
 }
 
 /** One server from `mcpServers` in the config file. */
@@ -315,6 +321,7 @@ export async function connectMcpServer(
       description: def.description ?? `MCP tool ${def.name} from ${name}`,
       parameters: (def.inputSchema as Record<string, unknown>) ?? { type: 'object', properties: {} },
       mutating: true, // an MCP server can do anything; treat it as mutating for approvals
+      network: config.network === true,
       async run(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
         const result = await channel.request<{ content?: unknown; isError?: boolean }>(
           'tools/call',

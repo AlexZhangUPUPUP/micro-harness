@@ -152,6 +152,10 @@ export const api = {
           body: JSON.stringify({ preset }),
         })
       : j<{ ok: boolean }>('/api/permission', { method: 'POST', body: JSON.stringify({ preset }) }),
+  /** The runtime web switch; the MCP server re-reads the toggle file per call. */
+  web: () => j<{ mode: string; enabled: boolean; provider: string }>('/api/web'),
+  setWeb: (enabled: boolean) =>
+    j<{ ok: boolean; enabled: boolean }>('/api/web', { method: 'POST', body: JSON.stringify({ enabled }) }),
   /** Answer a pending tool-call approval (allow/deny). */
   decidePermission: (id: string, requestId: string, allow: boolean) =>
     j<{ ok: boolean }>(`/api/sessions/${id}/permissions/${encodeURIComponent(requestId)}`, {

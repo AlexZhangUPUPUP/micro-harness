@@ -256,6 +256,10 @@ HTTP**（JSON 或一次性 SSE 回复）；工具按 `<server>__<tool>` 加命�
 已对着官方参考 server 做过端到端验证：发现 13 个工具，模型连同内置 5 个一起拿到它们，
 调用了 `everything__get-sum {a:17,b:25}`，并回答 `42`。
 
+**内置的联网工具。** `MICRO_WEB=off|fetch|search|all`（默认 `all`）会接入一个内置 MCP server，提供 `web_search` 与 `web_fetch`，无需额外配置文件。搜索默认 `bing`（无需 key，在全局引擎被墙的网络里仍可用）；`MICRO_SEARCH_PROVIDER` 可切到 `baidu`、`bocha`（博查，需 `BOCHA_API_KEY`）或 `searxng`（`MICRO_SEARXNG_URL`）。`web_fetch` 带 SSRF 防护：拒绝非公网地址，并把校验过的 IP 钉给连接。
+
+联网是一种权限能力：`仅可查看` / `工作区内修改` 永远拿不到这两个工具，`完全权限` 自由使用，`自动审查` 则每次调用前都要你确认。运行时开关在 `~/.micro-harness/web.json`（GUI 里的 🌐 按钮）可实时关闭——server 每次调用都会重读，所以不用重启。
+
 **它刻意不做的事：** 把 server 热插拔进运行中的进程，或者掉线时撤回它的工具。如果哪天这
 成了需求，那正是我们写下的"把插件容器请回来"的触发条件——见[对比文档](docs/design-comparison.zh-CN.md)。
 
@@ -300,6 +304,7 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 | **检视** | 每一次模型调用实际发出的载荷：系统提示词、工具 schema、消息、token 估算 |
 | **命令面板** | `⌘K` —— 应用动作 + 所有已保存会话的全文检索 |
 | **附件** | 往输入框里粘贴 / 拖入 / 点击上传文件：图片作为多模态内容部分发出，文本文件随 prompt 一起发 |
+| **联网** | 🌐 实时开关（`web_search` / `web_fetch`，走内置 MCP server） |
 | **权限** | 四档预设 —— 仅可查看 / 工作区内修改 / 完全权限 / 自动审查 —— 授予 shell 之前会先要你确认；`--approval` 仍负责逐次调用是否征求批准 |
 | **审批** | 服务端以 `--approval suggest`/`auto-edit` 运行时，改文件的工具调用会阻塞，并在对话里出现「允许 / 拒绝」卡片 |
 | **会话树** | 侧栏可切到树形模式，分叉会话嵌在其来源之下 |

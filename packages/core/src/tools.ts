@@ -38,6 +38,8 @@ export interface Tool {
   parameters: Record<string, unknown>
   /** True when the tool can change the workspace (needs approval in `suggest` mode). */
   mutating?: boolean
+  /** True when the tool reaches the network (gated by the permission preset, and prompted in `auto-review`). */
+  network?: boolean
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>
 }
 
