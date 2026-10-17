@@ -290,6 +290,22 @@ MCP 的镜像：`micro-harness acp` 在 stdio 上讲 **Agent Client Protocol**�
 通知（流式文本、4 次工具调用、带成本的用量）；在不声明 fs 能力时，文件确实落盘
 （`hello from acp`）。
 
+**从 Zed 驱动。** `scripts/acp.sh` 启动时会解析模型 key（先 `~/.micro-harness/env`，再 `~/.pi/agent/auth.json`），所以密钥不用写进编辑器设置。在 Zed 里把它加成 custom agent：
+
+```json
+{
+  "agent_servers": {
+    "micro-harness": {
+      "type": "custom",
+      "command": "/path/to/micro-harness/scripts/acp.sh",
+      "args": []
+    }
+  }
+}
+```
+
+然后在 Agent Panel 里用 `micro-harness` 新建线程。
+
 ---
 
 ## 🖥️ GUI
