@@ -261,9 +261,9 @@ export class Harness {
       case 'full-auto':
         return false
       case 'auto-edit':
-        return name === 'bash'
+        return name === 'bash' || !!tool?.network
       case 'suggest':
-        return !!tool?.mutating
+        return !!tool?.mutating || !!tool?.network
     }
   }
 

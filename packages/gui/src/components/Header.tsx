@@ -9,13 +9,15 @@ interface HeaderProps {
   series: number[]
   busy: boolean
   dark: boolean
+  webEnabled: boolean
   onToggleTheme: () => void
+  onToggleWeb: () => void
   onToggleSessions: () => void
   onTogglePanel: () => void
 }
 
 /** Slim command bar: brand, current session, live usage, global actions. */
-export function Header({ current, tokens, cost, series, busy, dark, onToggleTheme, onToggleSessions, onTogglePanel }: HeaderProps) {
+export function Header({ current, tokens, cost, series, busy, dark, webEnabled, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
   const { t, lang, setLang } = useT()
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 backdrop-blur">
@@ -49,6 +51,16 @@ export function Header({ current, tokens, cost, series, busy, dark, onToggleThem
           <span className="opacity-40">·</span>
           <RollingNumber value={cost} format={fmtCost} />
         </span>
+        <button
+          onClick={onToggleWeb}
+          aria-label={webEnabled ? t('web.on') : t('web.off')}
+          title={webEnabled ? t('web.on') : t('web.off')}
+          className={`grid h-7 w-7 place-items-center rounded-md text-[12px] transition hover:bg-muted ${
+            webEnabled ? 'text-teal' : 'text-muted-foreground'
+          }`}
+        >
+          {webEnabled ? '🌐' : '⛔'}
+        </button>
         <button
           onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
           aria-label={t('a11y.lang')}

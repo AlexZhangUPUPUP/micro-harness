@@ -26,6 +26,7 @@ import {
   mcpTools,
   openaiProvider,
   type McpConnection,
+  type McpServerConfig,
 } from '@micro-harness/core'
 import { createServer, PERMISSIONS, type PermissionPreset } from './server.ts'
 import { SessionStore } from './store.ts'
@@ -68,8 +69,29 @@ const guiDir: string | false =
 // line knows MCP exists — they are just more `Tool`s. A failing server is reported
 // and skipped instead of taking the server down.
 const mcpConfig = loadMcpServers(cwd)
-const mcpConns: McpConnection[] = mcpConfig.servers.length
-  ? await connectMcpServers(mcpConfig.servers, { cwd })
+
+// First-party web tools. When MICRO_WEB is not `off`, connect our own MCP server
+// (packages/web-mcp) unless the user already declared one named `web`.
+const webEnv: Record<string, string> = {
+  MICRO_WEB: process.env.MICRO_WEB ?? 'all',
+  MICRO_SEARCH_PROVIDER: process.env.MICRO_SEARCH_PROVIDER ?? 'bing',
+}
+for (const key of ['MICRO_WEB_TOGGLE_FILE', 'MICRO_WEB_MAX_CHARS', 'MICRO_WEB_TIMEOUT_MS', 'BOCHA_API_KEY', 'MICRO_SEARXNG_URL']) {
+  const value = process.env[key]
+  if (value) webEnv[key] = value
+}
+const webServerPath = path.resolve(import.meta.dir, '../../web-mcp/src/server.ts')
+const webServer: McpServerConfig | null =
+  (process.env.MICRO_WEB ?? 'all') !== 'off' && existsSync(webServerPath)
+    ? { name: 'web', command: 'bun', args: [webServerPath], env: webEnv, network: true }
+    : null
+
+const serverConfigs = [
+  ...(webServer ? [webServer] : []),
+  ...mcpConfig.servers.filter((s) => s.name !== 'web'),
+]
+const mcpConns: McpConnection[] = serverConfigs.length
+  ? await connectMcpServers(serverConfigs, { cwd })
   : []
 const mcpServers = mcpInfos(mcpConns)
 if (mcpServers.length) {

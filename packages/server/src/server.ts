@@ -43,7 +43,8 @@ import {
   type Tool,
   type McpServerInfo,
 } from '@micro-harness/core'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import path from 'node:path'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
@@ -61,12 +62,18 @@ export type PermissionPreset = 'read-only' | 'workspace' | 'full' | 'auto-review
  */
 export const PERMISSIONS: Record<
   PermissionPreset,
-  { tools: string[]; bash: boolean; approval: 'suggest' | 'auto-edit' | 'full-auto'; exp?: boolean }
+  { tools: string[]; bash: boolean; net: boolean; approval: 'suggest' | 'auto-edit' | 'full-auto'; exp?: boolean }
 > = {
-  'read-only': { tools: ['read_file', 'list_dir'], bash: false, approval: 'full-auto' },
-  workspace: { tools: ['read_file', 'write_file', 'list_dir'], bash: false, approval: 'full-auto' },
-  full: { tools: ['read_file', 'write_file', 'list_dir', 'bash'], bash: true, approval: 'full-auto' },
-  'auto-review': { tools: ['read_file', 'write_file', 'list_dir', 'bash'], bash: true, approval: 'auto-edit', exp: true },
+  'read-only': { tools: ['read_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
+  workspace: { tools: ['read_file', 'write_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
+  full: { tools: ['read_file', 'write_file', 'list_dir', 'bash'], bash: true, net: true, approval: 'full-auto' },
+  'auto-review': {
+    tools: ['read_file', 'write_file', 'list_dir', 'bash'],
+    bash: true,
+    net: true,
+    approval: 'auto-edit',
+    exp: true,
+  },
 }
 
 export interface ServerOptions {
@@ -189,6 +196,10 @@ export function createServer(options: ServerOptions): HarnessServer {
   if (authRequired && !options.token) throw new Error('a server token is required when binding beyond loopback')
   const guiRoot = options.guiDir ? path.resolve(options.guiDir) : null
   const guiIndex = guiRoot ? path.join(guiRoot, 'index.html') : null
+  // The web MCP server re-reads this file on every call; the GUI flips it here.
+  const webToggleFile =
+    process.env.MICRO_WEB_TOGGLE_FILE || path.join(homedir(), '.micro-harness', 'web.json')
+  const webMode = process.env.MICRO_WEB ?? 'all'
 
   const runtimes = new Map<string, SessionRuntime>()
   let defaultPermission: PermissionPreset = options.permission ?? 'workspace'
@@ -216,7 +227,9 @@ export function createServer(options: ServerOptions): HarnessServer {
     const preset = sessionPermission.get(meta.id) ?? defaultPermission
     const spec = PERMISSIONS[preset]
     const baseTools = (options.tools ?? makeTools()).filter(
-      (t) => !PERMISSIONS.full.tools.includes(t.name) || spec.tools.includes(t.name),
+      (t) =>
+        (!t.network || spec.net) &&
+        (!PERMISSIONS.full.tools.includes(t.name) || spec.tools.includes(t.name)),
     )
     const sessionBash = options.allowBash ?? spec.bash
     const sessionApproval = options.approval ?? spec.approval
@@ -430,6 +443,34 @@ export function createServer(options: ServerOptions): HarnessServer {
       if (!body.preset || !(body.preset in PERMISSIONS)) return json({ error: 'unknown preset' }, 400)
       sessionPermission.set(id, body.preset as PermissionPreset)
       return json({ ok: true, session: id, permission: body.preset })
+    }
+
+    // /api/web  -> the runtime web switch. The MCP server re-reads the file per
+    // call, so this flips it live without a restart (no MCP hot-plug needed).
+    if (parts[0] === 'api' && parts[1] === 'web') {
+      if (req.method === 'GET') {
+        let enabled = true
+        try {
+          const parsed = JSON.parse(readFileSync(webToggleFile, 'utf8')) as { enabled?: unknown }
+          enabled = parsed?.enabled !== false
+        } catch {
+          /* missing/corrupt means enabled */
+        }
+        return json({
+          mode: webMode,
+          enabled,
+          provider: process.env.MICRO_SEARCH_PROVIDER ?? 'bing',
+          toggleFile: webToggleFile,
+        })
+      }
+      if (req.method === 'POST') {
+        const body = (await req.json().catch(() => ({}))) as { enabled?: unknown }
+        const enabled = body.enabled !== false
+        mkdirSync(path.dirname(webToggleFile), { recursive: true })
+        writeFileSync(webToggleFile, JSON.stringify({ enabled }, null, 2))
+        return json({ ok: true, enabled })
+      }
+      return json({ error: 'method not allowed' }, 405)
     }
 
     // /api/sessions
