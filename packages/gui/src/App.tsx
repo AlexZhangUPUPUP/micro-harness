@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type FileAttachment, type ImageInput, type SessionMeta, type TaggedEvent } from './lib/api.ts'
+import { api, type FileAttachment, type ImageInput, type SessionMeta, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
 import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
@@ -55,6 +55,8 @@ export default function App() {
   const [models, setModels] = useState<string[]>([])
   const [permission, setPermission] = useState('full')
   const [webEnabled, setWebEnabled] = useState(true)
+  const [webProviders, setWebProviders] = useState<WebProvider[]>([])
+  const [webProvider, setWebProvider] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
   const [showSidebar, setShowSidebar] = useState(() => {
     const saved = localStorage.getItem('micro-sidebar')
@@ -157,7 +159,11 @@ export default function App() {
   useEffect(() => {
     void api
       .web()
-      .then((d) => setWebEnabled(d.enabled))
+      .then((d) => {
+        setWebEnabled(d.enabled)
+        setWebProvider(d.provider)
+        setWebProviders(d.providers ?? [])
+      })
       .catch(() => {})
   }, [])
 
@@ -165,10 +171,22 @@ export default function App() {
     const next = !webEnabled
     setWebEnabled(next)
     void api
-      .setWeb(next)
+      .setWeb({ enabled: next })
       .then((d) => setWebEnabled(d.enabled))
       .catch((err: unknown) => {
         setWebEnabled(!next)
+        setError(String((err as Error).message))
+      })
+  }
+
+  const changeProvider = (id: string): void => {
+    const prev = webProvider
+    setWebProvider(id)
+    void api
+      .setWeb({ provider: id })
+      .then((d) => setWebProvider(d.provider))
+      .catch((err: unknown) => {
+        setWebProvider(prev)
         setError(String((err as Error).message))
       })
   }
@@ -445,6 +463,9 @@ export default function App() {
         busy={busy}
         dark={dark}
         webEnabled={webEnabled}
+        webProvider={webProvider}
+        webProviders={webProviders}
+        onChangeProvider={changeProvider}
         onToggleTheme={toggleTheme}
         onToggleWeb={toggleWeb}
         onToggleSessions={() => setShowSidebar((v) => !v)}

@@ -4,7 +4,7 @@
  * re-checked on every call (the soft switch the GUI flips).
  */
 
-import { capabilities, runtimeEnabled, type WebConfig } from './config.ts'
+import { capabilities, runtimeEnabled, runtimeSettings, type WebConfig } from './config.ts'
 import { fetchText, WebError } from './net.ts'
 import { htmlToText, titleOf } from './html.ts'
 import { resolveProvider } from './providers.ts'
@@ -96,11 +96,12 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
         required: ['query'],
       },
       async run(args) {
-        if (!runtimeEnabled(cfg.toggleFile)) return { text: REFUSAL, isError: true }
+        const settings = runtimeSettings(cfg.toggleFile)
+        if (!settings.enabled) return { text: REFUSAL, isError: true }
         const query = String(args.query ?? '').trim()
         if (!query) return { text: 'web_search: query is required', isError: true }
         const maxResults = Number(args.maxResults) > 0 ? Math.min(Number(args.maxResults), 20) : 8
-        const id = String(args.provider ?? cfg.provider).toLowerCase()
+        const id = String(args.provider ?? settings.provider ?? cfg.provider).toLowerCase()
         try {
           const provider = resolveProvider(id, cfg)
           const results = await provider.search(query, maxResults, cfg)

@@ -1,4 +1,5 @@
 import { useT } from '../lib/i18n.tsx'
+import type { WebProvider } from '../lib/api.ts'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
 import { RollingNumber, Sparkline } from './Fx.tsx'
 
@@ -10,6 +11,9 @@ interface HeaderProps {
   busy: boolean
   dark: boolean
   webEnabled: boolean
+  webProvider: string
+  webProviders: WebProvider[]
+  onChangeProvider: (id: string) => void
   onToggleTheme: () => void
   onToggleWeb: () => void
   onToggleSessions: () => void
@@ -17,7 +21,7 @@ interface HeaderProps {
 }
 
 /** Slim command bar: brand, current session, live usage, global actions. */
-export function Header({ current, tokens, cost, series, busy, dark, webEnabled, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
+export function Header({ current, tokens, cost, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
   const { t, lang, setLang } = useT()
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 backdrop-blur">
@@ -51,6 +55,21 @@ export function Header({ current, tokens, cost, series, busy, dark, webEnabled, 
           <span className="opacity-40">·</span>
           <RollingNumber value={cost} format={fmtCost} />
         </span>
+        {webProviders.length > 1 && (
+          <select
+            value={webProvider}
+            onChange={(e) => onChangeProvider(e.target.value)}
+            aria-label={t('web.provider')}
+            title={t('web.provider')}
+            className="h-7 max-w-[112px] rounded-md border border-border bg-background/60 px-1 text-[10px] text-muted-foreground outline-none transition hover:text-foreground"
+          >
+            {webProviders.map((p) => (
+              <option key={p.id} value={p.id} disabled={!p.configured}>
+                {p.configured ? p.label : `${p.label} · ${t('web.unconfigured')}`}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           onClick={onToggleWeb}
           aria-label={webEnabled ? t('web.on') : t('web.off')}

@@ -149,6 +149,8 @@ const en: Dict = {
   'perm.cancel': 'Cancel',
   'web.on': 'Web access on — click to disable',
   'web.off': 'Web access off — click to enable',
+  'web.provider': 'Search engine',
+  'web.unconfigured': 'needs key',
 }
 
 const zh: Dict = {
@@ -291,6 +293,8 @@ const zh: Dict = {
   'perm.cancel': '取消',
   'web.on': '联网已开——点击关闭',
   'web.off': '联网已关——点击开启',
+  'web.provider': '搜索引擎',
+  'web.unconfigured': '未配置',
 }
 
 const DICTS: Record<Lang, Dict> = { en, zh }

@@ -874,6 +874,31 @@ test('/api/web reports and flips the runtime toggle', async () => {
     const after = (await (await fetch(`${srv.url}/api/web`)).json()) as { enabled: boolean }
     expect(after.enabled).toBe(false)
     expect((JSON.parse(readFileSync(toggle, 'utf8')) as { enabled: boolean }).enabled).toBe(false)
+
+    // Provider selection lives in the same file; flipping it keeps `enabled`.
+    const listed = (await (await fetch(`${srv.url}/api/web`)).json()) as {
+      providers: Array<{ id: string; configured: boolean }>
+    }
+    expect(listed.providers.map((p) => p.id)).toEqual(['bing', 'bocha', 'baidu', 'searxng'])
+    expect(listed.providers.find((p) => p.id === 'bing')?.configured).toBe(true)
+
+    const pick = await fetch(`${srv.url}/api/web`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'bing' }),
+    })
+    expect(pick.status).toBe(200)
+    const state = (await (await fetch(`${srv.url}/api/web`)).json()) as { enabled: boolean; provider: string }
+    expect(state.provider).toBe('bing')
+    expect(state.enabled).toBe(false) // preserved from the earlier flip
+    expect(JSON.parse(readFileSync(toggle, 'utf8'))).toEqual({ enabled: false, provider: 'bing' })
+
+    const unknown = await fetch(`${srv.url}/api/web`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'nope' }),
+    })
+    expect(unknown.status).toBe(400)
   } finally {
     srv.stop(true)
     if (prev === undefined) delete process.env.MICRO_WEB_TOGGLE_FILE

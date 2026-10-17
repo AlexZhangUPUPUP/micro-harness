@@ -76,6 +76,22 @@ export const PERMISSIONS: Record<
   },
 }
 
+/** Mirror of the web-mcp toggle file: a soft on/off plus an optional provider. */
+function readWebSettings(file: string): { enabled: boolean; provider?: string } {
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { enabled?: unknown; provider?: unknown }
+    return {
+      enabled: parsed?.enabled !== false,
+      provider:
+        typeof parsed?.provider === 'string' && parsed.provider.trim()
+          ? parsed.provider.trim().toLowerCase()
+          : undefined,
+    }
+  } catch {
+    return { enabled: true } // missing/corrupt = enabled, boot provider
+  }
+}
+
 export interface ServerOptions {
   store: SessionStore
   provider: Provider
@@ -200,6 +216,14 @@ export function createServer(options: ServerOptions): HarnessServer {
   const webToggleFile =
     process.env.MICRO_WEB_TOGGLE_FILE || path.join(homedir(), '.micro-harness', 'web.json')
   const webMode = process.env.MICRO_WEB ?? 'all'
+
+  // Search backends the GUI may pick — keep in sync with packages/web-mcp/src/providers.ts.
+  const SEARCH_PROVIDERS: Array<{ id: string; label: string; needs: string[] }> = [
+    { id: 'bing', label: 'Bing', needs: [] },
+    { id: 'bocha', label: '博查 Bocha', needs: ['BOCHA_API_KEY', 'MICRO_BOCHA_KEY'] },
+    { id: 'baidu', label: '百度 Baidu', needs: [] },
+    { id: 'searxng', label: 'SearXNG', needs: ['MICRO_SEARXNG_URL'] },
+  ]
 
   const runtimes = new Map<string, SessionRuntime>()
   let defaultPermission: PermissionPreset = options.permission ?? 'workspace'
@@ -449,26 +473,37 @@ export function createServer(options: ServerOptions): HarnessServer {
     // call, so this flips it live without a restart (no MCP hot-plug needed).
     if (parts[0] === 'api' && parts[1] === 'web') {
       if (req.method === 'GET') {
-        let enabled = true
-        try {
-          const parsed = JSON.parse(readFileSync(webToggleFile, 'utf8')) as { enabled?: unknown }
-          enabled = parsed?.enabled !== false
-        } catch {
-          /* missing/corrupt means enabled */
-        }
+        const settings = readWebSettings(webToggleFile)
         return json({
           mode: webMode,
-          enabled,
-          provider: process.env.MICRO_SEARCH_PROVIDER ?? 'bing',
+          enabled: settings.enabled,
+          provider: settings.provider ?? process.env.MICRO_SEARCH_PROVIDER ?? 'bing',
+          providers: SEARCH_PROVIDERS.map((p) => ({
+            id: p.id,
+            label: p.label,
+            configured: p.needs.length === 0 || p.needs.some((k) => Boolean(process.env[k])),
+          })),
           toggleFile: webToggleFile,
         })
       }
       if (req.method === 'POST') {
-        const body = (await req.json().catch(() => ({}))) as { enabled?: unknown }
-        const enabled = body.enabled !== false
+        const body = (await req.json().catch(() => ({}))) as { enabled?: unknown; provider?: unknown }
+        const current = readWebSettings(webToggleFile)
+        const enabled = body.enabled === undefined ? current.enabled : body.enabled !== false
+        let provider = current.provider
+        if (body.provider !== undefined) {
+          const id = String(body.provider).trim().toLowerCase()
+          const known = SEARCH_PROVIDERS.find((p) => p.id === id)
+          if (!known) return json({ error: `unknown search provider "${id}"` }, 400)
+          if (known.needs.length > 0 && !known.needs.some((k) => Boolean(process.env[k]))) {
+            return json({ error: `provider "${id}" is not configured (set ${known.needs.join(' or ')})` }, 400)
+          }
+          provider = id
+        }
+        const next = { enabled, ...(provider ? { provider } : {}) }
         mkdirSync(path.dirname(webToggleFile), { recursive: true })
-        writeFileSync(webToggleFile, JSON.stringify({ enabled }, null, 2))
-        return json({ ok: true, enabled })
+        writeFileSync(webToggleFile, JSON.stringify(next, null, 2))
+        return json({ ok: true, enabled, provider: provider ?? process.env.MICRO_SEARCH_PROVIDER ?? 'bing' })
       }
       return json({ error: 'method not allowed' }, 405)
     }

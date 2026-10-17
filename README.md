@@ -12,7 +12,7 @@
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <a href="https://alexzhangupupup.github.io/micro-harness/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub_Pages-blue?style=flat-square"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-180_passing-brightgreen?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-181_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
@@ -259,9 +259,9 @@ Verified against the official reference server, end to end: 13 tools discovered,
 model was offered all of them alongside the built-in five, it called
 `everything__get-sum {a:17,b:25}`, and answered `42`.
 
-**First-party web tools.** `MICRO_WEB=off|fetch|search|all` (default `all`) connects a bundled MCP server exposing `web_search` and `web_fetch` — no config file needed. Search defaults to `bing` (no key, reachable where the global engines are blocked); `MICRO_SEARCH_PROVIDER` switches to `baidu`, `bocha` (博查, needs `BOCHA_API_KEY`) or `searxng` (`MICRO_SEARXNG_URL`). `web_fetch` is SSRF-guarded: it refuses non-public addresses and pins the validated IP for the connection.
+**First-party web tools.** `MICRO_WEB=off|fetch|search|all` (default `all`) connects a bundled MCP server exposing `web_search` and `web_fetch` — no config file needed. Search defaults to `bing` (no key, reachable where the global engines are blocked); `MICRO_SEARCH_PROVIDER` sets the boot default and the picker in the GUI overrides it per call — `baidu`, `bocha` (博查, needs `BOCHA_API_KEY`) or `searxng` (`MICRO_SEARXNG_URL`). `web_fetch` is SSRF-guarded: it refuses non-public addresses and pins the validated IP for the connection.
 
-Web is a permission capability: `read-only` and `workspace` never get these tools, `full` uses them freely, and `auto-review` asks before every call. A runtime switch at `~/.micro-harness/web.json` (the 🌐 button in the GUI) turns them off live — the server re-reads it per call, so no restart.
+Web is a permission capability: `read-only` and `workspace` never get these tools, `full` uses them freely, and `auto-review` asks before every call. The 🌐 button and the search-engine picker write `~/.micro-harness/web.json` (`{"enabled": true, "provider": "bocha"}`); the server re-reads it per call, so switching engines or turning web off takes effect without a restart.
 
 **What it deliberately does not do:** hot-plug a server into a running process, or
 withdraw its tools when it drops. If that ever becomes a requirement, it is the trigger
@@ -326,7 +326,7 @@ Then open the Agent Panel and start a thread with `micro-harness`.
 | **Inspector** | the exact payload of every model call: system prompt, tool schemas, messages, token estimate |
 | **Palette** | `⌘K` — app actions plus full-text search across every saved session |
 | **Attachments** | paste, drop or click-upload files into the composer: images travel as multimodal content parts, text files ride along with the prompt |
-| **Web** | 🌐 toggles live web access (`web_search` / `web_fetch` via the bundled MCP server) |
+| **Web** | 🌐 toggles live web access; the adjacent picker chooses the search engine (`bing` / `baidu` / `bocha` / `searxng`) |
 | **Permissions** | four presets — read-only / workspace / full / auto-review — with a confirmation before granting shell access; `--approval` still controls per-call prompts |
 | **Approvals** | when the server runs `--approval suggest`/`auto-edit`, a mutating tool call blocks and the transcript shows an Allow / Deny card |
 | **Session tree** | flip the sidebar to tree mode to see forks nested under their origin |
