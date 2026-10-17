@@ -72,15 +72,31 @@ export function capabilities(mode: WebMode): { fetch: boolean; search: boolean }
   }
 }
 
+export interface RuntimeSettings {
+  enabled: boolean
+  /** Set only when the GUI picked one; otherwise the boot-time provider wins. */
+  provider?: string
+}
+
 /**
- * The runtime soft switch. Missing file, unreadable file or a parse error all
- * mean "enabled": a broken toggle must not silently cut the network off.
+ * The runtime soft switch + provider choice. Missing file, unreadable file or a
+ * parse error all mean "enabled, keep the boot provider": a broken toggle must
+ * not silently cut the network off or reroute searches.
  */
-export function runtimeEnabled(toggleFile: string): boolean {
+export function runtimeSettings(toggleFile: string): RuntimeSettings {
   try {
-    const parsed = JSON.parse(readFileSync(toggleFile, 'utf8')) as { enabled?: unknown }
-    return parsed?.enabled !== false
+    const parsed = JSON.parse(readFileSync(toggleFile, 'utf8')) as { enabled?: unknown; provider?: unknown }
+    const provider =
+      typeof parsed?.provider === 'string' && parsed.provider.trim()
+        ? parsed.provider.trim().toLowerCase()
+        : undefined
+    return { enabled: parsed?.enabled !== false, provider }
   } catch {
-    return true
+    return { enabled: true }
   }
+}
+
+/** Backwards-compatible helper for callers that only need the boolean. */
+export function runtimeEnabled(toggleFile: string): boolean {
+  return runtimeSettings(toggleFile).enabled
 }

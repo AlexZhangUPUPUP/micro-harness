@@ -52,6 +52,21 @@ export interface FileAttachment {
   text: string
 }
 
+/** One search backend the GUI may pick; `configured` is false when its key/URL is missing. */
+export interface WebProvider {
+  id: string
+  label: string
+  configured: boolean
+}
+
+export interface WebState {
+  mode: string
+  enabled: boolean
+  provider: string
+  providers: WebProvider[]
+  toggleFile?: string
+}
+
 export interface AgentWorktree {
   agentId: string
   path: string
@@ -153,9 +168,12 @@ export const api = {
         })
       : j<{ ok: boolean }>('/api/permission', { method: 'POST', body: JSON.stringify({ preset }) }),
   /** The runtime web switch; the MCP server re-reads the toggle file per call. */
-  web: () => j<{ mode: string; enabled: boolean; provider: string }>('/api/web'),
-  setWeb: (enabled: boolean) =>
-    j<{ ok: boolean; enabled: boolean }>('/api/web', { method: 'POST', body: JSON.stringify({ enabled }) }),
+  web: () => j<WebState>('/api/web'),
+  setWeb: (patch: { enabled?: boolean; provider?: string }) =>
+    j<{ ok: boolean; enabled: boolean; provider: string }>('/api/web', {
+      method: 'POST',
+      body: JSON.stringify(patch),
+    }),
   /** Answer a pending tool-call approval (allow/deny). */
   decidePermission: (id: string, requestId: string, allow: boolean) =>
     j<{ ok: boolean }>(`/api/sessions/${id}/permissions/${encodeURIComponent(requestId)}`, {
