@@ -40,6 +40,22 @@ Feature lists make every harness look alike. These five questions separate the d
 
 ---
 
+## Kernel shape
+
+The comparison above is about capabilities. This one is about the kernel: what the core is, who owns the loop, what an extension is, and what the event stream is for. It is the part that decides how much of the system you can read and replace.
+
+| | micro-harness | pi | Codex | Claude Code | opencode |
+|---|---|---|---|---|---|
+| **Kernel** | ~12k lines of TypeScript in 4 packages; no runtime dependencies | a small TypeScript loop plus an extension API | a Rust workspace: `core`, `tui`, `exec`, `app-server`, sandbox crates | closed source | a TypeScript server plus a protocol package and several clients |
+| **Owns the loop** | `Harness` (`packages/core/src/harness.ts`) | yes, deliberately small | `codex-core` | not inspectable | the server |
+| **Unit of extension** | compile-time interfaces (`Provider`/`Tool`/`FileSystem`) + MCP read at boot | TypeScript extensions registered at startup | MCP, `AGENTS.md`, config | hooks, skills, sub-agents, MCP | plugins plus the server protocol |
+| **Events** | one tagged stream: session log, SSE, replay, Trace and Inspector all consume it | session JSONL; RPC/SDK for integration | JSON-RPC (`app-server`) | — | the protocol between server and clients |
+| **Boundary** | permission presets × approval × a per-tool `network` flag | defined by extensions | OS sandbox (Seatbelt/Landlock) + approval policy | permission modes | configuration |
+
+Two honest notes. **opencode is the closest in shape**: a server that owns the loop, with TUI/desktop/web clients — the difference is scale and how small the kernel is, not the architecture. **pi is the closest in philosophy**: a small core with everything else as extensions; the difference is *when* extension happens — at startup through an API, or at compile time through interfaces.
+
+What is not a difference: having a server with SSE (opencode), supporting MCP (Codex, Claude Code), or being extensible (pi). What is: a kernel you can read end to end (the seed is six files), a compile-time seam instead of a plugin runtime — so no hot-plug, by design — and one event stream that is simultaneously the log, the replay source and the UI feed.
+
 ## What we took from the field
 
 Designs are not invented in a vacuum. Each item below credits its source and says where we used it.
@@ -118,8 +134,9 @@ So we kept the **seams**, deleted the **container**, and wrote the revival condi
 
 - **DeepSeek Harness (dsh)**: its `architecture.md` (everything is a plugin; no privileged core to patch; the turn-flow event pipeline; the three roles of a capability seam; "model-visible means recorded"; append-only session event log).
 - **pi**: its README and docs (Extensions, Compaction, Branching).
-- **Codex**: [`openai/codex`](https://github.com/openai/codex) (Apache-2.0, an open-source CLI).
+- **Codex**: [`openai/codex`](https://github.com/openai/codex) (Apache-2.0, an open-source CLI); the `codex-rs` workspace (core, tui, exec, app-server, sandbox crates).
+- **opencode**: [`anomalyco/opencode`](https://github.com/anomalyco/opencode) (open source, TypeScript monorepo: server, protocol, clients) and [opencode.ai](https://opencode.ai).
 - **Claude Code**: public docs on hooks, sub-agents, and its memory/compaction model.
 - **Our own claims**: every item under "Where we think we differ" can be checked in this repo — `packages/core/src/{harness,patch,context,fs}.ts`, `packages/gui/src/`, and the test suite (`bun test`).
 
-> Snapshot date: 2026-10-16.
+> Snapshot date: 2026-10-17.

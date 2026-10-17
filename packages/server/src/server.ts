@@ -284,6 +284,9 @@ export function createServer(options: ServerOptions): HarnessServer {
       cwd: sessionCwd,
       tools: [...baseTools, makeTaskTool(runner)],
       hub,
+      // The preset decides shell access for the main agent too; sub-agents get
+      // the same value through AgentRunner below.
+      allowBash: sessionBash,
       maxSteps: options.maxSteps,
       systemPrompt: options.systemPrompt,
       pricing: options.pricing,

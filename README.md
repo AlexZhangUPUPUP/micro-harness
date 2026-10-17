@@ -13,15 +13,17 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square"></a>
 </p>
 
-micro-harness is a coding-agent runtime built with TypeScript. Connect a model service compatible with OpenAI Chat Completions to read projects, edit files, call tools, and delegate work to multiple agents.
+micro-harness is a coding-agent runtime built with TypeScript. An *agent harness* is the layer between a model and a project: it runs the tool loop, manages the context window and records what happened. This one is small enough to read — **4 packages, ~12k lines, zero runtime dependencies**, with no framework between the model and the loop.
 
-Use it on a local project, or explore the source to understand how a coding agent works. Model calls, tool execution, and context management have corresponding code and event records you can inspect.
+Connect any OpenAI Chat Completions–compatible service to read projects, edit files, run tools and delegate to sub-agents. The CLI, HTTP server and web interface share the same kernel. The six-file seed it grew from is frozen at [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) — the shortest path to understanding the loop.
 
 ## Why use it
 
-- **Follow the collaboration.** See how the main agent delegates work, with status, token usage, and cost for each sub-agent.
-- **Review the changes.** Enable Git worktree isolation, inspect each sub-agent's diff in Changes, and accept or reject individual hunks.
-- **Inspect model calls.** Browse events and replay in Trace, then examine each round's system prompt, messages, and tool information in Inspector.
+- **A kernel you can read.** The loop, tool dispatch, compaction and event stream are ordinary code in `packages/core` (~5k lines). No plugin container, no framework — you can follow a request from `send()` to the model call and back.
+- **One event stream, four views.** The same tagged events are the session log, the SSE feed, replay, Trace and Inspector. “What the model saw” is recorded, not reconstructed from a separate UI state.
+- **Capability *is* the permission model.** `read-only` / `workspace` / `full` / `auto-review` decide which tools exist, whether the shell is available, and whether `network` tools need approval per call.
+- **Delegation with a review step.** Sub-agents get separate context (optionally a git worktree); their diffs land hunk by hunk, and a drifted hunk is reported rather than mis-applied.
+- **Tests and evals as first-class.** 185 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
 
 <p align="center">
   <img src="docs/gui.png" alt="micro-harness: sessions, conversation, and agent execution details" width="1100">
@@ -29,7 +31,53 @@ Use it on a local project, or explore the source to understand how a coding agen
 
 <p align="center"><em>Submit a task, follow its execution, and inspect the result in one interface.</em></p>
 
-[Quick start](#quick-start) · [CLI and editors](#cli-and-editors) · [Working with multiple agents](#working-with-multiple-agents) · [Configuration and boundaries](#configuration-and-boundaries) · [Architecture and documentation](#architecture-and-documentation) · [Development and contributing](#development-and-contributing)
+[Core design](#core-design) · [How it compares](#how-it-compares) · [Quick start](#quick-start) · [CLI and editors](#cli-and-editors) · [Working with multiple agents](#working-with-multiple-agents) · [Configuration and limitations](#configuration-and-limitations) · [Tests and evals](#tests-and-evals) · [Architecture and documentation](#architecture-and-documentation) · [Development and contributing](#development-and-contributing)
+
+## Core design
+
+| Design | How it works | Implementation |
+|---|---|---|
+| **One execution event contract** | Model requests, tool results, usage, and sub-agent status travel as events tagged with agent identity. Logs, SSE, and the interface consume those events. | [Event definitions](packages/core/src/events.ts), [agent loop](packages/core/src/harness.ts) |
+| **Replaceable capability interfaces** | The loop calls models through `Provider`, executes operations through `Tool`, and accesses files through `FileSystem`. Capabilities are composed explicitly in code. | [Model interface](packages/core/src/provider.ts), [tool interface](packages/core/src/tools.ts), [file interface](packages/core/src/fs.ts) |
+| **Context compaction that respects message structure** | The default keeps the first and recent turns while dropping the middle. Long single turns can be trimmed by tool step, keeping calls paired with their results. Model-written summaries are also supported. | [Context policies](packages/core/src/context.ts), [mechanism tests](packages/core/test/context.test.ts) |
+| **Separate collaboration state and code changes** | Sub-agents have independent conversations. Optional Git worktrees separate working directories, with diffs and hunk selection for integration. See [configuration](#configuration-and-limitations) for boundaries. | [Agent runner](packages/core/src/agents.ts), [isolation and integration](packages/core/src/isolation.ts), [patch application](packages/core/src/patch.ts) |
+
+The execution path connects entry points to recorded events. Solid arrows show requests or execution; dotted arrows show event output.
+
+```mermaid
+flowchart TB
+  CLI["CLI"] --> Loop["Agent loop"]
+  Editor["Editor / ACP"] --> Loop
+  Web["Web interface"] --> Server["HTTP / SSE server"]
+  Server --> Loop
+  Loop --> Model["Model Provider"]
+  Model --> Loop
+  Loop --> Tools["Built-in tools / MCP"]
+  Tools --> Loop
+  Loop --> Children["Sub-agents"]
+  Children --> Loop
+  Loop -.-> Events["Execution events"]
+  Children -.-> Events
+  Events --> Storage["Session records / search index"]
+  Events --> Views["Conversation / Trace / Replay / Inspector"]
+```
+
+## How it compares
+
+Different harnesses optimise different parts of the same problem: Codex has an OS sandbox, Claude Code has the deepest product surface, pi has the largest runtime extension surface, and opencode has the most complete client/server split. The difference here is at the kernel.
+
+| | micro-harness | pi | Codex | Claude Code | opencode |
+|---|---|---|---|---|---|
+| **Kernel** | ~12k lines TS, 4 packages, no runtime deps | small TS loop + extension API | Rust `core` + `tui`/`exec`/`app-server` | closed source | TS server + protocol + clients |
+| **Owns the loop** | `Harness` | yes, deliberately small | `codex-core` | — | the server |
+| **Extension unit** | compile-time interfaces + MCP at boot | TypeScript extensions at startup | MCP + `AGENTS.md` + config | hooks / skills / sub-agents | plugins + server protocol |
+| **Events** | one stream = log, SSE, replay, Inspector | session JSONL + RPC/SDK | `app-server` JSON-RPC | — | server protocol |
+| **Boundary** | presets × approval × tool `network` flag | extension-defined | OS sandbox + approval | permission modes | config |
+| **Surface** | CLI · server + GUI · ACP · MCP | TUI · RPC · SDK | CLI · TUI · app-server · MCP | CLI · IDE | CLI/TUI · desktop · server |
+
+`—` means the project does not document it, not that it is absent. This is a dated snapshot; corrections are welcome.
+
+What is **not** a difference: having a server with SSE (opencode does), supporting MCP (Codex and Claude Code do), or offering extensions (pi’s surface is much larger). What is: a kernel small enough to read end to end, a compile-time seam instead of a plugin runtime — so no hot-plug, by design — and an event stream that is simultaneously the log, the replay source and the UI feed. The [design notes](docs/design-comparison.md) go through the trade-offs question by question.
 
 ## Quick start
 
@@ -87,6 +135,12 @@ MICRO_PERMISSION=workspace microh
 ```
 
 `micro-harness` is the compiled CLI. `microh` is a web launcher pointing to this source checkout; it still needs Bun and the checkout.
+
+### What a run records
+
+For the file task in Quick start, the model issues a `write_file` call, the runtime executes it and returns the result, then the model reads the file and replies. The exact tool sequence depends on the model.
+
+Each `model.request` records the messages handed to the Provider after compaction and the tool names. `tool.call` / `tool.result` record arguments, output, and duration; `usage` records provider-reported token usage. Compare Inspector, Trace, and the file on disk to check what the model received and what it actually did.
 
 ## CLI and editors
 
@@ -160,7 +214,7 @@ Follow execution in Agents and inspect each diff in Changes, where you can selec
 
 The CLI also exposes `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--agent-max-tokens`, and `--agent-max-cost` to limit sub-agent execution.
 
-## Configuration and boundaries
+## Configuration and limitations
 
 | Configuration | Purpose |
 |---|---|
@@ -175,11 +229,17 @@ The CLI also exposes `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--a
 | `MICRO_SEARCH_PROVIDER` | Default search engine: `bing`, `baidu`, `bocha`, or `searxng` |
 | `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` / `MICRO_PRICE_INPUT_CACHED` | USD per million tokens for cost estimates |
 
-Your model provider charges for model usage. Displayed costs depend on your configured prices and the provider's usage reporting. Image input requires a model that supports it.
+Your model provider charges for model usage. Displayed costs depend on your configured prices and the provider’s usage reporting.
 
-**Permissions.** `bun run ui` and `microh` default to `full`; the examples explicitly use `workspace`. The CLI disables shell execution unless you pass `--allow-bash`; `--approval` controls approval prompts. Starting the server entry point directly defaults to `workspace`. Shell permission propagation to the web session’s main agent is currently incomplete; use the CLI example above for shell tasks. Permission filtering also does not yet fully constrain third-party MCP tools.
+**Permissions.** A preset bundles what the agent may touch with whether it must ask. `read-only` and `workspace` never get the shell or `network` tools; `full` gets both; `auto-review` gets both but asks before every shell command or network call. `bun run ui` and `microh` default to `full` (the examples pass `workspace` explicitly); the CLI needs `--allow-bash` and takes `--approval`. The web UI can switch a session’s preset, and the next run uses it. Sending a prompt while a run is active interrupts that run and starts a new turn from the recorded history.
 
-**Isolation.** File path checks and Git worktrees help scope file operations and separate changes; they do not provide an operating-system sandbox. Symlinks can currently point outside the working directory, and worktree creation failures fall back to the shared directory. Check the actual worktree status.
+**Limitations.**
+
+- **No OS-level sandbox.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. Symlinks can currently point outside the working directory, and a failed worktree creation falls back to the shared directory.
+- **MCP tools are added after preset filtering.** A `read-only` session can still call an MCP tool that writes. Choose the servers you connect with that in mind.
+- **No MCP hot-plug.** Configuration is read at startup; restart after editing `mcp.json`.
+- **Costs are estimates** based on your configured prices, and image input needs a vision model.
+- **Early (v0.1).** Interfaces may change between minor versions.
 
 ### External tools and web access
 
@@ -198,6 +258,26 @@ Connect external tools through MCP (Model Context Protocol), using stdio or HTTP
 
 Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. The web server bundles `web_search` and `web_fetch`, with a live web toggle and search-engine picker in the interface. Bocha requires `BOCHA_API_KEY`; SearXNG requires `MICRO_SEARXNG_URL`.
 
+## Tests and evals
+
+Context management has to handle both window size and message structure. These cases specify their inputs and assertions and run without a model key.
+
+| Check | Input or condition | Test assertions |
+|---|---|---|
+| Long single turn | One user message, 20 tool steps, and 4,000 characters per result; more than 20,000 estimated tokens before compaction | This fixture fits within 5,000 estimated tokens, preserving the task, latest step, and call/result pairing |
+| First and recent turns | Multiple turns trigger middle compaction | The first and recent turns survive, and retained content is not rewritten |
+| Summary failure | An injected summarizer throws | Compaction falls back to deterministic middle dropping |
+
+```bash
+# Offline check of context trimming, message pairing, and summary fallback.
+bun test packages/core/test/context.test.ts
+
+# Scripted-model check for two task types: create a file, fix a failing test.
+bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
+```
+
+These cover context mechanisms and task execution respectively. Token counts use a local estimate. Mock runs do not measure a real model’s coding ability or establish success rates across models. The full suite is `bun test` (185 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+
 ## Architecture and documentation
 
 The core runs the loop: request a model response, execute tools, and send the results back to the model. It emits events that the server persists and streams to the browser, where they drive the conversation, agent tree, and execution views.
@@ -209,7 +289,13 @@ The core runs the loop: request a model response, execute tools, and send the re
 | [`packages/gui`](packages/gui) | React interface, conversations, traces, change review, and Inspector |
 | [`packages/web-mcp`](packages/web-mcp) | Built-in search and page-fetching tools |
 
-Extend models, tools, and file access through the `Provider`, `Tool`, and `FileSystem` interfaces, then compose them explicitly in code. For the details and design decisions:
+### Two design decisions
+
+**Interfaces with explicit composition.** Models, tools, and file access are replaceable through interfaces, assembled at the CLI or server entry point. MCP configuration is loaded at startup, without runtime hot-plugging, keeping plugin lifecycle management out of the loop. See the [design comparison](docs/design-comparison.md) for the reasoning.
+
+**Separate records from search.** Web sessions append events to JSONL and maintain SQLite metadata and an FTS5 index. The index can be rebuilt from session records on disk, allowing records to be read independently while supporting search in the interface. See the [session store](packages/server/src/store.ts).
+
+Explore the implementation, evaluations, and project history:
 
 | Document | What to explore |
 |---|---|

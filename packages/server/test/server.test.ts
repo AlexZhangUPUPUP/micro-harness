@@ -949,3 +949,48 @@ test('a prompt during an active run aborts the old run instead of interleaving h
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('the full preset lets the web main agent run bash (allowBash reaches the Harness)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-bash-'))
+  const store = new SessionStore(dir)
+  let turn = 0
+  const provider: Provider = {
+    name: 'scripted',
+    async chat() {
+      turn++
+      if (turn === 1) {
+        return {
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              { id: 'b1', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command: 'echo hi' }) } },
+            ],
+          },
+        }
+      }
+      return { message: { role: 'assistant', content: 'done' } }
+    },
+  }
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false, permission: 'full' })
+  try {
+    const created = (await (
+      await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'go' }),
+      })
+    ).json()) as { session: { id: string } }
+    await srv.idle(created.session.id)
+    const results = store
+      .events(created.session.id)
+      .map((e) => e.event)
+      .filter((e) => e.type === 'tool.result') as Array<{ output: string }>
+    expect(results).toHaveLength(1)
+    expect(results[0].output).not.toContain('bash is disabled')
+    expect(results[0].output).toContain('hi')
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
