@@ -40,12 +40,16 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
       name: 'web_fetch',
       description:
         'Fetch one URL and return its readable text (HTML is converted to plain text). ' +
-        'Only public https addresses; redirects to another host are reported instead of followed.',
+        'Only public https addresses; redirects to another host are reported instead of followed. ' +
+        'Text is capped at 20000 characters by default — one fetch is normally enough.',
       inputSchema: {
         type: 'object',
         properties: {
           url: { type: 'string', description: 'absolute https URL to fetch' },
-          maxChars: { type: 'integer', description: 'cap on returned characters (optional)' },
+          maxChars: {
+            type: 'integer',
+            description: 'cap on returned characters (optional; default 20000, never above the server cap)',
+          },
         },
         required: ['url'],
       },
@@ -91,7 +95,6 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
         properties: {
           query: { type: 'string', description: 'search query' },
           maxResults: { type: 'integer', description: 'number of results (default 8)' },
-          provider: { type: 'string', description: 'override the configured provider (optional)' },
         },
         required: ['query'],
       },
