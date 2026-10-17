@@ -64,16 +64,18 @@ flowchart TB
 
 ## 与同类项目的区别
 
-不同的 harness 在同一个问题上优化不同的部分：Codex 有操作系统级沙箱，Claude Code 的产品面最完整，pi 的运行时扩展面最大，opencode 的客户端/服务端拆分最完整。这里的差别在内核。
+不同的 harness 在同一个问题上优化不同的部分：Codex 有操作系统级沙箱，Claude Code 的产品面最完整，pi 的运行时扩展面最大，opencode 的客户端/服务端拆分最完整。DeepSeek Harness（dsh）则以 Cordis 插件运行时组织能力，连 Agent 循环也可替换。这里的差别在内核。
 
-| | micro-harness | pi | Codex | Claude Code | opencode |
-|---|---|---|---|---|---|
-| **内核** | ~1.2 万行 TS，4 个包，零运行时依赖 | 小型 TS 循环 + 扩展 API | Rust `core` + `tui`/`exec`/`app-server` | 闭源 | TS server + protocol + 客户端 |
-| **谁拥有循环** | `Harness` | 是，刻意保持小 | `codex-core` | — | server |
-| **扩展单位** | 编译期接口 + 启动时读 MCP | 启动时注册的 TS 扩展 | MCP + `AGENTS.md` + 配置 | hooks / skills / sub-agents | 插件 + server 协议 |
-| **事件** | 一条流 = 日志、SSE、回放、Inspector | 会话 JSONL + RPC/SDK | `app-server` JSON-RPC | — | server 协议 |
-| **边界** | 预设 × 审批 × 工具 `network` 标记 | 由扩展决定 | OS 沙箱 + 审批 | 权限模式 | 配置 |
-| **集成面** | CLI · server + GUI · ACP · MCP | TUI · RPC · SDK | CLI · TUI · app-server · MCP | CLI · IDE | CLI/TUI · desktop · server |
+| | micro-harness | DeepSeek Harness（dsh） | pi | Codex | Claude Code | opencode |
+|---|---|---|---|---|---|---|
+| **内核** | ~1.2 万行 TS，4 个包，零运行时依赖 | Cordis 插件运行时 | 小型 TS 循环 + 扩展 API | Rust `core` + `tui`/`exec`/`app-server` | 闭源 | TS server + protocol + 客户端 |
+| **谁拥有循环** | `Harness` | `core/agent-loop` 默认驱动，可通过插件替换 | 是，刻意保持小 | `codex-core` | — | server |
+| **扩展单位** | 编译期接口 + 启动时读 MCP | Cordis 插件 + profiles / bundles 配置组装 | 启动时注册的 TS 扩展 | MCP + `AGENTS.md` + 配置 | hooks / skills / sub-agents | 插件 + server 协议 |
+| **事件** | 一条流 = 日志、SSE、回放、Inspector | 持久会话事件 + 运行中扩展事件 | 会话 JSONL + RPC/SDK | `app-server` JSON-RPC | — | server 协议 |
+| **边界** | 预设 × 审批 × 工具 `network` 标记 | sandbox 后端 + 工具执行策略 | 由扩展决定 | OS 沙箱 + 审批 | 权限模式 | 配置 |
+| **集成面** | CLI · server + GUI · ACP · MCP | Web · headless · SDK · ACP · desktop | TUI · RPC · SDK | CLI · TUI · app-server · MCP | CLI · IDE | CLI/TUI · desktop · server |
+
+DeepSeek Harness 列核对于 **2026-10-17**，依据其[官方架构文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)。它与本项目都重视事件和能力接口；主要差别是 dsh 通过插件与配置组合运行时，本项目在代码中显式组装接口。
 
 `—` 表示该项目没有公开说明，不代表它没有这个能力。这是一份有时间点的快照，欢迎纠错。
 
@@ -235,8 +237,8 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 
 **限制。**
 
-- **没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。符号链接目前仍可能指向目录外；worktree 创建失败会退回共享目录。
-- **MCP 工具在预设过滤之后加入。** `read-only` 会话仍能调用会写状态的 MCP 工具，接入前请自行评估。
+- **没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。符号链接目前仍可能指向目录外。显式启用 worktree 隔离时，目标目录必须是已有提交的 Git 仓库；隔离创建失败会停止子任务并返回原因，不会退回共享目录。
+- **工具权限依赖能力声明。** `read-only` 会过滤声明为可写的外部工具；当前 MCP 适配器保守地将所有 MCP 工具标为可写，因此只读会话不提供这些工具。其他预设下，外部工具的文件访问范围仍由其服务端负责。
 - **MCP 不支持热插拔。** 配置在启动时读取，改完 `mcp.json` 需重启。
 - **成本是估算**，取决于你配置的价格；图片输入需要支持视觉的模型。
 - **早期版本（v0.1）**，接口可能在小版本间变化。

@@ -250,8 +250,10 @@ export function createServer(options: ServerOptions): HarnessServer {
     const sessionCwd = meta.cwd || cwd
     const preset = sessionPermission.get(meta.id) ?? defaultPermission
     const spec = PERMISSIONS[preset]
+    // 只读约束同时覆盖外部工具；同一工具集合传给主 Agent 和子 Agent。
     const baseTools = (options.tools ?? makeTools()).filter(
       (t) =>
+        (preset !== 'read-only' || !t.mutating) &&
         (!t.network || spec.net) &&
         (!PERMISSIONS.full.tools.includes(t.name) || spec.tools.includes(t.name)),
     )
