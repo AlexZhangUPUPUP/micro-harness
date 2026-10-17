@@ -64,16 +64,18 @@ flowchart TB
 
 ## How it compares
 
-Different harnesses optimise different parts of the same problem: Codex has an OS sandbox, Claude Code has the deepest product surface, pi has the largest runtime extension surface, and opencode has the most complete client/server split. The difference here is at the kernel.
+Different harnesses optimise different parts of the same problem: Codex has an OS sandbox, Claude Code has the deepest product surface, pi has the largest runtime extension surface, and opencode has the most complete client/server split. DeepSeek Harness (dsh) composes capabilities through Cordis plugins, including a replaceable agent loop. The difference here is at the kernel.
 
-| | micro-harness | pi | Codex | Claude Code | opencode |
-|---|---|---|---|---|---|
-| **Kernel** | ~12k lines TS, 4 packages, no runtime deps | small TS loop + extension API | Rust `core` + `tui`/`exec`/`app-server` | closed source | TS server + protocol + clients |
-| **Owns the loop** | `Harness` | yes, deliberately small | `codex-core` | — | the server |
-| **Extension unit** | compile-time interfaces + MCP at boot | TypeScript extensions at startup | MCP + `AGENTS.md` + config | hooks / skills / sub-agents | plugins + server protocol |
-| **Events** | one stream = log, SSE, replay, Inspector | session JSONL + RPC/SDK | `app-server` JSON-RPC | — | server protocol |
-| **Boundary** | presets × approval × tool `network` flag | extension-defined | OS sandbox + approval | permission modes | config |
-| **Surface** | CLI · server + GUI · ACP · MCP | TUI · RPC · SDK | CLI · TUI · app-server · MCP | CLI · IDE | CLI/TUI · desktop · server |
+| | micro-harness | DeepSeek Harness (dsh) | pi | Codex | Claude Code | opencode |
+|---|---|---|---|---|---|---|
+| **Kernel** | ~12k lines TS, 4 packages, no runtime deps | Cordis plugin runtime | small TS loop + extension API | Rust `core` + `tui`/`exec`/`app-server` | closed source | TS server + protocol + clients |
+| **Owns the loop** | `Harness` | replaceable `core/agent-loop` driver | yes, deliberately small | `codex-core` | — | the server |
+| **Extension unit** | compile-time interfaces + MCP at boot | Cordis plugins + profiles / bundles | TypeScript extensions at startup | MCP + `AGENTS.md` + config | hooks / skills / sub-agents | plugins + server protocol |
+| **Events** | one stream = log, SSE, replay, Inspector | durable session events + live extension events | session JSONL + RPC/SDK | `app-server` JSON-RPC | — | server protocol |
+| **Boundary** | presets × approval × tool `network` flag | sandbox backends + tool execution policy | extension-defined | OS sandbox + approval | permission modes | config |
+| **Surface** | CLI · server + GUI · ACP · MCP | Web · headless · SDK · ACP · desktop | TUI · RPC · SDK | CLI · TUI · app-server · MCP | CLI · IDE | CLI/TUI · desktop · server |
+
+The DeepSeek Harness column was checked on **2026-10-17** against its [official architecture documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md). Both projects emphasize events and capability interfaces; dsh composes its runtime through plugins and configuration, while this project assembles interfaces explicitly in code.
 
 `—` means the project does not document it, not that it is absent. This is a dated snapshot; corrections are welcome.
 
@@ -235,8 +237,8 @@ Your model provider charges for model usage. Displayed costs depend on your conf
 
 **Limitations.**
 
-- **No OS-level sandbox.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. Symlinks can currently point outside the working directory, and a failed worktree creation falls back to the shared directory.
-- **MCP tools are added after preset filtering.** A `read-only` session can still call an MCP tool that writes. Choose the servers you connect with that in mind.
+- **No OS-level sandbox.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. Symlinks can currently point outside the working directory. Explicit worktree isolation requires a Git repository with a commit; creation failures stop the sub-task with an error instead of falling back to the shared directory.
+- **Tool permissions depend on capability declarations.** `read-only` filters external tools declared as mutating. The current MCP adapter conservatively marks all MCP tools as mutating, so they are unavailable in read-only sessions. Under other presets, file access by external tools remains the responsibility of their servers.
 - **No MCP hot-plug.** Configuration is read at startup; restart after editing `mcp.json`.
 - **Costs are estimates** based on your configured prices, and image input needs a vision model.
 - **Early (v0.1).** Interfaces may change between minor versions.

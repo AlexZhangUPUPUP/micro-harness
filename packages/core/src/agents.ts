@@ -238,51 +238,62 @@ export class AgentRunner {
     return n
   }
 
+  /** 校验任务并持有并发名额，所有初始化失败也必须释放资源。 */
   async run(roleName: string, prompt: string, parentId: string, depth: number): Promise<AgentResult> {
     const role = this.roles.get(roleName)
     const started = Date.now()
     const agentId = `${parentId}/${roleName}-${++this.#counter}`
-
+    // 提前失败不产生模型用量，也不创建子运行时。
     const fail = (error: string): AgentResult => ({
-      agentId,
-      role: roleName,
-      ok: false,
-      text: '',
-      input: 0,
-      output: 0,
-      cost: 0,
-      durationMs: Date.now() - started,
-      error,
+      agentId, role: roleName, ok: false, text: '', input: 0, output: 0, cost: 0,
+      durationMs: Date.now() - started, error,
     })
-
     if (!role) return fail(`unknown agent role: ${roleName} (known: ${this.roles.list().join(', ')})`)
     const maxDepth = this.#opts.maxDepth ?? 3
     if (depth >= maxDepth) return fail(`max agent depth ${maxDepth} reached (depth ${depth})`)
 
+    // 将隔离初始化纳入资源释放范围，禁止失败后使用共享工作区。
     const release = await this.#semaphore.acquire()
+    // 保留原有计时起点，隔离准备时间也计入子任务超时。
     const controller = new AbortController()
     const timeoutMs = this.#opts.timeoutMs ?? 300_000
     const timer = setTimeout(() => controller.abort(new Error(`agent timed out after ${timeoutMs}ms`)), timeoutMs)
-
-    const childTools = this.#childTools(role)
-
-    // Isolation: when enabled and the workspace is a git repo, each agent runs in
-    // its own worktree so parallel agents never overwrite each other.
-    let worktree: Worktree | null = null
-    if (this.#opts.isolation === 'worktree' && isGitRepo(this.#opts.cwd)) {
-      try {
-        worktree = createWorktree({ cwd: this.#opts.cwd, taskId: this.#taskId, agentId })
-        this.#worktrees.set(agentId, worktree)
-      } catch {
-        worktree = null // fall back to the shared workspace
-      }
+    try {
+      const worktree = this.#prepareWorktree(agentId)
+      const harness = this.#createHarness(role, agentId, parentId, depth, worktree)
+      return await this.#executeChild(harness, prompt, roleName, agentId, started, worktree, controller)
+    } catch (err) {
+      // 保留 Git 的失败原因，供调用方决定是否重试。
+      return fail(String((err as Error)?.message || err))
+    } finally {
+      // 初始化和执行共享同一个计时器与名额释放出口。
+      clearTimeout(timer)
+      release()
     }
+  }
 
+  /** 显式要求隔离时，必须成功建立独立工作区后才能继续。 */
+  #prepareWorktree(agentId: string): Worktree | null {
+    if (this.#opts.isolation !== 'worktree') return null
+    // 无提交的仓库同样无法建立 worktree，因此统一拒绝。
+    if (!isGitRepo(this.#opts.cwd)) throw new Error('worktree isolation requires a Git repository with a commit')
+    try {
+      const worktree = createWorktree({ cwd: this.#opts.cwd, taskId: this.#taskId, agentId })
+      this.#worktrees.set(agentId, worktree)
+      return worktree
+    } catch (err) {
+      // 隔离失败必须显式返回，避免并行任务误写共享目录。
+      throw new Error(`worktree isolation failed: ${String((err as Error)?.message || err)}`)
+    }
+  }
+
+  /** 根据已确认的隔离结果组装子运行时。 */
+  #createHarness(role: AgentRole, agentId: string, parentId: string, depth: number, worktree: Worktree | null): Harness {
     const harness = new Harness({
       provider: this.#opts.provider,
       model: role.model ?? this.#opts.model,
       cwd: worktree?.path ?? this.#opts.cwd,
-      // A worktree is a filesystem swap, not a special case in the tools.
+      // 隔离通过文件系统替换实现，工具无需感知 worktree。
       fs: worktree ? localFs(worktree.path) : this.#opts.fs,
       allowBash: this.#opts.allowBash,
       maxSteps: role.maxSteps,
@@ -290,19 +301,23 @@ export class AgentRunner {
       approval: this.#opts.approval,
       confirm: this.#opts.confirm,
       pricing: this.#opts.pricing,
-      tools: childTools,
+      tools: this.#childTools(role),
       hub: this.#opts.hub,
-      agentId,
-      parentId,
-      depth: depth + 1,
+      agentId, parentId, depth: depth + 1,
     })
+    // 仅在隔离建立成功后发布工作区信息。
     if (worktree) {
       harness.log.emit({ type: 'agent.worktree', path: worktree.path, branch: worktree.branch, base: worktree.base })
     }
+    return harness
+  }
 
+  /** 执行子任务并回收用量订阅，计时器由外层统一管理。 */
+  async #executeChild(harness: Harness, prompt: string, role: string, agentId: string, started: number, worktree: Worktree | null, controller: AbortController): Promise<AgentResult> {
     let input = 0
     let output = 0
     let cost = 0
+    // 只累计当前子任务的用量，并在超过预算时终止执行。
     const off = this.#opts.hub.on((e) => {
       if (e.agentId !== agentId || e.event.type !== 'usage') return
       input += e.event.input
@@ -314,19 +329,18 @@ export class AgentRunner {
         controller.abort(new Error(overTokens ? 'token budget exceeded' : 'cost budget exceeded'))
       }
     })
-
     try {
       const text = await harness.send(prompt, controller.signal)
-      return { agentId, role: roleName, ok: true, text, input, output, cost, durationMs: Date.now() - started, worktree }
+      return { agentId, role, ok: true, text, input, output, cost, durationMs: Date.now() - started, worktree }
     } catch (err) {
+      // 取消时优先返回超时或预算原因，保留原有结果契约。
       const message = controller.signal.aborted
         ? String(controller.signal.reason?.message ?? controller.signal.reason ?? 'aborted')
         : String((err as Error)?.message || err)
-      return { agentId, role: roleName, ok: false, text: '', input, output, cost, durationMs: Date.now() - started, error: message, worktree }
+      return { agentId, role, ok: false, text: '', input, output, cost, durationMs: Date.now() - started, error: message, worktree }
     } finally {
+      // 正常结束和异常结束均撤销当前任务的用量订阅。
       off()
-      clearTimeout(timer)
-      release()
     }
   }
 
