@@ -295,6 +295,22 @@ Verified by driving the real CLI as a subprocess with a real model: one turn pro
 `session/update` notifications (streamed text, four tool calls, usage with cost), and
 with the fs capability withheld the file really landed on disk (`hello from acp`).
 
+**Driving it from Zed.** `scripts/acp.sh` starts the server with the model key resolved (from `~/.micro-harness/env`, then `~/.pi/agent/auth.json`), so no secret has to go into editor settings. Add it as a custom agent in Zed:
+
+```json
+{
+  "agent_servers": {
+    "micro-harness": {
+      "type": "custom",
+      "command": "/path/to/micro-harness/scripts/acp.sh",
+      "args": []
+    }
+  }
+}
+```
+
+Then open the Agent Panel and start a thread with `micro-harness`.
+
 ---
 
 ## 🖥️ The GUI

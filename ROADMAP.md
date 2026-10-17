@@ -198,7 +198,7 @@ bun packages/core/src/cli.ts "hi" # 能跑
 - [x] **ACP server**（让编辑器驱动我们）：协议 v1，JSON-RPC/NDJSON；`initialize`/`session/new`/`session/prompt`/`session/cancel` 入，`session/update`+`session/request_permission`+`fs/*` 出；`micro-harness acp` 启动。真机验证：真 CLI 子进程 + 真模型，单回合 101 条 update，文件确实落盘
 - [x] 关键结论：MCP 用"启动时读配置"就够了，**不需要容器**——见 docs/design-comparison.zh-CN.md
 - [x] 验收：接入一个真实 MCP server（官方参考 server 端到端：13 工具 → 模型调用 → 42）
-- [ ] 验收：在 Zed 里驱动我们对话 —— 未验证（ACP 已用真 CLI 子进程 + 真模型验证：单回合 101 条 update）
+- [ ] 验收：在 Zed 里驱动我们对话 —— **配置就绪**（Zed 1.24.2 已装、`scripts/acp.sh` + `agent_servers` 已配、ACP `initialize` 与 `session/new` 实测通过），待 Agent Panel 里人工点击确认
 
 ## P9 · 上下文与经济性
 
