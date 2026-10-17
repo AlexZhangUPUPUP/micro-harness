@@ -7,6 +7,7 @@
       "devDependencies": {
         "@types/bun": "^1.1.14",
         "@types/node": "^22.10.0",
+        "marked": "^18.1.1",
         "typescript": "^5.7.2",
       },
     },
@@ -43,6 +44,13 @@
       },
       "dependencies": {
         "@micro-harness/core": "workspace:*",
+      },
+    },
+    "packages/web-mcp": {
+      "name": "@micro-harness/web-mcp",
+      "version": "0.1.0",
+      "bin": {
+        "micro-harness-web": "./src/server.ts",
       },
     },
   },
@@ -154,6 +162,8 @@
     "@micro-harness/gui": ["@micro-harness/gui@workspace:packages/gui"],
 
     "@micro-harness/server": ["@micro-harness/server@workspace:packages/server"],
+
+    "@micro-harness/web-mcp": ["@micro-harness/web-mcp@workspace:packages/web-mcp"],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
@@ -324,6 +334,8 @@
     "lines-and-columns": ["lines-and-columns@1.2.4", "", {}, "sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg=="],
 
     "lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
+
+    "marked": ["marked@18.1.1", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg=="],
 
     "merge2": ["merge2@1.4.1", "", {}, "sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg=="],
 

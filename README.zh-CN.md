@@ -11,7 +11,8 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
   <img alt="Bun" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-155_passing-brightgreen?style=flat-square">
+  <a href="https://alexzhangupupup.github.io/micro-harness/"><img alt="文档" src="https://img.shields.io/badge/docs-GitHub_Pages-blue?style=flat-square"></a>
+  <img alt="tests" src="https://img.shields.io/badge/tests-180_passing-brightgreen?style=flat-square">
   <img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
   <img alt="Stars" src="https://img.shields.io/github/stars/AlexZhangUPUPUP/micro-harness?style=flat-square">
