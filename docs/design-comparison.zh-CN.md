@@ -40,6 +40,22 @@
 
 ---
 
+## 内核形态
+
+上面的对比关于能力；这一节关于内核：核心是什么、谁拥有循环、扩展单位是什么、事件流用来做什么。它决定了这个系统有多少是你读得完、换得掉的。
+
+| | micro-harness | pi | Codex | Claude Code | opencode |
+|---|---|---|---|---|---|
+| **内核** | 4 个包、约 1.2 万行 TypeScript；零运行时依赖 | 小型 TypeScript 循环 + 扩展 API | Rust workspace：`core`、`tui`、`exec`、`app-server`、沙箱 crate | 闭源 | TypeScript server + protocol 包 + 多个客户端 |
+| **谁拥有循环** | `Harness`（`packages/core/src/harness.ts`） | 是，刻意保持小 | `codex-core` | 不可见 | server |
+| **扩展单位** | 编译期接口（`Provider`/`Tool`/`FileSystem`）+ 启动时读 MCP | 启动时注册的 TypeScript 扩展 | MCP、`AGENTS.md`、配置 | hooks、skills、子 Agent、MCP | 插件 + server 协议 |
+| **事件** | 一条带标签的流：会话日志、SSE、回放、Trace、Inspector 都消费它 | 会话 JSONL；集成走 RPC/SDK | JSON-RPC（`app-server`） | — | server 与客户端之间的协议 |
+| **边界** | 权限预设 × 审批 × 工具级 `network` 标记 | 由扩展定义 | OS 沙箱（Seatbelt/Landlock）+ 审批策略 | 权限模式 | 配置 |
+
+两句诚实话。**opencode 在形态上最接近**：server 拥有循环，TUI/desktop/web 都是客户端——差别在规模与内核大小，不在架构。**pi 在哲学上最接近**：小核心 + 其余全是扩展；差别在扩展发生的时机——启动时通过 API，还是编译期通过接口。
+
+不构成区别的：有 server + SSE（opencode）、支持 MCP（Codex、Claude Code）、可扩展（pi）。构成区别的：内核小到可以读完（种子只有 6 个文件）；用编译期接缝代替插件运行时——因此按设计不支持热插拔；以及一条同时充当日志、回放源与 UI 数据源的事件流。
+
 ## 我们从社区借鉴了什么
 
 设计不是凭空来的。下面每一条都注明出处，以及我们把它用在哪。
@@ -118,8 +134,9 @@ P1 是一个自研插件内核：396 行代码 + 10 个测试，包含 `provide`
 
 - **DeepSeek Harness（dsh）**：其 `architecture.md`（"产品的每一部分都是插件"、"没有需要打补丁的特权核心"、turn-flow 事件管线、能力接缝的三个角色、"模型可见即被记录"、追加式会话事件日志）。
 - **pi**：其 README 与文档（Extensions、Compaction、Branching）。
-- **Codex**：[`openai/codex`](https://github.com/openai/codex)（Apache-2.0，开源 CLI）。
+- **Codex**：[`openai/codex`](https://github.com/openai/codex)（Apache-2.0，开源 CLI）；`codex-rs` workspace（core、tui、exec、app-server、沙箱 crate）。
+- **opencode**：[`anomalyco/opencode`](https://github.com/anomalyco/opencode)（开源，TypeScript monorepo：server、protocol、客户端）与 [opencode.ai](https://opencode.ai)。
 - **Claude Code**：公开文档中的 hooks、子 agent 与记忆/压缩说明。
 - **我们自己的主张**：本文"我们认为自己不同的地方"每一条都能在本仓库核对——`packages/core/src/{harness,patch,context,fs}.ts`、`packages/gui/src/`，以及测试套件（`bun test`）。
 
-> 快照日期：2026-10-16。
+> 快照日期：2026-10-17。

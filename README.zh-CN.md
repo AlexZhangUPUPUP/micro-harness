@@ -13,15 +13,17 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square"></a>
 </p>
 
-micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。接入兼容 OpenAI Chat Completions 的模型服务后，它可以读取项目、修改文件、调用工具，并把复杂任务交给多个子 Agent。
+micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent harness** 是模型与项目之间的那一层：它跑工具循环、管理上下文窗口、记录发生过什么。这个 harness 小到可以读完——**4 个包、约 1.2 万行、零运行时依赖**，模型与循环之间没有框架。
 
-你可以直接用它处理本地项目，也可以从源码理解一个编码 Agent 如何工作：从模型调用、工具执行到上下文管理，运行过程都有对应的代码与事件记录。
+接入任意兼容 OpenAI Chat Completions 的模型服务，它就能读取项目、修改文件、运行工具，并把任务交给子 Agent。CLI、HTTP 服务与 Web 界面共享同一内核。最初只有 6 个源文件的种子版本冻结在 [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1)，是理解循环最短的路径。
 
 ## 为什么使用它
 
-- **把协作过程展开。** 查看主 Agent 如何分派任务，以及每个子 Agent 的状态、token 用量与成本。
-- **把改动留给审阅。** 开启 Git worktree 隔离后，在 Changes 面板查看各子 Agent 的 diff，逐块接受或拒绝改动。
-- **把模型调用看清。** 在 Trace 中检查事件与回放，在 Inspector 中查看每轮的系统提示词、消息和工具信息。
+- **内核可读。** 循环、工具调度、上下文裁剪与事件流都是 `packages/core` 里的普通代码（约 5000 行）。没有插件容器、没有框架——可以从 `send()` 一路跟到模型调用再跟回来。
+- **一条事件流，四个视图。** 同一批带标签的事件既是会话日志，也是 SSE、回放、Trace 与 Inspector 的数据源。“模型看到了什么”是被记录下来的，而不是从另一套 UI 状态反推的。
+- **能力即权限模型。** `read-only` / `workspace` / `full` / `auto-review` 决定哪些工具存在、有没有 shell、`network` 工具是否逐次审批。
+- **带审阅的委派。** 子 Agent 拥有独立上下文（可选独立 git worktree）；改动逐块落地，上下文漂移的 hunk 会被报告而不是错应用。
+- **测试与评测是一等公民。** 185 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
 
 <p align="center">
   <img src="docs/gui-zh.png" alt="micro-harness 中文界面：会话列表、对话与 Agent 运行详情" width="1100">
@@ -29,7 +31,53 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。接入�
 
 <p align="center"><em>在一个界面里提交任务、跟踪执行、查看结果。</em></p>
 
-[快速开始](#快速开始) · [CLI 与编辑器](#cli-与编辑器) · [多-agent-协作](#多-agent-协作) · [配置与运行边界](#配置与运行边界) · [架构与文档](#架构与文档) · [开发与贡献](#开发与贡献)
+[核心设计](#核心设计) · [与同类项目的区别](#与同类项目的区别) · [快速开始](#快速开始) · [CLI 与编辑器](#cli-与编辑器) · [多-agent-协作](#多-agent-协作) · [配置与限制](#配置与限制) · [测试与评测](#测试与评测) · [架构与文档](#架构与文档) · [开发与贡献](#开发与贡献)
+
+## 核心设计
+
+| 设计 | 如何工作 | 实现入口 |
+|---|---|---|
+| **统一的运行事件** | 模型请求、工具结果、用量与子 Agent 状态通过带有 Agent 标识的事件传递；日志、SSE 与界面消费这些事件。 | [事件定义](packages/core/src/events.ts)、[执行循环](packages/core/src/harness.ts) |
+| **可替换的能力接口** | 循环通过 `Provider` 调用模型，通过 `Tool` 执行操作，通过 `FileSystem` 访问文件；能力在代码中显式组装。 | [模型接口](packages/core/src/provider.ts)、[工具接口](packages/core/src/tools.ts)、[文件系统接口](packages/core/src/fs.ts) |
+| **按结构裁剪上下文** | 默认保留首轮与近期消息、裁剪中间内容；单轮任务过长时按工具步骤裁剪，保持工具调用与结果配对。也支持模型摘要策略。 | [上下文策略](packages/core/src/context.ts)、[机制测试](packages/core/test/context.test.ts) |
+| **分离协作状态与代码改动** | 子 Agent 使用独立对话上下文；可选 Git worktree 分离工作目录，再通过 diff 与逐块应用整合改动。具体边界见[配置说明](#配置与限制)。 | [Agent runner](packages/core/src/agents.ts)、[隔离与整合](packages/core/src/isolation.ts)、[补丁应用](packages/core/src/patch.ts) |
+
+从入口到运行记录，执行链路如下。实线表示请求或执行关系，虚线表示事件输出。
+
+```mermaid
+flowchart TB
+  CLI["CLI"] --> Loop["Agent 执行循环"]
+  Editor["编辑器 / ACP"] --> Loop
+  Web["Web 界面"] --> Server["HTTP / SSE 服务"]
+  Server --> Loop
+  Loop --> Model["模型 Provider"]
+  Model --> Loop
+  Loop --> Tools["内置工具 / MCP"]
+  Tools --> Loop
+  Loop --> Children["子 Agent"]
+  Children --> Loop
+  Loop -.-> Events["统一运行事件"]
+  Children -.-> Events
+  Events --> Storage["会话记录 / 检索索引"]
+  Events --> Views["对话 / 轨迹 / 回放 / Inspector"]
+```
+
+## 与同类项目的区别
+
+不同的 harness 在同一个问题上优化不同的部分：Codex 有操作系统级沙箱，Claude Code 的产品面最完整，pi 的运行时扩展面最大，opencode 的客户端/服务端拆分最完整。这里的差别在内核。
+
+| | micro-harness | pi | Codex | Claude Code | opencode |
+|---|---|---|---|---|---|
+| **内核** | ~1.2 万行 TS，4 个包，零运行时依赖 | 小型 TS 循环 + 扩展 API | Rust `core` + `tui`/`exec`/`app-server` | 闭源 | TS server + protocol + 客户端 |
+| **谁拥有循环** | `Harness` | 是，刻意保持小 | `codex-core` | — | server |
+| **扩展单位** | 编译期接口 + 启动时读 MCP | 启动时注册的 TS 扩展 | MCP + `AGENTS.md` + 配置 | hooks / skills / sub-agents | 插件 + server 协议 |
+| **事件** | 一条流 = 日志、SSE、回放、Inspector | 会话 JSONL + RPC/SDK | `app-server` JSON-RPC | — | server 协议 |
+| **边界** | 预设 × 审批 × 工具 `network` 标记 | 由扩展决定 | OS 沙箱 + 审批 | 权限模式 | 配置 |
+| **集成面** | CLI · server + GUI · ACP · MCP | TUI · RPC · SDK | CLI · TUI · app-server · MCP | CLI · IDE | CLI/TUI · desktop · server |
+
+`—` 表示该项目没有公开说明，不代表它没有这个能力。这是一份有时间点的快照，欢迎纠错。
+
+**不构成区别的**：有 server + SSE（opencode 也有）、支持 MCP（Codex 与 Claude Code 也有）、能扩展（pi 的扩展面大得多）。**构成区别的**：内核小到可以读完；用编译期接缝代替插件运行时——因此按设计不支持热插拔；以及一条同时充当日志、回放源与 UI 数据源的事件流。[设计笔记](docs/design-comparison.zh-CN.md)逐个问题展开了这些取舍。
 
 ## 快速开始
 
@@ -87,6 +135,12 @@ MICRO_PERMISSION=workspace microh
 ```
 
 `micro-harness` 是编译后的 CLI；`microh` 是指向当前源码仓库的 Web 启动脚本，仍需要 Bun 和该仓库。
+
+### 一次运行记录什么
+
+以快速开始中的文件任务为例：模型发出 `write_file` 调用，运行时执行后将结果交回模型；随后读取文件，最后生成回复。具体工具顺序由模型决定。
+
+每轮的 `model.request` 记录裁剪后交给 Provider 的消息与工具名称，`tool.call` / `tool.result` 记录参数、输出与耗时，`usage` 记录服务商返回的用量。你可以对照 Inspector、Trace 与磁盘文件，检查模型看到了什么、实际做了什么。
 
 ## CLI 与编辑器
 
@@ -160,7 +214,7 @@ bun start --dir /absolute/path/to/your-project --isolate --tree "将任务拆分
 
 CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent-max-tokens` 和 `--agent-max-cost`，用于限制子 Agent 的执行规模。
 
-## 配置与运行边界
+## 配置与限制
 
 | 配置 | 用途 |
 |---|---|
@@ -175,11 +229,17 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 | `MICRO_SEARCH_PROVIDER` | 默认搜索引擎：`bing`、`baidu`、`bocha`、`searxng` |
 | `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` / `MICRO_PRICE_INPUT_CACHED` | 每百万 token 的美元价格，用于成本估算 |
 
-模型费用由所接入的服务商收取。成本显示依赖配置的价格与服务商返回的用量；图片输入需要所选模型支持。
+模型费用由所接入的服务商收取。成本显示依赖配置的价格与服务商返回的用量。
 
-**权限。** `bun run ui` 与 `microh` 默认使用 `full`，上手示例显式改为 `workspace`。CLI 默认不允许 shell，需传入 `--allow-bash`；`--approval` 决定工具调用是否需要批准。直接启动 server 入口时默认使用 `workspace`。当前 Web 主 Agent 的 shell 权限传递仍有限制，需要运行 shell 时可使用上面的 CLI 入口；权限过滤也尚不能完整约束第三方 MCP 工具。
+**权限。** 预设把“能碰什么”和“要不要问”绑在一起：`read-only` 与 `workspace` 没有 shell、也没有 `network` 工具；`full` 两者都有；`auto-review` 两者都有，但每条 shell 命令与联网调用都要先确认。`bun run ui` 与 `microh` 默认 `full`（示例显式传 `workspace`）；CLI 需 `--allow-bash`，并用 `--approval` 控制审批。Web 界面可切换会话预设，下一次运行生效。运行中发送新消息会中断当前运行，并从已记录的历史开始新一轮。
 
-**隔离。** 文件工具的路径检查与 Git worktree 用于限制操作范围、分离代码改动，不提供操作系统级沙箱。当前符号链接仍可能指向目录外；worktree 创建失败时会退回共享目录，应检查实际的 worktree 状态。
+**限制。**
+
+- **没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。符号链接目前仍可能指向目录外；worktree 创建失败会退回共享目录。
+- **MCP 工具在预设过滤之后加入。** `read-only` 会话仍能调用会写状态的 MCP 工具，接入前请自行评估。
+- **MCP 不支持热插拔。** 配置在启动时读取，改完 `mcp.json` 需重启。
+- **成本是估算**，取决于你配置的价格；图片输入需要支持视觉的模型。
+- **早期版本（v0.1）**，接口可能在小版本间变化。
 
 ### 外部工具与联网
 
@@ -198,6 +258,26 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 
 工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。Web 服务内置 `web_search` 与 `web_fetch`，可通过界面的联网开关和搜索引擎选择器调整。使用 Bocha 需要 `BOCHA_API_KEY`，使用 SearXNG 需要 `MICRO_SEARXNG_URL`。
 
+## 测试与评测
+
+上下文管理需要同时处理窗口长度与消息结构。下面用例写明输入与断言，无需模型 Key 即可运行。
+
+| 检查 | 输入或条件 | 用例断言 |
+|---|---|---|
+| 单轮长任务 | 一条用户消息、20 个工具步骤，每个结果含 4,000 个字符，裁剪前估算超过 20,000 tokens | 在该构造用例中裁至不超过 5,000 个估算 tokens；保留任务描述、最新步骤与调用/结果配对 |
+| 首轮与近期内容 | 多轮消息触发中间裁剪 | 保留首轮与近期消息，保留部分的内容不被改写 |
+| 摘要失败 | 注入会抛出异常的摘要函数 | 回退到确定性的中间裁剪策略 |
+
+```bash
+# 离线检查上下文裁剪、消息配对和摘要降级机制。
+bun test packages/core/test/context.test.ts
+
+# 用脚本化模型检查“创建文件”和“修复失败测试”两类任务。
+bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
+```
+
+上述两组分别检查上下文机制与任务执行。token 数使用本地估算；mock 不衡量真实模型的编码能力，也不代表跨模型成功率。完整套件是 `bun test`（185 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+
 ## 架构与文档
 
 核心运行时负责“请求模型 → 执行工具 → 把结果交回模型”的循环，并发出事件。服务端将事件保存并推送到浏览器，界面据此展示对话、Agent 树与运行详情。
@@ -209,7 +289,13 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 | [`packages/gui`](packages/gui) | React Web 界面、对话、轨迹、改动审阅与 Inspector |
 | [`packages/web-mcp`](packages/web-mcp) | 内置搜索与网页读取工具 |
 
-扩展模型、工具与文件系统时，分别实现 `Provider`、`Tool`、`FileSystem` 接口，在代码中显式组装。具体设计与取舍见以下文档：
+### 两个设计取舍
+
+**接口扩展，显式组装。** 模型、工具与文件系统通过接口替换，在 CLI 或服务端入口完成组装。当前 MCP 配置在启动时加载，不提供运行中热插拔；这一边界让执行循环不必承担插件生命周期管理。取舍依据见[设计对比](docs/design-comparison.zh-CN.md)。
+
+**记录与检索分开。** Web 会话将事件追加到 JSONL，并维护 SQLite 元数据与 FTS5 检索索引；索引可从磁盘上的会话记录重建。这样运行记录既能被独立读取，也能支持界面检索。实现见[会话存储](packages/server/src/store.ts)。
+
+继续了解实现、评测与项目演进：
 
 | 文档 | 适合了解什么 |
 |---|---|
