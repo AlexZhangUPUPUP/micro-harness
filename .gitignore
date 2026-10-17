@@ -16,3 +16,6 @@ dist/
 
 # bun build --compile temp artifacts (left behind if a build is interrupted)
 *.bun-build
+
+# generated docs site
+site/

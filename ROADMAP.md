@@ -42,7 +42,7 @@
 | **P7** | 隔离与合并 | worktree 隔离 + 差异 + 合并队列 | ✅ |
 | **P8** | 互操作 | MCP client + ACP server | ✅ |
 | **P9** | 上下文与经济性 | 压缩策略 + 缓存前缀 + 成本计量 | ✅ |
-| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ◐ 基本完成：evals + 二进制 ✅；剩文档站（npm 发布已决定跳过） |
+| **P10** | 评测与发布 | evals + 单文件二进制 + 包发布 | ✅ evals + 二进制 + 文档站（GitHub Pages）；npm 发布已决定跳过 |
 
 **第一晚目标：P0 → P1 → P2 → P3（最小可用多 agent）。**
 
@@ -212,7 +212,8 @@ bun packages/core/src/cli.ts "hi" # 能跑
 
 - [x] `evals/`：任务集 + runner + 报告 —— 26 任务（确定性 + LLM 裁判 + rubric），`--mock` 无网确定性、CI-safe；新增**标注金标集 + 裁判校准 CLI**（`golden.ts` 10 例、`calibrate.ts`，`--min-accuracy` 门禁）
 - [x] `bun build --compile` 出单文件二进制（macOS/Linux）—— `dist/micro-harness`，`--help`/`--version` 无需 API key 即可用
-- [ ] npm/bun 发布 —— 暂不发布（已决定）；文档站 —— 未做
+- [x] 文档站：`scripts/build-docs.ts` 把 Markdown 渲染成带侧栏的静态站（`bun run docs:build` → `site/`），`.github/workflows/pages.yml` 发布到 GitHub Pages
+- [ ] npm/bun 发布 —— 暂不发布（已决定）
 - [x] 验收：`./scripts/install.sh` 一条命令装好（→ `~/.local/bin/micro-harness`）+ `bun run eval:mock` 跑通（44 pass / 0 fail / 8 skipped）
 
 ---

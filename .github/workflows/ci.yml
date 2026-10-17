@@ -18,4 +18,5 @@ jobs:
       - run: bun run typecheck
       - run: bunx tsc -p scripts/evals/tsconfig.json --noEmit
       - run: bun run eval:mock
+      - run: bun run docs:build
       - run: cd packages/gui && bun run build
