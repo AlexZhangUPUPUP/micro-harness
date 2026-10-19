@@ -6,6 +6,7 @@
  *                      global engines are blocked, no key
  *   baidu              baidu.com HTML — no key, best effort
  *   bocha              博查 Web Search API — POST + Bearer key, JSON
+ *   deepseek           DeepSeek Search API — POST + Bearer key, JSON
  *   searxng            a SearXNG instance (JSON API) — no key, you host it
  *
  * Every provider returns the same shape, so the model never sees which one ran.
@@ -173,6 +174,49 @@ const bocha: SearchProvider = {
   },
 }
 
+interface DeepseekResponse {
+  results?: Array<{ title?: string; url?: string; snippet?: string; summary?: string; site_name?: string | null }>
+}
+
+/**
+ * Parse the Search API response. `summary` (600–800 characters) is written for a
+ * model, so prefer it over the UI-sized `snippet`.
+ */
+export function parseDeepseek(json: DeepseekResponse, maxResults: number): SearchResult[] {
+  return (json.results ?? [])
+    .slice(0, maxResults)
+    .map((r) => ({
+      title: String(r.title || r.site_name || ''),
+      url: String(r.url ?? ''),
+      snippet: r.summary || r.snippet,
+    }))
+    .filter((r) => r.url)
+}
+
+const deepseek: SearchProvider = {
+  id: 'deepseek',
+  configured: (cfg) => Boolean(cfg.deepseekKey),
+  async search(query, maxResults, cfg) {
+    const key = needKey('deepseek', cfg.deepseekKey)
+    const res = await postJson(
+      new URL('https://api.deepseek.com/v1/tools/search'),
+      { query, count: Math.min(maxResults, 20) },
+      cfg,
+      { authorization: `Bearer ${key}` },
+    )
+    if (res.status < 200 || res.status >= 300) {
+      throw new WebError('network', `deepseek returned HTTP ${res.status}: ${res.text.slice(0, 200)}`)
+    }
+    let parsed: DeepseekResponse
+    try {
+      parsed = JSON.parse(res.text) as DeepseekResponse
+    } catch {
+      throw new WebError('network', 'deepseek returned non-JSON')
+    }
+    return parseDeepseek(parsed, maxResults)
+  },
+}
+
 const searxng: SearchProvider = {
   id: 'searxng',
   configured: (cfg) => Boolean(cfg.searxngUrl),
@@ -193,7 +237,7 @@ const searxng: SearchProvider = {
   },
 }
 
-const PROVIDERS: Record<string, SearchProvider> = { bing, baidu, bocha, searxng }
+const PROVIDERS: Record<string, SearchProvider> = { bing, baidu, bocha, deepseek, searxng }
 
 export function providerIds(): string[] {
   return Object.keys(PROVIDERS)

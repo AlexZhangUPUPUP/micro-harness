@@ -879,7 +879,7 @@ test('/api/web reports and flips the runtime toggle', async () => {
     const listed = (await (await fetch(`${srv.url}/api/web`)).json()) as {
       providers: Array<{ id: string; configured: boolean }>
     }
-    expect(listed.providers.map((p) => p.id)).toEqual(['bing', 'bocha', 'baidu', 'searxng'])
+    expect(listed.providers.map((p) => p.id)).toEqual(['bing', 'deepseek', 'bocha', 'baidu', 'searxng'])
     expect(listed.providers.find((p) => p.id === 'bing')?.configured).toBe(true)
 
     const pick = await fetch(`${srv.url}/api/web`, {

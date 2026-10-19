@@ -228,7 +228,7 @@ The CLI also exposes `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--a
 | `MICRO_DATA_DIR` | Web session and index directory; defaults to `~/.micro-harness` |
 | `MICRO_HOST` / `MICRO_PORT` / `MICRO_SERVER_TOKEN` | Bind address, starting port, and API authentication |
 | `MICRO_WEB` | Built-in web tools on the server: `off`, `fetch`, `search`, or `all` (default) |
-| `MICRO_SEARCH_PROVIDER` | Default search engine: `bing`, `baidu`, `bocha`, or `searxng` |
+| `MICRO_SEARCH_PROVIDER` | Default search engine: `bing`, `deepseek`, `baidu`, `bocha`, or `searxng` |
 | `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` / `MICRO_PRICE_INPUT_CACHED` | USD per million tokens for cost estimates |
 
 Your model provider charges for model usage. Displayed costs depend on your configured prices and the provider’s usage reporting.
@@ -258,7 +258,7 @@ Connect external tools through MCP (Model Context Protocol), using stdio or HTTP
 }
 ```
 
-Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. The web server bundles `web_search` and `web_fetch`, with a live web toggle and search-engine picker in the interface. Bocha requires `BOCHA_API_KEY`; SearXNG requires `MICRO_SEARXNG_URL`.
+Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. The web server bundles `web_search` and `web_fetch`, with a live web toggle and search-engine picker in the interface. DeepSeek needs `DEEPSEEK_API_KEY` (the same key the chat API uses), Bocha needs `BOCHA_API_KEY`, and SearXNG needs `MICRO_SEARXNG_URL`.
 
 ## Tests and evals
 

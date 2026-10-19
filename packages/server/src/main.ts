@@ -76,7 +76,7 @@ const webEnv: Record<string, string> = {
   MICRO_WEB: process.env.MICRO_WEB ?? 'all',
   MICRO_SEARCH_PROVIDER: process.env.MICRO_SEARCH_PROVIDER ?? 'bing',
 }
-for (const key of ['MICRO_WEB_TOGGLE_FILE', 'MICRO_WEB_MAX_CHARS', 'MICRO_WEB_TIMEOUT_MS', 'BOCHA_API_KEY', 'MICRO_SEARXNG_URL']) {
+for (const key of ['MICRO_WEB_TOGGLE_FILE', 'MICRO_WEB_MAX_CHARS', 'MICRO_WEB_TIMEOUT_MS', 'BOCHA_API_KEY', 'DEEPSEEK_API_KEY', 'MICRO_SEARXNG_URL']) {
   const value = process.env[key]
   if (value) webEnv[key] = value
 }

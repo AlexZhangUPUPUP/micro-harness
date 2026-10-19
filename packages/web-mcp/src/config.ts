@@ -24,9 +24,10 @@ export type WebMode = 'off' | 'fetch' | 'search' | 'all'
 
 export interface WebConfig {
   mode: WebMode
-  /** Search backend: bing (no key) | baidu (no key) | bocha | searxng | brave | tavily | exa. */
+  /** Search backend: bing (no key) | baidu (no key) | bocha | deepseek | searxng | brave | tavily | exa. */
   provider: string
   bochaKey: string
+  deepseekKey: string
   braveKey: string
   tavilyKey: string
   exaKey: string
@@ -52,6 +53,7 @@ export function loadWebConfig(env: NodeJS.ProcessEnv = process.env, home: string
     mode,
     provider: String(env.MICRO_SEARCH_PROVIDER ?? 'bing').trim().toLowerCase() || 'bing',
     bochaKey: env.BOCHA_API_KEY ?? env.MICRO_BOCHA_KEY ?? '',
+    deepseekKey: env.DEEPSEEK_API_KEY ?? env.MICRO_DEEPSEEK_KEY ?? '',
     braveKey: env.BRAVE_API_KEY ?? '',
     tavilyKey: env.TAVILY_API_KEY ?? '',
     exaKey: env.EXA_API_KEY ?? '',

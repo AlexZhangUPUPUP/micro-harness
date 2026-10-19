@@ -220,6 +220,7 @@ export function createServer(options: ServerOptions): HarnessServer {
   // Search backends the GUI may pick — keep in sync with packages/web-mcp/src/providers.ts.
   const SEARCH_PROVIDERS: Array<{ id: string; label: string; needs: string[] }> = [
     { id: 'bing', label: 'Bing', needs: [] },
+    { id: 'deepseek', label: 'DeepSeek', needs: ['DEEPSEEK_API_KEY', 'MICRO_DEEPSEEK_KEY'] },
     { id: 'bocha', label: '博查 Bocha', needs: ['BOCHA_API_KEY', 'MICRO_BOCHA_KEY'] },
     { id: 'baidu', label: '百度 Baidu', needs: [] },
     { id: 'searxng', label: 'SearXNG', needs: ['MICRO_SEARXNG_URL'] },

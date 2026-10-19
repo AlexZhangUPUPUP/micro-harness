@@ -228,7 +228,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 | `MICRO_DATA_DIR` | Web 会话与索引存储目录，默认 `~/.micro-harness` |
 | `MICRO_HOST` / `MICRO_PORT` / `MICRO_SERVER_TOKEN` | 服务监听地址、起始端口与 API 鉴权 |
 | `MICRO_WEB` | Web 服务内置联网工具：`off`、`fetch`、`search`、`all`，默认 `all` |
-| `MICRO_SEARCH_PROVIDER` | 默认搜索引擎：`bing`、`baidu`、`bocha`、`searxng` |
+| `MICRO_SEARCH_PROVIDER` | 默认搜索引擎：`bing`、`deepseek`、`baidu`、`bocha`、`searxng` |
 | `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` / `MICRO_PRICE_INPUT_CACHED` | 每百万 token 的美元价格，用于成本估算 |
 
 模型费用由所接入的服务商收取。成本显示依赖配置的价格与服务商返回的用量。
@@ -258,7 +258,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 }
 ```
 
-工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。Web 服务内置 `web_search` 与 `web_fetch`，可通过界面的联网开关和搜索引擎选择器调整。使用 Bocha 需要 `BOCHA_API_KEY`，使用 SearXNG 需要 `MICRO_SEARXNG_URL`。
+工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。Web 服务内置 `web_search` 与 `web_fetch`，可通过界面的联网开关和搜索引擎选择器调整。DeepSeek 需要 `DEEPSEEK_API_KEY`（与对话用的是同一个 key），Bocha 需要 `BOCHA_API_KEY`，SearXNG 需要 `MICRO_SEARXNG_URL`。
 
 ## 测试与评测
 
