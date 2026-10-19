@@ -26,17 +26,19 @@ interface Page {
   slug: string
   title: string
   group: string
+  /** Repo path, for the "edit this page" link. */
+  source: string
 }
 
 const PAGES: Page[] = [
-  { file: 'README.md', slug: 'index', title: 'Overview', group: 'Start' },
-  { file: 'README.zh-CN.md', slug: 'index.zh', title: '概览', group: '中文' },
-  { file: 'ARCHITECTURE.md', slug: 'architecture', title: 'Architecture', group: 'Design' },
-  { file: 'docs/design-comparison.md', slug: 'design-comparison', title: 'Design notes', group: 'Design' },
-  { file: 'scripts/evals/README.md', slug: 'evals', title: 'Evals', group: 'Design' },
-  { file: 'docs/design-comparison.zh-CN.md', slug: 'design-comparison.zh', title: '设计笔记', group: '中文' },
-  { file: 'ROADMAP.md', slug: 'roadmap', title: 'Roadmap', group: 'Project' },
-  { file: 'PROGRESS.md', slug: 'progress', title: 'Progress log', group: 'Project' },
+  { file: 'README.md', slug: 'index', title: 'Overview', group: 'Start', source: 'README.md' },
+  { file: 'README.zh-CN.md', slug: 'index.zh', title: '概览', group: '中文', source: 'README.zh-CN.md' },
+  { file: 'ARCHITECTURE.md', slug: 'architecture', title: 'Architecture', group: 'Design', source: 'ARCHITECTURE.md' },
+  { file: 'docs/design-comparison.md', slug: 'design-comparison', title: 'Design notes', group: 'Design', source: 'docs/design-comparison.md' },
+  { file: 'scripts/evals/README.md', slug: 'evals', title: 'Evals', group: 'Design', source: 'scripts/evals/README.md' },
+  { file: 'docs/design-comparison.zh-CN.md', slug: 'design-comparison.zh', title: '设计笔记', group: '中文', source: 'docs/design-comparison.zh-CN.md' },
+  { file: 'ROADMAP.md', slug: 'roadmap', title: 'Roadmap', group: 'Project', source: 'ROADMAP.md' },
+  { file: 'PROGRESS.md', slug: 'progress', title: 'Progress log', group: 'Project', source: 'PROGRESS.md' },
 ]
 
 const SLUGS = new Map(PAGES.map((p) => [p.file, `${p.slug}.html`]))
@@ -161,6 +163,17 @@ img { max-width: 100%; height: auto; }
 hr { height: 1px; margin: 28px 0; border: 0; background: var(--border); }
 details { margin: 0 0 16px; }
 summary { cursor: pointer; }
+.edit { margin-top: 48px; font-size: 13px; }
+#search { margin: 0 0 18px; }
+.pagefind-ui {
+  --pagefind-ui-scale: 0.75;
+  --pagefind-ui-primary: var(--accent);
+  --pagefind-ui-text: var(--fg);
+  --pagefind-ui-background: var(--bg);
+  --pagefind-ui-border: var(--border);
+  --pagefind-ui-border-radius: 6px;
+  --pagefind-ui-font: inherit;
+}
 @media (max-width: 860px) {
   .sidebar { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--border); }
   main { margin-left: 0; padding: 28px 20px 64px; }
@@ -193,18 +206,27 @@ function layout(page: Page, body: string): string {
 <!-- 文档站与 README 共用品牌资源。 -->
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="pagefind/pagefind-ui.css">
 </head>
 <body>
 <aside class="sidebar">
 <!-- 图标为装饰，链接由文字提供可访问名称。 -->
 <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" aria-hidden="true">micro-harness</a>
 <p class="tagline">A coding-agent harness you can read end to end.</p>
+<div id="search"></div>
 <nav>${nav}</nav>
 <p class="foot"><a href="${REPO}" target="_blank" rel="noreferrer">GitHub ↗</a><br>Built from <code>main</code></p>
 </aside>
 <main><div class="content">
 ${body}
+<p class="edit"><a href="${REPO}/blob/main/${page.source}" target="_blank" rel="noreferrer">Edit this page on GitHub</a></p>
 </div></main>
+<script src="pagefind/pagefind-ui.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    if (window.PagefindUI) new PagefindUI({ element: '#search', showSubResults: true, resetStyles: false })
+  })
+</script>
 </body>
 </html>
 `

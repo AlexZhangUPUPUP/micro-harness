@@ -1,0 +1,54 @@
+name: release
+
+# Build the single-file CLI for each platform and attach it to a GitHub Release.
+# Triggered by pushing a `v*` tag (or manually).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            asset: micro-harness-darwin-arm64
+          - os: ubuntu-latest
+            asset: micro-harness-linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun build --compile --outfile dist/${{ matrix.asset }} packages/core/src/cli.ts
+      - run: ./dist/${{ matrix.asset }} --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: chmod +x dist/micro-harness-* && ls -lh dist
+      - run: >
+          gh release create "$GITHUB_REF_NAME"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes
+          dist/micro-harness-*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

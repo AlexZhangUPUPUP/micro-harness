@@ -41,7 +41,7 @@ Connect any OpenAI Chat Completions–compatible service to read projects, edit 
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
-  <img src="docs/gui.png" alt="micro-harness: sessions, conversation, and agent execution details" width="1100">
+  <img src="docs/gui.webp" alt="micro-harness: sessions, conversation, and agent execution details" width="1100">
 </p>
 
 <p align="center"><em>Submit a task, follow its execution, and inspect the result in one interface.</em></p>
@@ -243,7 +243,7 @@ Follow execution in Agents and inspect each diff in Changes, where you can selec
 
 | Review code changes | Inspect model calls |
 |---|---|
-| ![Review individual hunks from a sub-agent](docs/gui-hunks.png) | ![Inspect model call information](docs/gui-inspector.png) |
+| ![Review individual hunks from a sub-agent](docs/gui-hunks.webp) | ![Inspect model call information](docs/gui-inspector.webp) |
 
 The CLI also exposes `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--agent-max-tokens`, and `--agent-max-cost` to limit sub-agent execution.
 
@@ -310,7 +310,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. Token counts use a local estimate. The full suite is `bun test` (212 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The full suite is `bun test` (212 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
 
 ## Architecture and documentation
 

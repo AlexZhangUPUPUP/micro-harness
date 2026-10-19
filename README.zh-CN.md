@@ -41,7 +41,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
-  <img src="docs/gui-zh.png" alt="micro-harness 中文界面：会话列表、对话与 Agent 运行详情" width="1100">
+  <img src="docs/gui-zh.webp" alt="micro-harness 中文界面：会话列表、对话与 Agent 运行详情" width="1100">
 </p>
 
 <p align="center"><em>在一个界面里提交任务、跟踪执行、查看结果。</em></p>
@@ -243,7 +243,7 @@ bun start --dir /absolute/path/to/your-project --isolate --tree "将任务拆分
 
 | 代码改动审阅 | 模型调用检查 |
 |---|---|
-| ![逐块审阅子 Agent 的代码改动](docs/gui-hunks.png) | ![检查模型调用信息](docs/gui-inspector.png) |
+| ![逐块审阅子 Agent 的代码改动](docs/gui-hunks.webp) | ![检查模型调用信息](docs/gui-inspector.webp) |
 
 CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent-max-tokens` 和 `--agent-max-cost`，用于限制子 Agent 的执行规模。
 
@@ -310,7 +310,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出；token 数使用本地估算。完整套件是 `bun test`（212 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。完整套件是 `bun test`（212 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 

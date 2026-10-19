@@ -18,7 +18,7 @@
     "build:bin": "bun build --compile --outfile dist/micro-harness packages/core/src/cli.ts",
     "eval": "bun scripts/evals/run.ts",
     "eval:mock": "bun scripts/evals/run.ts --mock",
-    "docs:build": "bun scripts/build-docs.ts"
+    "docs:build": "bun scripts/build-docs.ts && pagefind --site site"
   },
   "engines": {
     "bun": ">=1.1"
@@ -27,6 +27,7 @@
     "@types/bun": "^1.1.14",
     "@types/node": "^22.10.0",
     "marked": "^18.1.1",
+    "pagefind": "^1.5.2",
     "typescript": "^5.7.2"
   }
 }
