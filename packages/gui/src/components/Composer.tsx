@@ -21,6 +21,10 @@ interface ComposerProps {
   /** Current permission preset and its setter (switching `full` asks first). */
   permission?: string
   onPermission?: (id: string) => void
+  /** Prompt templates (`/name`) loaded from the workspace. */
+  commands?: Array<{ name: string; description: string }>
+  /** Skills found in the workspace (they ride in the system prompt). */
+  skills?: Array<{ name: string; description: string }>
 }
 
 /** Largest text file we inline; bigger ones are truncated with a note. */
@@ -62,9 +66,12 @@ export function Composer({
   setFiles,
   permission,
   onPermission,
+  commands,
+  skills,
 }: ComposerProps) {
   const { t } = useT()
   const [dragging, setDragging] = useState(false)
+  const taRef = useRef<HTMLTextAreaElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   /** Images → base64 parts (no data-URL prefix), the shape the provider wants. */
@@ -117,6 +124,17 @@ export function Composer({
   }
 
   const hasAttachments = images.length > 0 || files.length > 0
+
+  // `/` at the start of the line opens the prompt-template picker. The server
+  // expands `/name args` when it sends, so completing is enough here.
+  const slash = /^\/([A-Za-z0-9_-]*)$/.exec(value)
+  const query = slash ? (slash[1] ?? '') : null
+  const matches = query === null ? [] : (commands ?? []).filter((c) => c.name.startsWith(query)).slice(0, 6)
+  const showSkills = query === '' && (skills?.length ?? 0) > 0
+  const pickCommand = (name: string): void => {
+    setValue(`/${name} `)
+    requestAnimationFrame(() => taRef.current?.focus())
+  }
 
   return (
     <div className="shrink-0 border-t border-border/70 bg-background/70 p-3 backdrop-blur">
@@ -204,7 +222,51 @@ export function Composer({
               </div>
             )}
 
+            {query !== null && (matches.length > 0 || showSkills) && (
+              <div className="border-b border-border/50 px-2 py-1.5">
+                {matches.length > 0 && (
+                  <>
+                    <div className="px-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {t('composer.commands')}
+                    </div>
+                    {matches.map((c) => (
+                      <button
+                        key={c.name}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          pickCommand(c.name)
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-1.5 py-0.5 text-left hover:bg-muted"
+                      >
+                        <span className="font-mono text-[11px] text-teal">/{c.name}</span>
+                        {c.description && (
+                          <span className="truncate text-[11px] text-muted-foreground">{c.description}</span>
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {showSkills && (
+                  <>
+                    <div className="px-1 pb-0.5 pt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {t('composer.skills')}
+                    </div>
+                    {skills!.map((sk) => (
+                      <div
+                        key={sk.name}
+                        className="flex items-center gap-2 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        <span className="font-mono">{sk.name}</span>
+                        {sk.description && <span className="truncate">{sk.description}</span>}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
             <textarea
+              ref={taRef}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onPaste={(e) => {
@@ -245,6 +307,11 @@ export function Composer({
                 }
               }}
               onKeyDown={(e) => {
+                if (matches.length > 0 && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey))) {
+                  e.preventDefault()
+                  pickCommand(matches[0]!.name)
+                  return
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   onSend()

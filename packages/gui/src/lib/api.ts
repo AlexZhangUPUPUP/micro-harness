@@ -59,6 +59,17 @@ export interface WebProvider {
   configured: boolean
 }
 
+export interface CommandInfo {
+  name: string
+  description: string
+  body: string
+}
+
+export interface SkillInfo {
+  name: string
+  description: string
+}
+
 export interface WebState {
   mode: string
   enabled: boolean
@@ -167,6 +178,11 @@ export const api = {
           body: JSON.stringify({ preset }),
         })
       : j<{ ok: boolean }>('/api/permission', { method: 'POST', body: JSON.stringify({ preset }) }),
+  /** Prompt templates and skills loaded from the workspace. */
+  commands: (cwd?: string) =>
+    j<{ cwd: string; templates: CommandInfo[]; skills: SkillInfo[] }>(
+      `/api/commands${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''}`,
+    ),
   /** The per-run cost budget, when one is configured. */
   budget: () => j<{ maxCost: number | null }>('/api/budget'),
   /** The runtime web switch; the MCP server re-reads the toggle file per call. */

@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { SessionStore } from '../src/store.ts'
@@ -1086,6 +1086,46 @@ test('/api/budget reports the configured cost cap', async () => {
     const res = await fetch(`${srv.url}/api/budget`)
     expect(res.status).toBe(200)
     expect(((await res.json()) as { maxCost: number | null }).maxCost).toBe(0.5)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('/api/commands lists templates and skills; /name expands on send', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-cmd-'))
+  mkdirSync(path.join(dir, 'prompts'), { recursive: true })
+  writeFileSync(path.join(dir, 'prompts', 'fix.md'), '---\ndescription: Fix tests\n---\nPlease fix: $ARGUMENTS\n')
+  mkdirSync(path.join(dir, 'skills', 'review'), { recursive: true })
+  writeFileSync(path.join(dir, 'skills', 'review', 'SKILL.md'), '---\ndescription: Review code\n---\nAlways review carefully.\n')
+  const store = new SessionStore(dir)
+  const { provider } = echoProvider()
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+  try {
+    const listed = (await (await fetch(`${srv.url}/api/commands`)).json()) as {
+      templates: Array<{ name: string; description: string; body: string }>
+      skills: Array<{ name: string; description: string }>
+    }
+    expect(listed.templates).toHaveLength(1)
+    expect(listed.templates[0]).toMatchObject({ name: 'fix', description: 'Fix tests' })
+    expect(listed.templates[0]!.body).toContain('Please fix: $ARGUMENTS')
+    expect(listed.skills).toEqual([{ name: 'review', description: 'Review code' }])
+
+    const created = (await (
+      await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: '/fix the login test' }),
+      })
+    ).json()) as { session: { id: string } }
+    await srv.idle(created.session.id)
+
+    const events = store.events(created.session.id)
+    const user = events.find((e) => e.event.type === 'user.message')!.event as { text: string }
+    expect(user.text).toBe('Please fix: the login test')
+    const request = events.find((e) => e.event.type === 'model.request')!.event as { system: string }
+    expect(request.system).toContain('### Skill: review')
+    expect(request.system).toContain('Always review carefully.')
   } finally {
     srv.stop(true)
     rmSync(dir, { recursive: true, force: true })

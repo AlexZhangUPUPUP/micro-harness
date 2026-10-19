@@ -22,14 +22,24 @@ micro-harness is a coding-agent runtime built with TypeScript. An *agent harness
 
 Connect any OpenAI Chat Completions–compatible service to read projects, edit files, run tools and delegate to sub-agents. The CLI, HTTP server and web interface share the same kernel. The six-file seed it grew from is frozen at [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) — the shortest path to understanding the loop.
 
+<!-- 星标动图链接到仓库，点击图片不会自动更改账号的 Star 状态。 -->
+<p align="center">
+  <a href="https://github.com/AlexZhangUPUPUP/micro-harness">
+    <img src="docs/star.gif" alt="Click Star on the micro-harness GitHub repository" width="1100">
+  </a>
+</p>
+
+<p align="center">If this helps, give micro-harness a star.</p>
+
 ## Why use it
 
 - **A kernel you can read.** The loop, tool dispatch, compaction and event stream are ordinary code in `packages/core` (~5k lines). No plugin container, no framework — you can follow a request from `send()` to the model call and back.
 - **One event stream, four views.** The same tagged events are the session log, the SSE feed, replay, Trace and Inspector. “What the model saw” is recorded, not reconstructed from a separate UI state.
 - **Capability *is* the permission model.** `read-only` / `workspace` / `full` / `auto-review` decide which tools exist, whether the shell is available, and whether `network` tools need approval per call.
 - **Delegation with a review step.** Sub-agents get separate context (optionally a git worktree); their diffs land hunk by hunk, and a drifted hunk is reported rather than mis-applied.
-- **Tests and evals as first-class.** 209 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
+- **Tests and evals as first-class.** 210 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
 
+<!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
   <img src="docs/gui.png" alt="micro-harness: sessions, conversation, and agent execution details" width="1100">
 </p>
@@ -47,7 +57,7 @@ Connect any OpenAI Chat Completions–compatible service to read projects, edit 
 | **Context compaction that respects message structure** | The default keeps the first and recent turns while dropping the middle. Long single turns can be trimmed by tool step, keeping calls paired with their results. Model-written summaries are also supported. | [Context policies](packages/core/src/context.ts), [mechanism tests](packages/core/test/context.test.ts) |
 | **Separate collaboration state and code changes** | Sub-agents have independent conversations. Optional Git worktrees separate working directories, with diffs and hunk selection for integration. See [configuration](#configuration-and-limitations) for boundaries. | [Agent runner](packages/core/src/agents.ts), [isolation and integration](packages/core/src/isolation.ts), [patch application](packages/core/src/patch.ts) |
 
-Project instructions live in the working directory: if `AGENTS.md` exists, its contents are appended to the system prompt (capped at 8,000 characters). The Inspector shows the exact prompt a run received, so you can confirm what the model was told.
+Project instructions live in the working directory: if `AGENTS.md` exists, its contents are appended to the system prompt (capped at 8,000 characters). The Inspector shows the exact prompt a run received, so you can confirm what the model was told. Prompt templates in `prompts/` or `commands/` appear as `/name` in the composer (the server expands `/name args`), and skills in `skills/<name>/SKILL.md` are appended to the system prompt; the CLI and the web UI read the same files.
 
 The execution path connects entry points to recorded events. Solid arrows show requests or execution; dotted arrows show event output.
 
@@ -286,7 +296,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. Token counts use a local estimate. The full suite is `bun test` (209 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. Token counts use a local estimate. The full suite is `bun test` (210 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
 
 ## Architecture and documentation
 

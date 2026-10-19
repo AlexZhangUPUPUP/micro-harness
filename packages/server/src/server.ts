@@ -29,16 +29,22 @@ import {
   applyHunkSelection,
   createAgentRegistry,
   defaultSystemPrompt,
+  expandTemplate,
   integrateApply,
   integratePreview,
+  loadPromptTemplates,
+  loadSkills,
   makeTaskTool,
   makeTools,
   promoteWorktree,
   reconstructMessages,
   removeWorktree,
+  skillsToPrompt,
   worktreeDiff,
   type AgentRole,
+  type PromptTemplate,
   type Provider,
+  type Skill,
   type TaggedEvent,
   type Tool,
   type McpServerInfo,
@@ -233,6 +239,31 @@ export function createServer(options: ServerOptions): HarnessServer {
   const sessionPermission = new Map<string, PermissionPreset>()
   const approvals = options.approvals ?? createApprovalBroker()
   const cwd = options.cwd
+
+  // Skills and prompt templates are files in the workspace, same layout as the
+  // CLI: ./skills, ./prompts and ./commands, plus the user-level equivalents.
+  const skillsFor = (dir: string): Skill[] =>
+    [path.join(dir, 'skills'), path.join(homedir(), '.micro-harness', 'skills')].flatMap((d) => loadSkills(d))
+
+  const templatesFor = (dir: string): PromptTemplate[] => {
+    const dirs = [path.join(dir, 'prompts'), path.join(dir, 'commands'), path.join(homedir(), '.micro-harness', 'prompts')]
+    const byName = new Map<string, PromptTemplate>()
+    for (const d of dirs) for (const t of loadPromptTemplates(d)) byName.set(t.name, t)
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /** The prompt a session actually runs with: base + AGENTS.md + skills. */
+  const systemFor = (dir: string): string =>
+    (options.systemPrompt ?? defaultSystemPrompt(dir)) + skillsToPrompt(skillsFor(dir))
+
+  /** `/name args` expands a prompt template, exactly like the CLI's REPL. */
+  const expandCommand = (prompt: string, dir: string): string => {
+    const match = /^\/([A-Za-z0-9_-]+)(?:[ \t]+([\s\S]*))?$/.exec(prompt.trim())
+    if (!match) return prompt
+    const template = templatesFor(dir).find((t) => t.name === match[1])
+    if (!template) return prompt
+    return expandTemplate(template, (match[2] ?? '').split(/\s+/).filter(Boolean))
+  }
   const tools = options.tools
 
   /** Worktree info per agent, read back from the durable event stream. */
@@ -295,7 +326,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       allowBash: sessionBash,
       startSeq,
       maxSteps: options.maxSteps,
-      systemPrompt: options.systemPrompt,
+      systemPrompt: systemFor(sessionCwd),
       pricing: options.pricing,
       maxToolOutput: options.maxToolOutput,
       maxCost: options.maxCost,
@@ -339,14 +370,16 @@ export function createServer(options: ServerOptions): HarnessServer {
   }
 
   const create = (body: { prompt?: string; model?: string; cwd?: string; title?: string; images?: ImageInput[] }): SessionMeta => {
+    const dir = body.cwd ?? cwd
+    const prompt = body.prompt ? expandCommand(body.prompt, dir) : undefined
     const meta = store.create({
-      title: body.title ?? body.prompt?.slice(0, 100) ?? '',
+      title: body.title ?? prompt?.slice(0, 100) ?? '',
       model: body.model ?? model,
-      cwd: body.cwd ?? cwd,
+      cwd: dir,
     })
     const runtime = build(meta)
     runtimes.set(meta.id, runtime)
-    if (body.prompt) start(runtime, body.prompt, body.images)
+    if (prompt) start(runtime, prompt, body.images)
     return meta
   }
 
@@ -362,7 +395,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       // synthesizes a result for anything still unanswered, so cap the wait.
       await Promise.race([active.done.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))])
     }
-    const system = options.systemPrompt ?? defaultSystemPrompt(meta.cwd || cwd)
+    const system = systemFor(meta.cwd || cwd)
     const history = store.events(id)
     const reconstructed = reconstructMessages(history, system, 'main')
     // Continue the recorded sequence: restarting it at 1 would make (agentId, seq)
@@ -371,7 +404,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     const runtime = build({ ...meta, status: 'active' }, lastSeq)
     runtime.harness.messages.splice(0, runtime.harness.messages.length, ...reconstructed)
     runtimes.set(id, runtime)
-    start(runtime, prompt, images)
+    start(runtime, expandCommand(prompt, meta.cwd || cwd), images)
     return runtime
   }
 
@@ -465,6 +498,14 @@ export function createServer(options: ServerOptions): HarnessServer {
     }
     if (url.pathname === '/api/budget') {
       return json({ maxCost: options.maxCost ?? null })
+    }
+    if (url.pathname === '/api/commands') {
+      const dir = url.searchParams.get('cwd') || cwd
+      return json({
+        cwd: dir,
+        templates: templatesFor(dir).map((t) => ({ name: t.name, description: t.description ?? '', body: t.body })),
+        skills: skillsFor(dir).map((s) => ({ name: s.name, description: s.description ?? '' })),
+      })
     }
     // When a GUI build is present, serve it (public; the API stays token-gated below).
     if (guiRoot && guiIndex && req.method === 'GET' && parts[0] !== 'api') {

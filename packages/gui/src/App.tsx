@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type FileAttachment, type ImageInput, type SessionMeta, type TaggedEvent, type WebProvider } from './lib/api.ts'
+import { api, type CommandInfo, type FileAttachment, type ImageInput, type SessionMeta, type SkillInfo, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
 import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
@@ -56,6 +56,8 @@ export default function App() {
   const [permission, setPermission] = useState('full')
   const [webEnabled, setWebEnabled] = useState(true)
   const [budget, setBudget] = useState<number | null>(null)
+  const [commands, setCommands] = useState<CommandInfo[]>([])
+  const [skills, setSkills] = useState<SkillInfo[]>([])
   const [webProviders, setWebProviders] = useState<WebProvider[]>([])
   const [webProvider, setWebProvider] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
@@ -155,6 +157,16 @@ export default function App() {
       .then(() => void refreshSessions())
       .catch((err: unknown) => setError(String((err as Error).message)))
   }
+
+  useEffect(() => {
+    void api
+      .commands(currentMeta?.cwd)
+      .then((d) => {
+        setCommands(d.templates)
+        setSkills(d.skills)
+      })
+      .catch(() => {})
+  }, [currentMeta?.cwd])
 
   useEffect(() => {
     void api
@@ -604,6 +616,8 @@ export default function App() {
             onSend={() => void send()}
             busy={busy}
             onStop={stopRun}
+            commands={commands}
+            skills={skills}
             models={models}
             model={model}
             setModel={chooseModel}

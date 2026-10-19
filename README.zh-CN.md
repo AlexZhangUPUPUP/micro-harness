@@ -22,14 +22,24 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 
 接入任意兼容 OpenAI Chat Completions 的模型服务，它就能读取项目、修改文件、运行工具，并把任务交给子 Agent。CLI、HTTP 服务与 Web 界面共享同一内核。最初只有 6 个源文件的种子版本冻结在 [`seed-v1`](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1)，是理解循环最短的路径。
 
+<!-- 星标动图链接到仓库，点击图片不会自动更改账号的 Star 状态。 -->
+<p align="center">
+  <a href="https://github.com/AlexZhangUPUPUP/micro-harness">
+    <img src="docs/star.gif" alt="点击 micro-harness GitHub 仓库的 Star 按钮" width="1100">
+  </a>
+</p>
+
+<p align="center">如果这个项目对你有帮助，欢迎点个 Star。</p>
+
 ## 为什么使用它
 
 - **内核可读。** 循环、工具调度、上下文裁剪与事件流都是 `packages/core` 里的普通代码（约 5000 行）。没有插件容器、没有框架——可以从 `send()` 一路跟到模型调用再跟回来。
 - **一条事件流，四个视图。** 同一批带标签的事件既是会话日志，也是 SSE、回放、Trace 与 Inspector 的数据源。“模型看到了什么”是被记录下来的，而不是从另一套 UI 状态反推的。
 - **能力即权限模型。** `read-only` / `workspace` / `full` / `auto-review` 决定哪些工具存在、有没有 shell、`network` 工具是否逐次审批。
 - **带审阅的委派。** 子 Agent 拥有独立上下文（可选独立 git worktree）；改动逐块落地，上下文漂移的 hunk 会被报告而不是错应用。
-- **测试与评测是一等公民。** 209 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
+- **测试与评测是一等公民。** 210 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
 
+<!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
   <img src="docs/gui-zh.png" alt="micro-harness 中文界面：会话列表、对话与 Agent 运行详情" width="1100">
 </p>
@@ -47,7 +57,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 | **按结构裁剪上下文** | 默认保留首轮与近期消息、裁剪中间内容；单轮任务过长时按工具步骤裁剪，保持工具调用与结果配对。也支持模型摘要策略。 | [上下文策略](packages/core/src/context.ts)、[机制测试](packages/core/test/context.test.ts) |
 | **分离协作状态与代码改动** | 子 Agent 使用独立对话上下文；可选 Git worktree 分离工作目录，再通过 diff 与逐块应用整合改动。具体边界见[配置说明](#配置与限制)。 | [Agent runner](packages/core/src/agents.ts)、[隔离与整合](packages/core/src/isolation.ts)、[补丁应用](packages/core/src/patch.ts) |
 
-项目指令放在工作目录里：如果存在 `AGENTS.md`，其内容会追加到系统提示词（上限 8,000 字符）。Inspector 会显示某次运行实际收到的完整提示词，可据此核对模型被告知了什么。
+项目指令放在工作目录里：如果存在 `AGENTS.md`，其内容会追加到系统提示词（上限 8,000 字符）。Inspector 会显示某次运行实际收到的完整提示词，可据此核对模型被告知了什么。`prompts/` 或 `commands/` 下的提示词模板会以 `/name` 出现在输入框（`/name args` 由服务端展开），`skills/<name>/SKILL.md` 里的技能会追加到系统提示词；CLI 与 Web 读取同一批文件。
 
 从入口到运行记录，执行链路如下。实线表示请求或执行关系，虚线表示事件输出。
 
@@ -286,7 +296,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出；token 数使用本地估算。完整套件是 `bun test`（209 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出；token 数使用本地估算。完整套件是 `bun test`（210 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 
