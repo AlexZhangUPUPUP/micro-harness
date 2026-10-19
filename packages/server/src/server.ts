@@ -242,7 +242,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     return map
   }
 
-  const build = (meta: SessionMeta): SessionRuntime => {
+  const build = (meta: SessionMeta, startSeq = 0): SessionRuntime => {
     const hub = new EventHub()
     // Attach persistence *before* the Harness emits its `session.start`.
     const off = hub.on((e: TaggedEvent) => store.append(meta.id, e))
@@ -278,6 +278,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       maxTokens: options.agentMaxTokens,
       isolation: options.isolation,
       pricing: options.pricing,
+      startSeq,
     })
 
     const harness = new Harness({
@@ -289,6 +290,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       // The preset decides shell access for the main agent too; sub-agents get
       // the same value through AgentRunner below.
       allowBash: sessionBash,
+      startSeq,
       maxSteps: options.maxSteps,
       systemPrompt: options.systemPrompt,
       pricing: options.pricing,
@@ -357,8 +359,12 @@ export function createServer(options: ServerOptions): HarnessServer {
       await Promise.race([active.done.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))])
     }
     const system = options.systemPrompt ?? defaultSystemPrompt(meta.cwd || cwd)
-    const reconstructed = reconstructMessages(store.events(id), system, 'main')
-    const runtime = build({ ...meta, status: 'active' })
+    const history = store.events(id)
+    const reconstructed = reconstructMessages(history, system, 'main')
+    // Continue the recorded sequence: restarting it at 1 would make (agentId, seq)
+    // repeat, and clients that dedupe by it would drop the new run's events.
+    const lastSeq = history.reduce((max, e) => Math.max(max, e.seq), 0)
+    const runtime = build({ ...meta, status: 'active' }, lastSeq)
     runtime.harness.messages.splice(0, runtime.harness.messages.length, ...reconstructed)
     runtimes.set(id, runtime)
     start(runtime, prompt, images)

@@ -163,12 +163,20 @@ export function formatAgentTree(roots: AgentNode[]): string {
 
 /** A per-agent emitter: tags events, assigns seq/time, forwards to the hub. */
 export class AgentLog {
-  #seq = 0
+  #seq: number
   constructor(
     readonly hub: EventHub,
     readonly agentId: string,
     readonly parentId: string | null = null,
-  ) {}
+    /**
+     * Last sequence number already used for this agent. A resumed session passes
+     * its recorded maximum so a new run continues above it — otherwise (agentId,
+     * seq) repeats across runs and consumers that dedupe by it lose events.
+     */
+    startSeq = 0,
+  ) {
+    this.#seq = startSeq
+  }
 
   emit(event: AgentEvent): TaggedEvent {
     const tagged: TaggedEvent = {

@@ -86,3 +86,10 @@ test('parallel results arriving out of order still form one answered group', asy
     ['b', 'B'],
   ])
 })
+
+test('an agent log can continue a recorded sequence (resume)', async () => {
+  const { AgentLog, EventHub } = await import('../src/events.ts')
+  const hub = new EventHub()
+  const log = new AgentLog(hub, 'main', null, 41)
+  expect(log.emit({ type: 'turn.start', turn: 1 }).seq).toBe(42)
+})

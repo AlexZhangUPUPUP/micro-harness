@@ -23,7 +23,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 - **一条事件流，四个视图。** 同一批带标签的事件既是会话日志，也是 SSE、回放、Trace 与 Inspector 的数据源。“模型看到了什么”是被记录下来的，而不是从另一套 UI 状态反推的。
 - **能力即权限模型。** `read-only` / `workspace` / `full` / `auto-review` 决定哪些工具存在、有没有 shell、`network` 工具是否逐次审批。
 - **带审阅的委派。** 子 Agent 拥有独立上下文（可选独立 git worktree）；改动逐块落地，上下文漂移的 hunk 会被报告而不是错应用。
-- **测试与评测是一等公民。** 185 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
+- **测试与评测是一等公民。** 197 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
 
 <p align="center">
   <img src="docs/gui-zh.png" alt="micro-harness 中文界面：会话列表、对话与 Agent 运行详情" width="1100">
@@ -278,7 +278,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。token 数使用本地估算；mock 不衡量真实模型的编码能力，也不代表跨模型成功率。完整套件是 `bun test`（185 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。token 数使用本地估算；mock 不衡量真实模型的编码能力，也不代表跨模型成功率。完整套件是 `bun test`（197 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 

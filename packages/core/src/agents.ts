@@ -169,6 +169,8 @@ export interface AgentRunnerOptions {
   isolation?: 'none' | 'worktree'
   /** Task id used to name worktree branches; defaults to a random id. */
   taskId?: string
+  /** Starting point for child-agent sequence numbers (a resumed session's max). */
+  startSeq?: number
   pricing?: { input: number; output: number }
 }
 
@@ -304,6 +306,7 @@ export class AgentRunner {
       tools: this.#childTools(role),
       hub: this.#opts.hub,
       agentId, parentId, depth: depth + 1,
+      startSeq: this.#opts.startSeq,
     })
     // 仅在隔离建立成功后发布工作区信息。
     if (worktree) {

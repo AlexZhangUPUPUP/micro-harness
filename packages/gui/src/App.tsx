@@ -208,17 +208,44 @@ export default function App() {
   }, [])
 
   // Load + subscribe to the selected session. `runTick` re-subscribes after a
-  // follow-up, because the server closes the stream when each run finishes.
+  // follow-up, because the server closes each run's stream when it finishes.
   useEffect(() => {
     if (!current) return
     let live = true
-    void api.get(current).then((d) => {
-      if (live) setEvents(d.events)
-    })
+    let loaded = false
+    // Events that arrive while the snapshot is still loading. Appending them
+    // immediately would let the snapshot overwrite them; buffering and merging
+    // keeps both. The key includes `t` because older logs restarted `seq` on
+    // every resume (new runs now continue the sequence).
+    const buffered: TaggedEvent[] = []
+    const keyOf = (e: TaggedEvent): string => `${e.agentId}:${e.seq}:${e.t}`
+    const merge = (base: TaggedEvent[], extra: TaggedEvent[]): TaggedEvent[] => {
+      const seen = new Set(base.map(keyOf))
+      const out = base.slice()
+      for (const e of extra) {
+        const k = keyOf(e)
+        if (seen.has(k)) continue
+        seen.add(k)
+        out.push(e)
+      }
+      return out
+    }
+    void api
+      .get(current)
+      .then((d) => {
+        if (!live) return
+        loaded = true
+        setEvents(merge(d.events, buffered))
+        buffered.length = 0
+      })
+      .catch(() => {
+        loaded = true
+        setEvents((prev) => merge(prev, buffered))
+        buffered.length = 0
+      })
     const off = api.subscribe(current, {
       onEvent: (e) => {
         setError('')
-        setEvents((prev) => (prev.some((x) => x.seq === e.seq && x.agentId === e.agentId) ? prev : [...prev, e]))
         // The server echoed a user message: drop the local optimistic copy.
         if (e.event.type === 'user.message') {
           const ev = e.event as { content?: unknown; text?: unknown }
@@ -233,6 +260,11 @@ export default function App() {
         } else if (e.event.type === 'error') {
           setOptimistic([])
         }
+        if (!loaded) {
+          buffered.push(e)
+          return
+        }
+        setEvents((prev) => (prev.some((x) => keyOf(x) === keyOf(e)) ? prev : [...prev, e]))
       },
       onError: () => setError('event stream disconnected'),
     })

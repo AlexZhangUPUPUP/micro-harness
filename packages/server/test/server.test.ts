@@ -994,3 +994,40 @@ test('the full preset lets the web main agent run bash (allowBash reaches the Ha
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('resuming continues the event sequence instead of restarting at 1', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-seq-'))
+  const store = new SessionStore(dir)
+  const { provider } = echoProvider()
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+  try {
+    const created = (await (
+      await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'one' }),
+      })
+    ).json()) as { session: { id: string } }
+    const id = created.session.id
+    await srv.idle(id)
+    const firstMax = Math.max(...store.events(id).map((e) => e.seq))
+    const before = store.events(id).length
+
+    const resumed = await fetch(`${srv.url}/api/sessions/${id}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'two' }),
+    })
+    expect(resumed.status).toBe(202)
+    await srv.idle(id)
+
+    const added = store.events(id).slice(before)
+    expect(added.length).toBeGreaterThan(0)
+    expect(Math.min(...added.map((e) => e.seq))).toBeGreaterThan(firstMax)
+    const keys = store.events(id).map((e) => `${e.agentId}:${e.seq}`)
+    expect(new Set(keys).size).toBe(keys.length) // no (agentId, seq) repeats
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

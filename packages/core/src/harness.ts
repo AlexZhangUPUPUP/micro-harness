@@ -43,6 +43,8 @@ export interface HarnessOptions {
   hub?: EventHub
   agentId?: string
   parentId?: string | null
+  /** Last seq already recorded for this agent; a resumed run continues above it. */
+  startSeq?: number
   tools?: Tool[]
   /** Nesting depth of this agent (root = 0). Sub-agents get depth + 1. */
   depth?: number
@@ -136,7 +138,7 @@ export class Harness {
     this.#approval = opts.approval ?? 'full-auto'
     this.#confirm = opts.confirm
     this.hub = opts.hub ?? new EventHub()
-    this.log = new AgentLog(this.hub, opts.agentId ?? 'main', opts.parentId ?? null)
+    this.log = new AgentLog(this.hub, opts.agentId ?? 'main', opts.parentId ?? null, opts.startSeq ?? 0)
 
     const system = opts.systemPrompt ?? defaultSystemPrompt(opts.cwd)
     this.#system = system
