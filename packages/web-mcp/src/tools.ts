@@ -41,7 +41,7 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
       description:
         'Fetch one URL and return its readable text (HTML is converted to plain text). ' +
         'Only public https addresses; redirects to another host are reported instead of followed. ' +
-        'Text is capped at 20000 characters by default — one fetch is normally enough.',
+        'Text is capped at 20000 characters by default. Fetch only a page you will cite, and do not fetch the same URL twice.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -89,12 +89,14 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
   if (caps.search) {
     tools.push({
       name: 'web_search',
-      description: 'Search the web and return result titles, URLs and snippets. Use web_fetch to read a result.',
+      description:
+        'Search the web and return titles, URLs and snippets. One or two calls usually suffice; ' +
+        'fetch a page only when its snippet is not enough to answer.',
       inputSchema: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'search query' },
-          maxResults: { type: 'integer', description: 'number of results (default 8)' },
+          maxResults: { type: 'integer', description: 'number of results (default 5)' },
         },
         required: ['query'],
       },
@@ -103,7 +105,7 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
         if (!settings.enabled) return { text: REFUSAL, isError: true }
         const query = String(args.query ?? '').trim()
         if (!query) return { text: 'web_search: query is required', isError: true }
-        const maxResults = Number(args.maxResults) > 0 ? Math.min(Number(args.maxResults), 20) : 8
+        const maxResults = Number(args.maxResults) > 0 ? Math.min(Number(args.maxResults), 20) : 5
         const id = String(args.provider ?? settings.provider ?? cfg.provider).toLowerCase()
         try {
           const provider = resolveProvider(id, cfg)
