@@ -64,3 +64,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 运行时 · 三件：① 新增「停止」——`POST /api/sessions/:id/stop` + GUI 停止按钮（`Esc` 同效），中断后状态回到 `done`；② 文件工具在路径检查前先 `realpath`，symlink 逃逸会被拒绝（含新建文件的场景）；③ `web_fetch` 增加 5 分钟 / 32 条的 URL+cap 缓存，命中在输出里标记 `cached`。204 测试
 - 2026-10-19 · 默认值 · 让「默认能干活」：CLI 的 bash 改为默认开启（`--no-bash` 关闭），审批默认 `auto-edit`（写文件不打扰、跑 shell 先问；非 TTY 时拒绝而不是挂起）；直接启动 server 时默认权限 `workspace` → `auto-review`；README 中英 quick start 全部改用 `auto-review`，并去掉已默认的 CLI 参数
 - 2026-10-19 · 能力 · 三件：① 工作目录下的 `AGENTS.md` 自动追加到系统提示词（8,000 字符上限，CLI 与 server 共用）；② `MICRO_MAX_COST` + `GET /api/budget`，顶栏显示剩余额度，超限以 `stopReason=budget` 停止；③ README 补上 mock 评测结果（52 次尝试 / 44 通过 / 0 失败 / 8 跳过）。209 测试
+- 2026-10-19 · ACP · Zed 人工验收通过：在 Zed 1.24.2 的 Agent Panel 里可以正常调用 micro-harness（`scripts/acp.sh` + `agent_servers` 配置），P8 最后一项验收完成
