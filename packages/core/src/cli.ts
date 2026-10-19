@@ -32,6 +32,7 @@ import { expandTemplate, loadPromptTemplates, loadSkills, skillsToPrompt, type P
 import { parseTaskFile, runAuto } from './autorun.ts'
 import { connectMcpServers, loadMcpServers, mcpInfos, mcpTools, type McpConnection } from './mcp.ts'
 import { runAcpServer } from './acp.ts'
+import { runMcpServer } from './mcp-server.ts'
 
 // ------------------------------------------------------------------- argv
 
@@ -66,7 +67,8 @@ function opt(name: string, fallback?: string): string | undefined {
   return fallback
 }
 
-const sub: 'run' | 'chat' | 'acp' = positionals[0] === 'run' ? 'run' : positionals[0] === 'acp' ? 'acp' : 'chat'
+const sub: 'run' | 'chat' | 'acp' | 'mcp' =
+  positionals[0] === 'run' ? 'run' : positionals[0] === 'acp' ? 'acp' : positionals[0] === 'mcp' ? 'mcp' : 'chat'
 const args = sub === 'run' ? positionals.slice(1) : positionals
 
 const quiet = flag('quiet')
@@ -105,6 +107,7 @@ Usage:
   micro-harness run "task" …          queued run
   micro-harness run --auto --tasks f  unattended driver (budget/timeout)
   micro-harness acp                    ACP server over stdio (editor-driven)
+  micro-harness mcp [--allow-bash]      MCP server over stdio (tools for other agents)
 
 Options:
   --model <id>            model id (env MICRO_MODEL, default deepseek-chat)
@@ -135,6 +138,15 @@ if (argv.includes('-h') || argv.includes('--help')) {
 }
 if (argv.includes('-v') || argv.includes('--version')) {
   console.log(VERSION)
+  process.exit(0)
+}
+
+if (sub === 'mcp') {
+  // Expose the tools over stdio. Shell access stays off unless asked for here:
+  // the caller is another agent, not the person at this terminal.
+  const allowMcpBash = argv.includes('--allow-bash')
+  const tools = makeTools().filter((t) => t.name !== 'bash' || allowMcpBash)
+  await runMcpServer({ tools, ctx: { cwd, allowBash: allowMcpBash, agentId: 'mcp' } })
   process.exit(0)
 }
 

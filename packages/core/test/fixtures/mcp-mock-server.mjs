@@ -18,6 +18,12 @@ const TOOLS = [
     description: 'Always fails',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'peek',
+    description: 'Read-only inspection',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+  },
 ]
 
 process.stdin.on('data', (chunk) => {
@@ -54,6 +60,8 @@ process.stdin.on('data', (chunk) => {
       const { name, arguments: args } = msg.params
       if (name === 'echo') {
         send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: `echo:${args.text}` }] } })
+      } else if (name === 'peek') {
+        send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'peeked' }] } })
       } else if (name === 'boom') {
         send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'kaboom' }], isError: true } })
       } else {

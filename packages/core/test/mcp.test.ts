@@ -13,12 +13,13 @@ test('stdio: initialize, list tools, call them, and namespace the names', async 
   const conn = await connectMcpServer(stdioConfig, { timeoutMs: 10_000 })
   expect(conn.info.status).toBe('ready')
   expect(conn.info.transport).toBe('stdio')
-  expect(conn.info.tools).toEqual(['mock__echo', 'mock__boom'])
-  expect(conn.tools.map((t) => t.name)).toEqual(['mock__echo', 'mock__boom'])
+  expect(conn.info.tools).toEqual(['mock__echo', 'mock__boom', 'mock__peek'])
+  expect(conn.tools.map((t) => t.name)).toEqual(['mock__echo', 'mock__boom', 'mock__peek'])
 
   const echo = conn.tools.find((t) => t.name === 'mock__echo')!
   expect(echo.description).toBe('Echo the text back')
-  expect(echo.mutating).toBe(true) // an MCP server can do anything → approval-worthy
+  expect(echo.mutating).toBe(true) // undeclared → assume it can write
+  expect(conn.tools.find((t) => t.name === 'mock__peek')!.mutating).toBe(false) // readOnlyHint
   expect(echo.parameters).toMatchObject({ type: 'object' })
 
   const ok = await echo.run({ text: 'hi' }, { cwd: '.', allowBash: false })
@@ -62,7 +63,7 @@ test('a server that cannot start is reported, not thrown', async () => {
 test('several servers connect together; a broken one does not take the others down', async () => {
   const conns = await connectMcpServers([stdioConfig, { name: 'broken', command: 'nope-not-here' }], { timeoutMs: 8000 })
   expect(conns.map((c) => c.info.status)).toEqual(['ready', 'error'])
-  expect(mcpTools(conns).map((t) => t.name)).toEqual(['mock__echo', 'mock__boom'])
+  expect(mcpTools(conns).map((t) => t.name)).toEqual(['mock__echo', 'mock__boom', 'mock__peek'])
   await Promise.all(conns.map((c) => c.close()))
 })
 

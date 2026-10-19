@@ -84,6 +84,12 @@ interface McpToolDef {
   name: string
   description?: string
   inputSchema?: Record<string, unknown>
+  /**
+   * MCP's own safety hints. `readOnlyHint` is the one the permission model can
+   * trust: a read-only session may use such a tool instead of losing every tool
+   * from the server.
+   */
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean }
 }
 
 /** Whatever the transport is, this is all the client needs from it. */
@@ -320,7 +326,7 @@ export async function connectMcpServer(
       name: mcpToolName(name, def.name),
       description: def.description ?? `MCP tool ${def.name} from ${name}`,
       parameters: (def.inputSchema as Record<string, unknown>) ?? { type: 'object', properties: {} },
-      mutating: true, // an MCP server can do anything; treat it as mutating for approvals
+      mutating: def.annotations?.readOnlyHint !== true, // undeclared = assume it can write
       network: config.network === true,
       async run(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
         const result = await channel.request<{ content?: unknown; isError?: boolean }>(

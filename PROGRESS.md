@@ -66,3 +66,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 能力 · 三件：① 工作目录下的 `AGENTS.md` 自动追加到系统提示词（8,000 字符上限，CLI 与 server 共用）；② `MICRO_MAX_COST` + `GET /api/budget`，顶栏显示剩余额度，超限以 `stopReason=budget` 停止；③ README 补上 mock 评测结果（52 次尝试 / 44 通过 / 0 失败 / 8 跳过）。209 测试
 - 2026-10-19 · ACP · Zed 人工验收通过：在 Zed 1.24.2 的 Agent Panel 里可以正常调用 micro-harness（`scripts/acp.sh` + `agent_servers` 配置），P8 最后一项验收完成
 - 2026-10-19 · Web · Skills 与提示词模板接入 Web：`GET /api/commands` 返回 `prompts/` `commands/` 模板与 `skills/*/SKILL.md`；服务端在 create/resume 时展开 `/name args`；skills 追加进系统提示词；输入框以 `/` 触发补全菜单（Tab/Enter 选中）。210 测试
+- 2026-10-19 · MCP · 两个方向都通了：① MCP 客户端尊重 `readOnlyHint`（未声明仍按可写处理），只读会话可用只读 MCP 工具；② 新增 `micro-harness mcp` 子命令，把内置工具经 stdio MCP 暴露给其它 agent（默认不含 bash，`--allow-bash` 显式开启）。212 测试
