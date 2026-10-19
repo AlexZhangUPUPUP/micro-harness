@@ -109,8 +109,8 @@ For another compatible service, change the URL, key, and model ID together. For 
 ### 2. Open the web interface
 
 ```bash
-# Workspace permission: built-in file tools work, the shell stays closed.
-MICRO_PERMISSION=workspace bun run ui
+# Auto-review: the shell works, but every command asks first.
+MICRO_PERMISSION=auto-review bun run ui
 ```
 
 The first launch builds the interface and opens your browser, normally at `http://127.0.0.1:8787`. If the port is occupied, the launcher picks another one; use the URL printed in your terminal. Use the composer's **Stop** button (or `Esc`) to interrupt a run, and `Ctrl-C` to stop the process.
@@ -127,7 +127,7 @@ From the micro-harness repository, pass the absolute path to your project:
 
 ```bash
 # Replace with the path to your project.
-MICRO_CWD=/absolute/path/to/your-project MICRO_PERMISSION=workspace bun run ui
+MICRO_CWD=/absolute/path/to/your-project MICRO_PERMISSION=auto-review bun run ui
 ```
 
 Alternatively, install the two launch commands:
@@ -138,7 +138,7 @@ Alternatively, install the two launch commands:
 
 # Enter the target project, then start the interface.
 cd /absolute/path/to/your-project
-MICRO_PERMISSION=workspace microh
+MICRO_PERMISSION=auto-review microh
 ```
 
 `micro-harness` is the compiled CLI. `microh` is a web launcher pointing to this source checkout; it still needs Bun and the checkout.
@@ -160,8 +160,8 @@ From the repository root:
 bun start "Read this project and summarize its entry points and main modules"
 bun start
 
-# Explicitly allow the shell, with an approval before each call.
-bun start --allow-bash --approval auto-edit "Run the relevant tests and analyze failures"
+# The shell is on by default; auto-edit asks before each command.
+bun start "Run the relevant tests and analyze failures"
 
 # Point at the target project.
 bun start --dir /absolute/path/to/your-project "Explain this project's structure"
@@ -207,7 +207,7 @@ The main agent delegates through the `task` tool. Each sub-agent gets its own co
 
 ```bash
 # Enable isolation on a Git project and open the web interface.
-MICRO_CWD=/absolute/path/to/your-project MICRO_ISOLATE=1 MICRO_PERMISSION=workspace bun run ui
+MICRO_CWD=/absolute/path/to/your-project MICRO_ISOLATE=1 MICRO_PERMISSION=auto-review bun run ui
 
 # The CLI takes the same flags and prints the agent tree when done.
 bun start --dir /absolute/path/to/your-project --isolate --tree "Delegate separate parts of the task to sub-agents, then summarize their results"
@@ -238,7 +238,7 @@ The CLI also exposes `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--a
 
 Your model provider charges for model usage. Displayed costs depend on your configured prices and the provider’s usage reporting.
 
-**Permissions.** A preset bundles what the agent may touch with whether it must ask. `read-only` and `workspace` never get the shell or `network` tools; `full` gets both; `auto-review` gets both but asks before every shell command or network call. `bun run ui` and `microh` default to `full` (the examples pass `workspace` explicitly); the CLI needs `--allow-bash` and takes `--approval`. The web UI can switch a session’s preset, and the next run uses it. Sending a prompt while a run is active interrupts that run and starts a new turn from the recorded history.
+**Permissions.** A preset bundles what the agent may touch with whether it must ask. `read-only` and `workspace` never get the shell or `network` tools; `full` gets both; `auto-review` gets both but asks before every shell command or network call. `bun run ui` and `microh` default to `full` (the examples use `auto-review`); the CLI enables the shell by default and uses `--approval auto-edit`; pass `--no-bash` to turn it off. The web UI can switch a session’s preset, and the next run uses it. Sending a prompt while a run is active interrupts that run and starts a new turn from the recorded history.
 
 **Limitations.**
 

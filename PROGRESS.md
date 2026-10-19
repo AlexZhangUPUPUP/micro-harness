@@ -62,3 +62,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 联网 · 新增 DeepSeek Search API 引擎（`POST https://api.deepseek.com/v1/tools/search`，Bearer；`{query,count}` → `{results[]}`，`summary` 600–800 字适合模型读）。注册为 `deepseek`，`DEEPSEEK_API_KEY` 存在即启用；GUI 下拉框自动出现。补 parser / 列表 / 未配置拒绝的测试（198）与 README/.env.example 说明
 - 2026-10-19 · 发布 · GitHub Pages 已启用（Source: GitHub Actions），文档站由 `.github/workflows/pages.yml` 构建 `site/` 并部署到 https://alexzhangupupup.github.io/micro-harness/
 - 2026-10-19 · 运行时 · 三件：① 新增「停止」——`POST /api/sessions/:id/stop` + GUI 停止按钮（`Esc` 同效），中断后状态回到 `done`；② 文件工具在路径检查前先 `realpath`，symlink 逃逸会被拒绝（含新建文件的场景）；③ `web_fetch` 增加 5 分钟 / 32 条的 URL+cap 缓存，命中在输出里标记 `cached`。204 测试
+- 2026-10-19 · 默认值 · 让「默认能干活」：CLI 的 bash 改为默认开启（`--no-bash` 关闭），审批默认 `auto-edit`（写文件不打扰、跑 shell 先问；非 TTY 时拒绝而不是挂起）；直接启动 server 时默认权限 `workspace` → `auto-review`；README 中英 quick start 全部改用 `auto-review`，并去掉已默认的 CLI 参数

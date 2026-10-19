@@ -70,7 +70,7 @@ const sub: 'run' | 'chat' | 'acp' = positionals[0] === 'run' ? 'run' : positiona
 const args = sub === 'run' ? positionals.slice(1) : positionals
 
 const quiet = flag('quiet')
-const allowBash = flag('allow-bash')
+const allowBash = !flag('no-bash')
 const traceOn = flag('trace')
 const autoMode = flag('auto')
 const yes = flag('yes')
@@ -81,7 +81,7 @@ const maxContextTokens = Number(opt('max-context', '24000')) || 24_000
 const model = opt('model', process.env.MICRO_MODEL || process.env.OPENAI_MODEL || 'deepseek-chat')!
 const baseUrl = opt('base-url', process.env.MICRO_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com')!
 const apiKey = process.env.MICRO_API_KEY || process.env.OPENAI_API_KEY || ''
-const approval = (opt('approval', 'full-auto') as ApprovalMode) ?? 'full-auto'
+const approval = (opt('approval', 'auto-edit') as ApprovalMode) ?? 'auto-edit'
 const pricing = {
   input: Number(opt('price-input', process.env.MICRO_PRICE_INPUT || '0')) || 0,
   output: Number(opt('price-output', process.env.MICRO_PRICE_OUTPUT || '0')) || 0,
@@ -110,8 +110,8 @@ Options:
   --model <id>            model id (env MICRO_MODEL, default deepseek-chat)
   --base-url <url>        OpenAI-compatible base URL (env MICRO_BASE_URL)
   --dir <path>            working directory (default: cwd)
-  --approval <mode>       suggest | auto-edit | full-auto (default full-auto)
-  --allow-bash            enable the bash tool
+  --approval <mode>       suggest | auto-edit | full-auto (default auto-edit)
+  --no-bash               disable the bash tool (enabled by default)
   --max-steps <n>         model loop step budget (default 24)
   --max-context <n>       context token budget (default 24000)
   --max-tool-output <n>   truncate tool output to n tokens

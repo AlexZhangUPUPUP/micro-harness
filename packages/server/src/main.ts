@@ -122,7 +122,7 @@ const server = createServer({
   permission:
     process.env.MICRO_PERMISSION && process.env.MICRO_PERMISSION in PERMISSIONS
       ? (process.env.MICRO_PERMISSION as PermissionPreset)
-      : undefined,
+      : 'auto-review',
   roles,
   isolation: process.env.MICRO_ISOLATE === '1' ? 'worktree' : 'none',
   pricing: {

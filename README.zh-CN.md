@@ -109,8 +109,8 @@ export MICRO_MODEL=deepseek-chat
 ### 2. 启动 Web 界面
 
 ```bash
-# 首次体验使用工作区权限：允许内置文件工具读写，不开放 shell。
-MICRO_PERMISSION=workspace bun run ui
+# 自动审查：shell 可用，但每条命令都要先确认。
+MICRO_PERMISSION=auto-review bun run ui
 ```
 
 首次启动会构建界面，然后自动打开浏览器，默认地址为 `http://127.0.0.1:8787`。端口被占用时会选择其他端口，以终端打印的地址为准；用输入框里的**停止**按钮（或 `Esc`）中断一次运行，按 `Ctrl-C` 停止服务。
@@ -127,7 +127,7 @@ MICRO_PERMISSION=workspace bun run ui
 
 ```bash
 # 将路径替换为你的项目目录。
-MICRO_CWD=/absolute/path/to/your-project MICRO_PERMISSION=workspace bun run ui
+MICRO_CWD=/absolute/path/to/your-project MICRO_PERMISSION=auto-review bun run ui
 ```
 
 也可以安装两个启动命令：
@@ -138,7 +138,7 @@ MICRO_CWD=/absolute/path/to/your-project MICRO_PERMISSION=workspace bun run ui
 
 # 进入目标项目，再启动界面。
 cd /absolute/path/to/your-project
-MICRO_PERMISSION=workspace microh
+MICRO_PERMISSION=auto-review microh
 ```
 
 `micro-harness` 是编译后的 CLI；`microh` 是指向当前源码仓库的 Web 启动脚本，仍需要 Bun 和该仓库。
@@ -160,8 +160,8 @@ MICRO_PERMISSION=workspace microh
 bun start "阅读项目，概括入口文件和主要模块"
 bun start
 
-# 显式开放 shell，并在 shell 调用前要求确认。
-bun start --allow-bash --approval auto-edit "运行相关测试，分析失败原因"
+# shell 默认开启；auto-edit 会在每条命令前询问。
+bun start "运行相关测试，分析失败原因"
 
 # 指定目标项目。
 bun start --dir /absolute/path/to/your-project "解释这个项目的结构"
@@ -207,7 +207,7 @@ bun start --dir /absolute/path/to/your-project "解释这个项目的结构"
 
 ```bash
 # 在 Git 项目上启用隔离，并打开 Web 界面。
-MICRO_CWD=/absolute/path/to/your-project MICRO_ISOLATE=1 MICRO_PERMISSION=workspace bun run ui
+MICRO_CWD=/absolute/path/to/your-project MICRO_ISOLATE=1 MICRO_PERMISSION=auto-review bun run ui
 
 # CLI 中使用对应参数，完成后打印 Agent 树。
 bun start --dir /absolute/path/to/your-project --isolate --tree "将任务拆分给子 Agent，分别处理后汇总"
@@ -238,7 +238,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 
 模型费用由所接入的服务商收取。成本显示依赖配置的价格与服务商返回的用量。
 
-**权限。** 预设把“能碰什么”和“要不要问”绑在一起：`read-only` 与 `workspace` 没有 shell、也没有 `network` 工具；`full` 两者都有；`auto-review` 两者都有，但每条 shell 命令与联网调用都要先确认。`bun run ui` 与 `microh` 默认 `full`（示例显式传 `workspace`）；CLI 需 `--allow-bash`，并用 `--approval` 控制审批。Web 界面可切换会话预设，下一次运行生效。运行中发送新消息会中断当前运行，并从已记录的历史开始新一轮。
+**权限。** 预设把“能碰什么”和“要不要问”绑在一起：`read-only` 与 `workspace` 没有 shell、也没有 `network` 工具；`full` 两者都有；`auto-review` 两者都有，但每条 shell 命令与联网调用都要先确认。`bun run ui` 与 `microh` 默认 `full`（示例使用 `auto-review`）；CLI 默认开启 shell，审批默认 `auto-edit`；加 `--no-bash` 可关闭。Web 界面可切换会话预设，下一次运行生效。运行中发送新消息会中断当前运行，并从已记录的历史开始新一轮。
 
 **限制。**
 
