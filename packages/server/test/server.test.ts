@@ -1076,3 +1076,18 @@ test('POST /stop aborts the active run and leaves the session done', async () =>
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('/api/budget reports the configured cost cap', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-budget-'))
+  const store = new SessionStore(dir)
+  const { provider } = echoProvider()
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false, maxCost: 0.5 })
+  try {
+    const res = await fetch(`${srv.url}/api/budget`)
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { maxCost: number | null }).maxCost).toBe(0.5)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

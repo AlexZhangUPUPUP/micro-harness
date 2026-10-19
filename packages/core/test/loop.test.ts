@@ -416,3 +416,25 @@ test('send with images produces array content with a data URL; without images st
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('a run stops once the cost budget is exceeded', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-budget-'))
+  try {
+    const { harness, events } = setup(
+      [
+        {
+          message: { role: 'assistant', content: 'expensive' },
+          usage: { prompt_tokens: 1000, completion_tokens: 1000 },
+        },
+      ],
+      dir,
+      { pricing: { input: 1, output: 1 }, maxCost: 0 },
+    )
+    const text = await harness.send('go')
+    expect(text).toContain('cost budget')
+    const ends = events.map((e) => e.event).filter((e) => e.type === 'turn.end')
+    expect(ends.at(-1)).toMatchObject({ stopReason: 'budget' })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

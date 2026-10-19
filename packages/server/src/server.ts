@@ -119,6 +119,8 @@ export interface ServerOptions {
   /** Run each sub-agent in its own git worktree so parallel edits never collide. */
   isolation?: 'none' | 'worktree'
   maxSteps?: number
+  /** Stop a run once its cumulative cost exceeds this many USD. */
+  maxCost?: number
   systemPrompt?: string
   pricing?: { input: number; output: number; inputCached?: number }
   /** Cap on a single tool result, in characters (~3k tokens by default). */
@@ -296,6 +298,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       systemPrompt: options.systemPrompt,
       pricing: options.pricing,
       maxToolOutput: options.maxToolOutput,
+      maxCost: options.maxCost,
       // Approvals: the loop emits `permission.request` and blocks until the client
       // answers through POST /api/sessions/:id/permissions/:requestId.
       approval: sessionApproval,
@@ -459,6 +462,9 @@ export function createServer(options: ServerOptions): HarnessServer {
 
     if (url.pathname === '/health') {
       return json({ ok: true, name: 'micro-harness', version: '0.1.0' })
+    }
+    if (url.pathname === '/api/budget') {
+      return json({ maxCost: options.maxCost ?? null })
     }
     // When a GUI build is present, serve it (public; the API stays token-gated below).
     if (guiRoot && guiIndex && req.method === 'GET' && parts[0] !== 'api') {

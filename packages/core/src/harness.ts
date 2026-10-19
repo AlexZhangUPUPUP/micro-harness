@@ -10,6 +10,8 @@
  * message so the model can recover.
  */
 
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { cacheReadTokens, userContent } from './model.ts'
 import {
   compactMessages,
@@ -95,7 +97,33 @@ When the task is complete, answer with a short summary: which files you changed 
 
 /** Resolve the default system prompt for a working directory. */
 export function defaultSystemPrompt(cwd: string): string {
-  return DEFAULT_SYSTEM.replace('{{cwd}}', cwd)
+  return withProjectInstructions(DEFAULT_SYSTEM.replace('{{cwd}}', cwd), cwd)
+}
+
+/** Cap on project instructions, in characters, so a huge file cannot crowd out the task. */
+export const MAX_PROJECT_INSTRUCTIONS = 8_000
+
+/**
+ * The repository's own instructions, if any. `AGENTS.md` is the convention shared
+ * by Codex, opencode and others, so a project keeps one file regardless of which
+ * harness its contributors happen to use.
+ */
+export function projectInstructions(cwd: string): string {
+  try {
+    const text = readFileSync(path.join(cwd, 'AGENTS.md'), 'utf8').trim()
+    if (!text) return ''
+    return text.length > MAX_PROJECT_INSTRUCTIONS
+      ? `${text.slice(0, MAX_PROJECT_INSTRUCTIONS)}\n\n…(truncated; keep AGENTS.md short)`
+      : text
+  } catch {
+    return ''
+  }
+}
+
+/** Append `AGENTS.md` to a system prompt (a missing file leaves it untouched). */
+export function withProjectInstructions(prompt: string, cwd: string): string {
+  const extra = projectInstructions(cwd)
+  return extra ? `${prompt}\n\nProject instructions (AGENTS.md; these override general defaults):\n\n${extra}` : prompt
 }
 
 export class Harness {

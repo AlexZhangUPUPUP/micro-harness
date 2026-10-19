@@ -167,6 +167,8 @@ export const api = {
           body: JSON.stringify({ preset }),
         })
       : j<{ ok: boolean }>('/api/permission', { method: 'POST', body: JSON.stringify({ preset }) }),
+  /** The per-run cost budget, when one is configured. */
+  budget: () => j<{ maxCost: number | null }>('/api/budget'),
   /** The runtime web switch; the MCP server re-reads the toggle file per call. */
   web: () => j<WebState>('/api/web'),
   setWeb: (patch: { enabled?: boolean; provider?: string }) =>

@@ -55,6 +55,7 @@ export default function App() {
   const [models, setModels] = useState<string[]>([])
   const [permission, setPermission] = useState('full')
   const [webEnabled, setWebEnabled] = useState(true)
+  const [budget, setBudget] = useState<number | null>(null)
   const [webProviders, setWebProviders] = useState<WebProvider[]>([])
   const [webProvider, setWebProvider] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('micro-model') ?? '')
@@ -154,6 +155,13 @@ export default function App() {
       .then(() => void refreshSessions())
       .catch((err: unknown) => setError(String((err as Error).message)))
   }
+
+  useEffect(() => {
+    void api
+      .budget()
+      .then((d) => setBudget(d.maxCost))
+      .catch(() => {})
+  }, [])
 
   // The runtime web switch; the web MCP server re-reads the file per call.
   useEffect(() => {
@@ -499,6 +507,7 @@ export default function App() {
         current={current}
         tokens={tree.total.input + tree.total.output}
         cost={tree.total.cost}
+        budget={budget}
         series={usageSeries}
         busy={busy}
         dark={dark}

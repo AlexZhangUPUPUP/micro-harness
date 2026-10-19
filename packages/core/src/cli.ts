@@ -21,7 +21,7 @@ import { stdin, stdout } from 'node:process'
 import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Harness, type ApprovalMode, type ConfirmFn } from './harness.ts'
+import { Harness, withProjectInstructions, type ApprovalMode, type ConfirmFn } from './harness.ts'
 import { openaiProvider } from './provider.ts'
 import { EventHub, buildAgentTree, formatAgentTree, type TaggedEvent } from './events.ts'
 import { Trace } from './trace.ts'
@@ -164,11 +164,13 @@ function loadAllTemplates(): PromptTemplate[] {
 const skills = loadAllSkills()
 const templates = loadAllTemplates()
 const templateMap = new Map(templates.map((t) => [t.name, t]))
-const systemPrompt =
+const systemPrompt = withProjectInstructions(
   (opt('system') ?? `You are a careful coding agent working inside the directory ${cwd}.
 Use the provided tools to inspect and modify files; prefer reading a file before writing it.
 Work autonomously — do not ask for confirmation. When the task is complete, reply with a short summary of what you did.`) +
-  skillsToPrompt(skills)
+    skillsToPrompt(skills),
+  cwd,
+)
 
 // ------------------------------------------------------------------ wiring
 

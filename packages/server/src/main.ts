@@ -131,6 +131,7 @@ const server = createServer({
     inputCached: Number(process.env.MICRO_PRICE_INPUT_CACHED ?? 0),
   },
   maxToolOutput: Number(process.env.MICRO_MAX_TOOL_OUTPUT ?? 0) || undefined,
+  maxCost: Number(process.env.MICRO_MAX_COST ?? 0) || undefined,
 })
 
 console.log(`micro-harness server · ${server.url} · data ${dataDir}${guiDir ? ' · GUI on' : ''}${token ? ' · auth on' : ''}`)

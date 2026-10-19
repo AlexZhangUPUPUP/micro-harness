@@ -10,6 +10,7 @@ interface HeaderProps {
   current: string | null
   tokens: number
   cost: number
+  budget?: number | null
   series: number[]
   busy: boolean
   dark: boolean
@@ -24,7 +25,7 @@ interface HeaderProps {
 }
 
 /** Slim command bar: brand, current session, live usage, global actions. */
-export function Header({ current, tokens, cost, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
+export function Header({ current, tokens, cost, budget, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
   const { t, lang, setLang } = useT()
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 backdrop-blur">
@@ -58,6 +59,14 @@ export function Header({ current, tokens, cost, series, busy, dark, webEnabled, 
           <RollingNumber value={tokens} format={fmtTokens} /> tok
           <span className="opacity-40">·</span>
           <RollingNumber value={cost} format={fmtCost} />
+          {budget != null && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className={budget - cost <= 0 ? 'text-destructive' : ''}>
+                {t('header.budgetLeft')} {fmtCost(Math.max(0, budget - cost))}
+              </span>
+            </>
+          )}
         </span>
         {webProviders.length > 1 && (
           <select

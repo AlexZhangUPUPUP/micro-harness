@@ -28,7 +28,7 @@ Connect any OpenAI Chat Completions–compatible service to read projects, edit 
 - **One event stream, four views.** The same tagged events are the session log, the SSE feed, replay, Trace and Inspector. “What the model saw” is recorded, not reconstructed from a separate UI state.
 - **Capability *is* the permission model.** `read-only` / `workspace` / `full` / `auto-review` decide which tools exist, whether the shell is available, and whether `network` tools need approval per call.
 - **Delegation with a review step.** Sub-agents get separate context (optionally a git worktree); their diffs land hunk by hunk, and a drifted hunk is reported rather than mis-applied.
-- **Tests and evals as first-class.** 197 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
+- **Tests and evals as first-class.** 209 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
 
 <p align="center">
   <img src="docs/gui.png" alt="micro-harness: sessions, conversation, and agent execution details" width="1100">
@@ -46,6 +46,8 @@ Connect any OpenAI Chat Completions–compatible service to read projects, edit 
 | **Replaceable capability interfaces** | The loop calls models through `Provider`, executes operations through `Tool`, and accesses files through `FileSystem`. Capabilities are composed explicitly in code. | [Model interface](packages/core/src/provider.ts), [tool interface](packages/core/src/tools.ts), [file interface](packages/core/src/fs.ts) |
 | **Context compaction that respects message structure** | The default keeps the first and recent turns while dropping the middle. Long single turns can be trimmed by tool step, keeping calls paired with their results. Model-written summaries are also supported. | [Context policies](packages/core/src/context.ts), [mechanism tests](packages/core/test/context.test.ts) |
 | **Separate collaboration state and code changes** | Sub-agents have independent conversations. Optional Git worktrees separate working directories, with diffs and hunk selection for integration. See [configuration](#configuration-and-limitations) for boundaries. | [Agent runner](packages/core/src/agents.ts), [isolation and integration](packages/core/src/isolation.ts), [patch application](packages/core/src/patch.ts) |
+
+Project instructions live in the working directory: if `AGENTS.md` exists, its contents are appended to the system prompt (capped at 8,000 characters). The Inspector shows the exact prompt a run received, so you can confirm what the model was told.
 
 The execution path connects entry points to recorded events. Solid arrows show requests or execution; dotted arrows show event output.
 
@@ -235,6 +237,7 @@ The CLI also exposes `--max-depth`, `--max-concurrency`, `--agent-timeout`, `--a
 | `MICRO_WEB` | Built-in web tools on the server: `off`, `fetch`, `search`, or `all` (default) |
 | `MICRO_SEARCH_PROVIDER` | Default search engine: `bing`, `deepseek`, `baidu`, `bocha`, or `searxng` |
 | `MICRO_PRICE_INPUT` / `MICRO_PRICE_OUTPUT` / `MICRO_PRICE_INPUT_CACHED` | USD per million tokens for cost estimates |
+| `MICRO_MAX_COST` | Stop a run once its cumulative cost passes this many USD |
 
 Your model provider charges for model usage. Displayed costs depend on your configured prices and the provider’s usage reporting.
 
@@ -283,7 +286,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-These cover context mechanisms and task execution respectively. Token counts use a local estimate. Mock runs do not measure a real model’s coding ability or establish success rates across models. The full suite is `bun test` (197 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. Token counts use a local estimate. The full suite is `bun test` (209 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
 
 ## Architecture and documentation
 
