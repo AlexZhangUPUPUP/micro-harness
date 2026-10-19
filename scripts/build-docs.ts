@@ -111,7 +111,9 @@ a:hover { text-decoration: underline; }
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
 }
-.brand { display: block; font-weight: 700; font-size: 17px; color: var(--fg); letter-spacing: -0.01em; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--fg); letter-spacing: -0.01em; }
+/* 品牌图标保持固定尺寸，避免挤压侧栏标题。 */
+.brand img { width: 24px; height: 30px; flex-shrink: 0; }
 .tagline { margin: 4px 0 22px; font-size: 12.5px; color: var(--muted); }
 .group { margin-bottom: 20px; }
 .group-title {
@@ -188,11 +190,14 @@ function layout(page: Page, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(page.title)} · micro-harness</title>
 <meta name="description" content="A coding-agent harness you can read end to end.">
+<!-- 文档站与 README 共用品牌资源。 -->
+<link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <aside class="sidebar">
-<a class="brand" href="index.html">micro-harness</a>
+<!-- 图标为装饰，链接由文字提供可访问名称。 -->
+<a class="brand" href="index.html"><img src="assets/logo.svg" alt="" aria-hidden="true">micro-harness</a>
 <p class="tagline">A coding-agent harness you can read end to end.</p>
 <nav>${nav}</nav>
 <p class="foot"><a href="${REPO}" target="_blank" rel="noreferrer">GitHub ↗</a><br>Built from <code>main</code></p>

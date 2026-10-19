@@ -3,6 +3,9 @@ import type { WebProvider } from '../lib/api.ts'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
 import { RollingNumber, Sparkline } from './Fx.tsx'
 
+// 由 Vite 解析共享品牌资源，生产构建自动生成可部署的资源地址。
+const logoUrl = new URL('../../../../docs/logo.svg', import.meta.url).href
+
 interface HeaderProps {
   current: string | null
   tokens: number
@@ -36,7 +39,8 @@ export function Header({ current, tokens, cost, series, busy, dark, webEnabled, 
       </button>
 
       <span className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-teal shadow-[0_0_8px_hsl(var(--teal)/0.8)]" aria-hidden="true" />
+        {/* 品牌图标与相邻名称共同展示，避免重复朗读。 */}
+        <img src={logoUrl} alt="" aria-hidden="true" className="h-6 w-5 shrink-0" />
         <span className="text-[13px] font-semibold tracking-tight">micro-harness</span>
       </span>
 

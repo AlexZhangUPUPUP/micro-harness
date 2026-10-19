@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 432" fill="none">
+  <title>micro-harness</title>
+  <!-- 蓝青渐变强调连接与执行，透明画布适配深浅背景。 -->
+  <defs>
+    <linearGradient id="brand" x1="16" y1="16" x2="336" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#386BFF"/>
+      <stop offset="1" stop-color="#00C8D8"/>
+    </linearGradient>
+  </defs>
+  <!-- 两段几何笔画组成 h，保留中间断口作为品牌识别特征。 -->
+  <path fill="url(#brand)" d="M32 16H84Q100 16 100 32V132Q100 164 132 164H196Q202 164 202 170V224Q202 230 196 230H132Q100 230 100 262V400Q100 416 84 416H32Q16 416 16 400V32Q16 16 32 16ZM234 164H320Q336 164 336 180V400Q336 416 320 416H268Q252 416 252 400V262Q252 238 228 230V170Q228 164 234 164Z"/>
+</svg>

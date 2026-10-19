@@ -1,3 +1,8 @@
+<!-- 品牌图标使用透明背景，适配深浅主题。 -->
+<p align="center">
+  <img src="docs/logo.svg" alt="micro-harness logo" width="88" height="108">
+</p>
+
 <h1 align="center">micro-harness</h1>
 
 <p align="center"><strong>Put models to work on code. See how the work gets done.</strong></p>
