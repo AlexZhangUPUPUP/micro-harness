@@ -108,7 +108,7 @@ For another compatible service, change the URL, key, and model ID together. For 
 MICRO_PERMISSION=workspace bun run ui
 ```
 
-The first launch builds the interface and opens your browser, normally at `http://127.0.0.1:8787`. If the port is occupied, the launcher picks another one; use the URL printed in your terminal. Press `Ctrl-C` to stop.
+The first launch builds the interface and opens your browser, normally at `http://127.0.0.1:8787`. If the port is occupied, the launcher picks another one; use the URL printed in your terminal. Use the composer's **Stop** button (or `Esc`) to interrupt a run, and `Ctrl-C` to stop the process.
 
 Try a small task:
 
@@ -237,7 +237,7 @@ Your model provider charges for model usage. Displayed costs depend on your conf
 
 **Limitations.**
 
-- **No OS-level sandbox.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. Symlinks can currently point outside the working directory. Explicit worktree isolation requires a Git repository with a commit; creation failures stop the sub-task with an error instead of falling back to the shared directory.
+- **No OS-level sandbox.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. Symlinks are resolved before the check, so a link that escapes the working directory is rejected. Explicit worktree isolation requires a Git repository with a commit; creation failures stop the sub-task with an error instead of falling back to the shared directory.
 - **Tool permissions depend on capability declarations.** `read-only` filters external tools declared as mutating. The current MCP adapter conservatively marks all MCP tools as mutating, so they are unavailable in read-only sessions. Under other presets, file access by external tools remains the responsibility of their servers.
 - **No MCP hot-plug.** Configuration is read at startup; restart after editing `mcp.json`.
 - **Costs are estimates** based on your configured prices, and image input needs a vision model.
@@ -258,7 +258,7 @@ Connect external tools through MCP (Model Context Protocol), using stdio or HTTP
 }
 ```
 
-Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. The web server bundles `web_search` and `web_fetch`, with a live web toggle and search-engine picker in the interface. DeepSeek needs `DEEPSEEK_API_KEY` (the same key the chat API uses), Bocha needs `BOCHA_API_KEY`, and SearXNG needs `MICRO_SEARXNG_URL`.
+Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. The web server bundles `web_search` and `web_fetch`, with a live web toggle and search-engine picker in the interface. DeepSeek needs `DEEPSEEK_API_KEY` (the same key the chat API uses), Bocha needs `BOCHA_API_KEY`, and SearXNG needs `MICRO_SEARXNG_URL`. Identical fetches are cached for five minutes.
 
 ## Tests and evals
 

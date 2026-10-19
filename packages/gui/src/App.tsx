@@ -179,6 +179,14 @@ export default function App() {
       })
   }
 
+  const stopRun = (): void => {
+    if (!current) return
+    void api
+      .stop(current)
+      .then(() => void refreshSessions())
+      .catch((err: unknown) => setError(String((err as Error).message)))
+  }
+
   const changeProvider = (id: string): void => {
     const prev = webProvider
     setWebProvider(id)
@@ -586,6 +594,7 @@ export default function App() {
             setValue={setInput}
             onSend={() => void send()}
             busy={busy}
+            onStop={stopRun}
             models={models}
             model={model}
             setModel={chooseModel}

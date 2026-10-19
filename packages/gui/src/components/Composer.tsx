@@ -7,6 +7,7 @@ interface ComposerProps {
   value: string
   setValue: (v: string) => void
   onSend: () => void
+  onStop?: () => void
   busy: boolean
   models?: string[]
   model?: string
@@ -50,6 +51,7 @@ export function Composer({
   value,
   setValue,
   onSend,
+  onStop,
   busy,
   models,
   model,
@@ -247,6 +249,10 @@ export function Composer({
                   e.preventDefault()
                   onSend()
                 }
+                if (e.key === 'Escape' && busy) {
+                  e.preventDefault()
+                  onStop?.()
+                }
               }}
               rows={2}
               aria-label={t('a11y.composer')}
@@ -288,14 +294,24 @@ export function Composer({
                   ))}
                 </select>
               )}
-              <button
-                onClick={onSend}
-                disabled={busy || !value.trim()}
-                className="ml-auto flex h-7 items-center gap-1 rounded-full bg-teal px-4 text-[12px] font-medium text-white transition hover:brightness-110 disabled:opacity-40"
-              >
-                {t('composer.send')}
-                <span aria-hidden="true">↑</span>
-              </button>
+              {busy ? (
+                <button
+                  onClick={onStop}
+                  className="ml-auto flex h-7 items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-4 text-[12px] font-medium text-destructive transition hover:bg-destructive/20"
+                >
+                  {t('composer.stop')}
+                  <span aria-hidden="true">■</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onSend}
+                  disabled={!value.trim()}
+                  className="ml-auto flex h-7 items-center gap-1 rounded-full bg-teal px-4 text-[12px] font-medium text-white transition hover:brightness-110 disabled:opacity-40"
+                >
+                  {t('composer.send')}
+                  <span aria-hidden="true">↑</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

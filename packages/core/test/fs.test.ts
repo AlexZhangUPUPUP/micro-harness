@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { localFs, type DirEntry, type FileSystem } from '../src/fs.ts'
@@ -85,4 +85,32 @@ test('the file tools run unchanged over a different filesystem provider', async 
   // and the sandbox rule still comes from the provider, not the tool
   const escape = await dispatch(tools, 'read_file', JSON.stringify({ path: '../../etc/passwd' }), c)
   expect(escape.isError).toBe(true)
+})
+
+test('a symlink that leaves the sandbox is rejected, even for a new file', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-fs-'))
+  const outside = await mkdtemp(path.join(tmpdir(), 'mh-fs-out-'))
+  try {
+    await writeFile(path.join(outside, 'secret.txt'), 'secret')
+    await symlink(outside, path.join(dir, 'link'))
+    const fs = localFs(dir)
+    expect(() => fs.resolve('link/secret.txt')).toThrow(/symlink/)
+    expect(() => fs.resolve('link/new.txt')).toThrow(/symlink/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+    await rm(outside, { recursive: true, force: true })
+  }
+})
+
+test('a symlink that stays inside the sandbox is allowed', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-fs-'))
+  try {
+    await mkdir(path.join(dir, 'real'))
+    await writeFile(path.join(dir, 'real', 'a.txt'), 'a')
+    await symlink(path.join(dir, 'real'), path.join(dir, 'alias'))
+    const fs = localFs(dir)
+    expect(fs.read(fs.resolve('alias/a.txt'))).resolves.toBe('a')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

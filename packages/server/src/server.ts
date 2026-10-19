@@ -562,6 +562,14 @@ export function createServer(options: ServerOptions): HarnessServer {
         if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
         return sse(id, req)
       }
+      if (action === 'stop') {
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        const runtime = runtimes.get(id)
+        const stopped = Boolean(runtime && !runtime.controller.signal.aborted)
+        if (runtime && stopped) runtime.controller.abort()
+        return json({ ok: true, stopped })
+      }
       if (action === 'resume') {
         if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         if (!store.has(id)) return json({ error: 'session not found' }, 404)

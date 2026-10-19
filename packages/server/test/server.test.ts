@@ -1031,3 +1031,48 @@ test('resuming continues the event sequence instead of restarting at 1', async (
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('POST /stop aborts the active run and leaves the session done', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-stop-'))
+  const store = new SessionStore(dir)
+  let aborted = false
+  const provider: Provider = {
+    name: 'blocking',
+    chat(req) {
+      return new Promise((_resolve, reject) => {
+        const stop = (): void => {
+          aborted = true
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        }
+        if (req.signal?.aborted) stop()
+        else req.signal?.addEventListener('abort', stop, { once: true })
+      })
+    },
+  }
+  const srv = createServer({ store, provider, model: 'fake', cwd: dir, requireAuth: false })
+  try {
+    const created = (await (
+      await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'go' }),
+      })
+    ).json()) as { session: { id: string } }
+    const id = created.session.id
+
+    const res = await fetch(`${srv.url}/api/sessions/${id}/stop`, { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { stopped: boolean }).stopped).toBe(true)
+    expect(aborted).toBe(true)
+    await srv.idle(id)
+    expect(store.require(id).status).toBe('done')
+
+    // Stopping an idle session is a no-op, not an error.
+    const again = await fetch(`${srv.url}/api/sessions/${id}/stop`, { method: 'POST' })
+    expect(again.status).toBe(200)
+    expect(((await again.json()) as { stopped: boolean }).stopped).toBe(false)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

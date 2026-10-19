@@ -108,7 +108,7 @@ export MICRO_MODEL=deepseek-chat
 MICRO_PERMISSION=workspace bun run ui
 ```
 
-首次启动会构建界面，然后自动打开浏览器，默认地址为 `http://127.0.0.1:8787`。端口被占用时会选择其他端口，以终端打印的地址为准；按 `Ctrl-C` 停止服务。
+首次启动会构建界面，然后自动打开浏览器，默认地址为 `http://127.0.0.1:8787`。端口被占用时会选择其他端口，以终端打印的地址为准；用输入框里的**停止**按钮（或 `Esc`）中断一次运行，按 `Ctrl-C` 停止服务。
 
 输入一个简单任务：
 
@@ -237,7 +237,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 
 **限制。**
 
-- **没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。符号链接目前仍可能指向目录外。显式启用 worktree 隔离时，目标目录必须是已有提交的 Git 仓库；隔离创建失败会停止子任务并返回原因，不会退回共享目录。
+- **没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。符号链接会先解析再做检查，指向目录外的链接会被拒绝。显式启用 worktree 隔离时，目标目录必须是已有提交的 Git 仓库；隔离创建失败会停止子任务并返回原因，不会退回共享目录。
 - **工具权限依赖能力声明。** `read-only` 会过滤声明为可写的外部工具；当前 MCP 适配器保守地将所有 MCP 工具标为可写，因此只读会话不提供这些工具。其他预设下，外部工具的文件访问范围仍由其服务端负责。
 - **MCP 不支持热插拔。** 配置在启动时读取，改完 `mcp.json` 需重启。
 - **成本是估算**，取决于你配置的价格；图片输入需要支持视觉的模型。
@@ -258,7 +258,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 }
 ```
 
-工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。Web 服务内置 `web_search` 与 `web_fetch`，可通过界面的联网开关和搜索引擎选择器调整。DeepSeek 需要 `DEEPSEEK_API_KEY`（与对话用的是同一个 key），Bocha 需要 `BOCHA_API_KEY`，SearXNG 需要 `MICRO_SEARXNG_URL`。
+工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。Web 服务内置 `web_search` 与 `web_fetch`，可通过界面的联网开关和搜索引擎选择器调整。DeepSeek 需要 `DEEPSEEK_API_KEY`（与对话用的是同一个 key），Bocha 需要 `BOCHA_API_KEY`，SearXNG 需要 `MICRO_SEARXNG_URL`。同一 URL 的重复抓取会缓存五分钟。
 
 ## 测试与评测
 

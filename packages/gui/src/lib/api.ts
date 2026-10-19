@@ -206,6 +206,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ files }),
     }),
+  /** Abort the run in progress (the GUI's stop button). */
+  stop: (id: string) => j<{ ok: boolean; stopped: boolean }>(`/api/sessions/${id}/stop`, { method: 'POST' }),
   /**
    * Subscribe to a session's event stream. Returns an unsubscribe function.
    *

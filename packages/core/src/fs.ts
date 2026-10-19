@@ -12,7 +12,7 @@
  * (a container, an SSH host, a map in memory) implement the same contract.
  */
 
-import { promises as nodeFs } from 'node:fs'
+import { promises as nodeFs, realpathSync } from 'node:fs'
 import path from 'node:path'
 
 export interface DirEntry {
@@ -35,10 +35,40 @@ export interface FileSystem {
 /** The default provider: the real filesystem, sandboxed to one directory. */
 export function localFs(root: string): FileSystem {
   const base = path.resolve(root)
+
+  /** realpath of the deepest existing ancestor, with the missing tail re-appended. */
+  const realpathDeep = (p: string): string => {
+    let current = p
+    const tail: string[] = []
+    for (;;) {
+      try {
+        const real = realpathSync(current)
+        return tail.length ? path.join(real, ...tail.reverse()) : real
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') throw err
+        const parent = path.dirname(current)
+        if (parent === current) return p
+        tail.push(path.basename(current))
+        current = parent
+      }
+    }
+  }
+
+  const realBase = realpathDeep(base)
+  const insideLogical = (p: string): boolean => p === base || p.startsWith(base + path.sep)
+  const insideReal = (p: string): boolean => p === realBase || p.startsWith(realBase + path.sep)
+
   const resolve = (p: unknown): string => {
     const abs = path.resolve(base, String(p ?? '.'))
-    if (abs !== base && !abs.startsWith(base + path.sep)) {
+    if (!insideLogical(abs)) {
       throw new Error(`path escapes the working directory: ${String(p)}`)
+    }
+    // A lexically-inside path can still leave through a symlink; check where it
+    // really lands. `realpathDeep` also covers a file that does not exist yet by
+    // resolving its deepest existing ancestor.
+    if (!insideReal(realpathDeep(abs))) {
+      throw new Error(`path escapes the working directory via a symlink: ${String(p)}`)
     }
     return abs
   }

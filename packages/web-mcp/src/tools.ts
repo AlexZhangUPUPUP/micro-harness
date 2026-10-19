@@ -5,7 +5,8 @@
  */
 
 import { capabilities, runtimeEnabled, runtimeSettings, type WebConfig } from './config.ts'
-import { fetchText, WebError } from './net.ts'
+import { cacheGet, cacheKey, cacheSet } from './cache.ts'
+import { fetchText, WebError, type FetchedText } from './net.ts'
 import { htmlToText, titleOf } from './html.ts'
 import { resolveProvider } from './providers.ts'
 
@@ -58,13 +59,21 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
         const url = String(args.url ?? '').trim()
         if (!url) return { text: 'web_fetch: url is required', isError: true }
         const maxChars = Number(args.maxChars) > 0 ? Math.min(Number(args.maxChars), cfg.maxChars) : cfg.maxChars
+        const key = cacheKey(url, maxChars, cfg.maxBytes)
+        let res: FetchedText | undefined = cacheGet(key)
+        const fromCache = res !== undefined
         try {
-          const res = await fetchText(url, {
-            maxBytes: cfg.maxBytes,
-            maxChars,
-            timeoutMs: cfg.timeoutMs,
-            userAgent: cfg.userAgent,
-          })
+          if (!res) {
+            const fetched = await fetchText(url, {
+              maxBytes: cfg.maxBytes,
+              maxChars,
+              timeoutMs: cfg.timeoutMs,
+              userAgent: cfg.userAgent,
+            })
+            // Redirects are reported, not followed, and are not worth caching.
+            if (!fetched.redirectTo) cacheSet(key, fetched)
+            res = fetched
+          }
           if (res.redirectTo) {
             return { text: `${res.finalUrl} → ${res.redirectTo}\n(redirected to a different host; fetch that URL if you want it)` }
           }
@@ -73,7 +82,7 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
           const body = isHtml ? htmlToText(res.text) : res.text
           const header = [
             `URL: ${res.finalUrl}`,
-            `Status: ${res.status} · ${res.contentType} · ${fmtBytes(res.bytes)}${res.truncated ? ' · truncated' : ''}`,
+            `Status: ${res.status} · ${res.contentType} · ${fmtBytes(res.bytes)}${res.truncated ? ' · truncated' : ''}${fromCache ? ' · cached' : ''}`,
             title ? `Title: ${title}` : '',
           ]
             .filter(Boolean)
