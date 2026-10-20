@@ -29,6 +29,7 @@ import {
   type McpServerConfig,
 } from '@micro-harness/core'
 import { createServer, PERMISSIONS, type PermissionPreset } from './server.ts'
+import { detectSandbox, type Sandbox, type SandboxMode } from '@micro-harness/core'
 import { SessionStore } from './store.ts'
 
 const port = Number(process.env.MICRO_PORT ?? 8787)
@@ -107,6 +108,17 @@ if (mcpServers.length) {
 
 const store = new SessionStore(dataDir)
 const provider = openaiProvider({ baseUrl, apiKey })
+const sandboxMode = (process.env.MICRO_SANDBOX ?? 'off') as SandboxMode
+let sandbox: Sandbox | null = null
+try {
+  const detected = detectSandbox(sandboxMode)
+  sandbox = detected.sandbox
+  if (detected.notice) console.error(`sandbox: ${detected.notice}`)
+} catch (err) {
+  console.error(String((err as Error)?.message ?? err))
+  process.exit(1)
+}
+
 const server = createServer({
   store,
   provider,
@@ -132,9 +144,10 @@ const server = createServer({
   },
   maxToolOutput: Number(process.env.MICRO_MAX_TOOL_OUTPUT ?? 0) || undefined,
   maxCost: Number(process.env.MICRO_MAX_COST ?? 0) || undefined,
+  sandbox: sandbox ?? undefined,
 })
 
-console.log(`micro-harness server · ${server.url} · data ${dataDir}${guiDir ? ' · GUI on' : ''}${token ? ' · auth on' : ''}`)
+console.log(`micro-harness server · ${server.url} · data ${dataDir}${guiDir ? ' · GUI on' : ''}${token ? ' · auth on' : ''}${sandbox ? ` · sandbox ${sandbox.kind}` : ''}`)
 
 const shutdown = (): void => {
   console.log('\nshutting down…')

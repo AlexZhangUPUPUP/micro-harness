@@ -27,6 +27,7 @@ import type { ChatMessage, ToolCall } from './model.ts'
 import type { Provider } from './provider.ts'
 import { dispatch, makeTools, toolDefs, type Tool, type ToolContext, type ToolResult } from './tools.ts'
 import { AgentLog, EventHub } from './events.ts'
+import type { Sandbox } from './sandbox.ts'
 
 export interface HarnessOptions {
   provider: Provider
@@ -47,6 +48,10 @@ export interface HarnessOptions {
   parentId?: string | null
   /** Last seq already recorded for this agent; a resumed run continues above it. */
   startSeq?: number
+  /** OS-level confinement for the shell tool (none by default). */
+  sandbox?: Sandbox
+  /** Whether a sandboxed shell may reach the network. */
+  network?: boolean
   tools?: Tool[]
   /** Nesting depth of this agent (root = 0). Sub-agents get depth + 1. */
   depth?: number
@@ -157,6 +162,8 @@ export class Harness {
       allowBash: !!opts.allowBash,
       agentId: opts.agentId ?? 'main',
       depth: opts.depth ?? 0,
+      sandbox: opts.sandbox,
+      network: opts.network,
       // The filesystem the file tools run against: the injected provider, else
       // the real disk rooted at `cwd`. Sub-agents inherit their parent's.
       fs: opts.fs ?? localFs(opts.cwd),
@@ -307,7 +314,13 @@ export class Harness {
       } catch {
         /* keep the raw string in the event */
       }
-      this.log.emit({ type: 'tool.call', id: call.id, name, args })
+      this.log.emit({
+        type: 'tool.call',
+        id: call.id,
+        name,
+        args,
+        ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
+      })
 
       if (this.#needsApproval(name)) {
         const id = `perm:${call.id}`

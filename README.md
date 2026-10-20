@@ -269,7 +269,7 @@ Your model provider charges for model usage. Displayed costs depend on your conf
 
 **Limitations.**
 
-- **No OS-level sandbox.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. Symlinks are resolved before the check, so a link that escapes the working directory is rejected. Explicit worktree isolation requires a Git repository with a commit; creation failures stop the sub-task with an error instead of falling back to the shared directory.
+- **No OS-level sandbox by default.** Path checks and Git worktrees scope file operations and separate changes; they are not a security boundary. An optional macOS Seatbelt sandbox (`--sandbox=auto|require`, `MICRO_SANDBOX`) confines shell commands to the workspace (plus `/tmp` and `/dev`) and denies network unless `--sandbox-net` is passed; Linux support is the next milestone. Symlinks are resolved before the check, so a link that escapes the working directory is rejected. Explicit worktree isolation requires a Git repository with a commit; creation failures stop the sub-task with an error instead of falling back to the shared directory.
 - **Tool permissions depend on capability declarations.** `read-only` filters external tools declared as mutating. The MCP adapter honors `readOnlyHint`; a tool that does not declare it is treated as mutating, so read-only sessions cannot call it. Under other presets, file access by external tools remains the responsibility of their servers.
 - **No MCP hot-plug.** Configuration is read at startup; restart after editing `mcp.json`.
 - **Costs are estimates** based on your configured prices, and image input needs a vision model.

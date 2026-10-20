@@ -22,6 +22,7 @@ import { Harness, type ApprovalMode, type ConfirmFn } from './harness.ts'
 import type { EventHub } from './events.ts'
 import { createWorktree, isGitRepo, removeWorktree, type Worktree } from './isolation.ts'
 import { localFs, type FileSystem } from './fs.ts'
+import type { Sandbox } from './sandbox.ts'
 import type { Provider } from './provider.ts'
 import type { Tool, ToolContext, ToolResult } from './tools.ts'
 
@@ -171,6 +172,10 @@ export interface AgentRunnerOptions {
   taskId?: string
   /** Starting point for child-agent sequence numbers (a resumed session's max). */
   startSeq?: number
+  /** OS-level confinement inherited by child agents. */
+  sandbox?: Sandbox
+  /** Whether a sandboxed shell may reach the network. */
+  network?: boolean
   pricing?: { input: number; output: number }
 }
 
@@ -307,6 +312,8 @@ export class AgentRunner {
       hub: this.#opts.hub,
       agentId, parentId, depth: depth + 1,
       startSeq: this.#opts.startSeq,
+      sandbox: this.#opts.sandbox,
+      network: this.#opts.network,
     })
     // 仅在隔离建立成功后发布工作区信息。
     if (worktree) {

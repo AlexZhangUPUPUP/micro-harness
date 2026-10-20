@@ -1,17 +1,21 @@
 # 执行清单
 
-- [ ] 定义 `Sandbox` 接口与 `detectSandbox`。
-- [ ] macOS Seatbelt profile 生成 + 单元测试。
+- [x] 定义 `Sandbox` 接口与 `detectSandbox`。
+- [x] macOS Seatbelt profile 生成 + 单元测试。
 - [ ] Linux bwrap 参数生成 + 单元测试。
-- [ ] `ToolContext.sandbox` 注入（CLI / Harness / AgentRunner / server）。
-- [ ] `bash` 工具执行前包装命令。
-- [ ] `tool.call` 记录 `sandbox` 类型并在 Trace/Inspector 展示。
-- [ ] `off` 行为不变，既有测试全绿。
-- [ ] `require` 缺失工具时 fail closed；`auto` 回退有明确警告。
-- [ ] 平台可用时的写入/断网集成测试。
-- [ ] README 限制一节更新（中英）。
-- [ ] 全量测试、类型检查、文档站构建。
+- [x] `ToolContext.sandbox` 注入（CLI / Harness / AgentRunner / server / ACP）。
+- [x] `bash` 工具执行前包装命令。
+- [x] `tool.call` 记录 `sandbox` 类型（Trace/Inspector 的专门展示留给 M3）。
+- [x] `off` 行为不变，既有测试全绿。
+- [x] `require` 缺失工具时 fail closed；`auto` 回退有明确警告。
+- [x] 平台可用时的写入/断网集成测试（macOS）。
+- [x] README 限制一节更新（中英）。
+- [x] 全量测试、类型检查（文档站构建随 M3）。
 
 ## 验证记录
 
-（待实现后补充：平台、profile 内容、被拒绝/允许的路径、测试数量。）
+- 平台：macOS 26.6.2，`/usr/bin/sandbox-exec` 可用。
+- profile：`deny default` + `process*` + `process-exec*` + `file-read*`；写根 = cwd（含 realpath）+ `/tmp` + `/private/tmp` + `/dev`；`--sandbox-net` 时才加 `network*`。
+- 实测：写 `cwd` 成功；写工作区外失败（`Operation not permitted`）；默认断网时 `curl` 失败。
+- `detectSandbox`：`off` 不包装；`require` 缺原语抛错；`auto` 回退并给出 notice。
+- 测试：`bun test` **215 通过 / 0 失败**；`bun run typecheck` 通过。

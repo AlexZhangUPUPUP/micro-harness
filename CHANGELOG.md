@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Optional macOS Seatbelt sandbox for the shell tool (`--sandbox=auto|require`,
+  `MICRO_SANDBOX`): deny-by-default writes outside the workspace, and no
+  network unless `--sandbox-net` is passed.
+
 ## [0.1.0] — 2026-10-19
 
 First public release: a coding-agent runtime you can read end to end.

@@ -68,3 +68,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · Web · Skills 与提示词模板接入 Web：`GET /api/commands` 返回 `prompts/` `commands/` 模板与 `skills/*/SKILL.md`；服务端在 create/resume 时展开 `/name args`；skills 追加进系统提示词；输入框以 `/` 触发补全菜单（Tab/Enter 选中）。210 测试
 - 2026-10-19 · MCP · 两个方向都通了：① MCP 客户端尊重 `readOnlyHint`（未声明仍按可写处理），只读会话可用只读 MCP 工具；② 新增 `micro-harness mcp` 子命令，把内置工具经 stdio MCP 暴露给其它 agent（默认不含 bash，`--allow-bash` 显式开启）。212 测试
 - 2026-10-19 · 发布 · ① 真实模型抽查（deepseek-chat，5 个确定性任务各 1 次）5/5 通过，写入 README；② CHANGELOG + v0.1.0 + release 工作流（macOS arm64 / Linux x64 单文件）；③ 文档站：截图转 WebP（3.0MB → 792KB）、Pagefind 搜索、每页 “Edit on GitHub”。212 测试
+- 2026-10-19 · 沙箱 · M0+M1：`Sandbox` 接口与 `detectSandbox`（off/auto/require）、macOS Seatbelt（deny default，写根 = cwd + /tmp + /dev，默认断网）、`bash` 执行前包装、CLI `--sandbox`/`--sandbox-net`、server `MICRO_SANDBOX`、`tool.call` 记录沙箱类型；写工作区外被拒、默认断网实测通过。215 测试（分支 feat/os-sandbox）

@@ -6,8 +6,9 @@
  * result (including errors) goes back as a `tool` message so the model can recover.
  */
 
-import { exec } from 'node:child_process'
+import { exec, execFile } from 'node:child_process'
 import { localFs, type FileSystem } from './fs.ts'
+import type { Sandbox } from './sandbox.ts'
 import type { ToolDef } from './model.ts'
 
 export interface ToolContext {
@@ -25,6 +26,10 @@ export interface ToolContext {
   depth?: number
   /** Aborted when the current turn is cancelled; propagated to sub-agents. */
   signal?: AbortSignal
+  /** OS-level confinement for shell commands, when one is configured. */
+  sandbox?: Sandbox
+  /** Whether a sandboxed command may reach the network (default: no). */
+  network?: boolean
 }
 
 export interface ToolResult {
@@ -53,16 +58,21 @@ function clip(text: string, max = MAX_OUTPUT): string {
 /** The filesystem this call should use: the injected provider, or local disk. */
 const fsFor = (ctx: ToolContext): FileSystem => ctx.fs ?? localFs(ctx.cwd)
 
-function sh(command: string, cwd: string, timeout = 60_000): Promise<{ stdout: string; stderr: string; code: number }> {
+function sh(
+  command: string,
+  cwd: string,
+  timeout = 60_000,
+  wrap?: { command: string; args: string[] },
+): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    exec(
-      command,
-      { cwd, timeout, maxBuffer: 1024 * 1024, encoding: 'utf8' },
-      (err, stdout, stderr) => {
-        const code = err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0
-        resolve({ stdout: String(stdout || ''), stderr: String(stderr || ''), code })
-      },
-    )
+    const options = { cwd, timeout, maxBuffer: 1024 * 1024, encoding: 'utf8' as const }
+    const done = (err: unknown, stdout: string | Buffer, stderr: string | Buffer): void => {
+      const code =
+        err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0
+      resolve({ stdout: String(stdout || ''), stderr: String(stderr || ''), code })
+    }
+    if (wrap) execFile(wrap.command, wrap.args, options, done)
+    else exec(command, options, done)
   })
 }
 
@@ -140,7 +150,8 @@ export function makeTools(): Tool[] {
       async run(args, ctx) {
         const command = String(args.command ?? '').trim()
         if (!command) return { output: 'no command given', isError: true }
-        const { stdout, stderr, code } = await sh(command, ctx.cwd)
+        const wrapped = ctx.sandbox?.wrap(command, { cwd: ctx.cwd, network: ctx.network === true })
+        const { stdout, stderr, code } = await sh(command, ctx.cwd, 60_000, wrapped)
         const combined = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n')
         return { output: clip(combined || `(no output, exit ${code})`), isError: code !== 0 }
       },

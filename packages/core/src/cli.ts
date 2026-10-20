@@ -33,6 +33,7 @@ import { parseTaskFile, runAuto } from './autorun.ts'
 import { connectMcpServers, loadMcpServers, mcpInfos, mcpTools, type McpConnection } from './mcp.ts'
 import { runAcpServer } from './acp.ts'
 import { runMcpServer } from './mcp-server.ts'
+import { detectSandbox, type Sandbox, type SandboxMode } from './sandbox.ts'
 
 // ------------------------------------------------------------------- argv
 
@@ -84,6 +85,22 @@ const model = opt('model', process.env.MICRO_MODEL || process.env.OPENAI_MODEL |
 const baseUrl = opt('base-url', process.env.MICRO_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com')!
 const apiKey = process.env.MICRO_API_KEY || process.env.OPENAI_API_KEY || ''
 const approval = (opt('approval', 'auto-edit') as ApprovalMode) ?? 'auto-edit'
+const sandboxMode = opt('sandbox', process.env.MICRO_SANDBOX ?? 'off') as SandboxMode
+if (!['off', 'auto', 'require'].includes(sandboxMode)) {
+  console.error(`unknown --sandbox value: ${sandboxMode} (off | auto | require)`)
+  process.exit(1)
+}
+let sandbox: Sandbox | null = null
+try {
+  const detected = detectSandbox(sandboxMode)
+  sandbox = detected.sandbox
+  if (detected.notice) console.error(`sandbox: ${detected.notice}`)
+} catch (err) {
+  console.error(String((err as Error)?.message ?? err))
+  process.exit(1)
+}
+const sandboxNetwork = flag('sandbox-net')
+
 const pricing = {
   input: Number(opt('price-input', process.env.MICRO_PRICE_INPUT || '0')) || 0,
   output: Number(opt('price-output', process.env.MICRO_PRICE_OUTPUT || '0')) || 0,
@@ -115,6 +132,8 @@ Options:
   --dir <path>            working directory (default: cwd)
   --approval <mode>       suggest | auto-edit | full-auto (default auto-edit)
   --no-bash               disable the bash tool (enabled by default)
+  --sandbox <mode>        off | auto | require (default off)
+  --sandbox-net           allow network inside the sandbox
   --max-steps <n>         model loop step budget (default 24)
   --max-context <n>       context token budget (default 24000)
   --max-tool-output <n>   truncate tool output to n tokens
@@ -260,6 +279,8 @@ const runner = new AgentRunner({
   timeoutMs: (Number(opt('agent-timeout', '300')) || 300) * 1000,
   maxTokens: opt('agent-max-tokens') ? Number(opt('agent-max-tokens')) : undefined,
   maxCost: opt('agent-max-cost') ? Number(opt('agent-max-cost')) : undefined,
+  sandbox: sandbox ?? undefined,
+  network: sandboxNetwork,
 })
 
 if (isolate) process.on('exit', () => void runner.cleanupWorktrees())
@@ -282,6 +303,8 @@ if (sub === 'acp') {
     maxSteps,
     pricing,
     tools: allTools,
+    sandbox: sandbox ?? undefined,
+    network: sandboxNetwork,
     systemPrompt,
     version: VERSION,
   })
@@ -293,6 +316,8 @@ const harness = new Harness({
   model,
   cwd,
   allowBash,
+  sandbox: sandbox ?? undefined,
+  network: sandboxNetwork,
   maxSteps,
   maxContextTokens,
   systemPrompt,
@@ -307,7 +332,7 @@ const harness = new Harness({
 })
 
 if (!quiet) {
-  console.error(`micro-harness · ${model} · cwd ${cwd} · approval ${approval}${allowBash ? ' · bash on' : ''}`)
+  console.error(`micro-harness · ${model} · cwd ${cwd} · approval ${approval}${allowBash ? ' · bash on' : ''}${sandbox ? ` · sandbox ${sandbox.kind}` : ''}`)
 }
 
 // ----------------------------------------------------------------- run modes

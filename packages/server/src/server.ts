@@ -54,6 +54,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
+import type { Sandbox } from '@micro-harness/core'
 import { createApprovalBroker, type ApprovalBroker } from './approvals.ts'
 
 export type PermissionPreset = 'read-only' | 'workspace' | 'full' | 'auto-review'
@@ -127,6 +128,8 @@ export interface ServerOptions {
   maxSteps?: number
   /** Stop a run once its cumulative cost exceeds this many USD. */
   maxCost?: number
+  /** OS-level confinement for the shell tool (none when omitted). */
+  sandbox?: Sandbox
   systemPrompt?: string
   pricing?: { input: number; output: number; inputCached?: number }
   /** Cap on a single tool result, in characters (~3k tokens by default). */
@@ -313,6 +316,8 @@ export function createServer(options: ServerOptions): HarnessServer {
       isolation: options.isolation,
       pricing: options.pricing,
       startSeq,
+      sandbox: options.sandbox,
+      network: spec.net,
     })
 
     const harness = new Harness({
@@ -325,6 +330,8 @@ export function createServer(options: ServerOptions): HarnessServer {
       // the same value through AgentRunner below.
       allowBash: sessionBash,
       startSeq,
+      sandbox: options.sandbox,
+      network: spec.net,
       maxSteps: options.maxSteps,
       systemPrompt: systemFor(sessionCwd),
       pricing: options.pricing,

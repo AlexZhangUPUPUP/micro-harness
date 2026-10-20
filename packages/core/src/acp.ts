@@ -24,6 +24,7 @@
 import { randomUUID } from 'node:crypto'
 import { EventHub, type AgentEvent } from './events.ts'
 import { localFs, type DirEntry, type FileSystem } from './fs.ts'
+import type { Sandbox } from './sandbox.ts'
 import { Harness, type ApprovalMode } from './harness.ts'
 import type { Provider } from './provider.ts'
 import type { Tool } from './tools.ts'
@@ -35,6 +36,10 @@ export interface AcpOptions {
   model: string
   cwd: string
   allowBash?: boolean
+  /** OS-level confinement for the shell tool, when configured. */
+  sandbox?: Sandbox
+  /** Whether a sandboxed shell may reach the network. */
+  network?: boolean
   /** non-`full-auto` modes ask the editor through `session/request_permission`. */
   approval?: ApprovalMode
   maxSteps?: number
@@ -303,6 +308,8 @@ export async function runAcpServer(opts: AcpOptions): Promise<void> {
             model: opts.model,
             cwd,
             allowBash: opts.allowBash,
+            sandbox: opts.sandbox,
+            network: opts.network,
             maxSteps: opts.maxSteps,
             pricing: opts.pricing,
             tools: opts.tools,
