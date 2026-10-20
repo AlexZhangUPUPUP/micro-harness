@@ -2,7 +2,7 @@
 
 - [x] 定义 `Sandbox` 接口与 `detectSandbox`。
 - [x] macOS Seatbelt profile 生成 + 单元测试。
-- [ ] Linux bwrap 参数生成 + 单元测试。
+- [x] Linux bwrap 参数生成 + 单元测试。
 - [x] `ToolContext.sandbox` 注入（CLI / Harness / AgentRunner / server / ACP）。
 - [x] `bash` 工具执行前包装命令。
 - [x] `tool.call` 记录 `sandbox` 类型（Trace/Inspector 的专门展示留给 M3）。
@@ -18,4 +18,5 @@
 - profile：`deny default` + `process*` + `process-exec*` + `file-read*`；写根 = cwd（含 realpath）+ `/tmp` + `/private/tmp` + `/dev`；`--sandbox-net` 时才加 `network*`。
 - 实测：写 `cwd` 成功；写工作区外失败（`Operation not permitted`）；默认断网时 `curl` 失败。
 - `detectSandbox`：`off` 不包装；`require` 缺原语抛错；`auto` 回退并给出 notice。
-- 测试：`bun test` **215 通过 / 0 失败**；`bun run typecheck` 通过。
+- 测试：`bun test` **219 通过 / 0 失败**；`bun run typecheck` 通过。
+- Linux bwrap：参数（`--ro-bind / /`、bind 工作区、`--unshare-net`、`--die-with-parent`）与检测（缺 bwrap / userns 不可用）有单测；集成用例在非 Linux 环境跳过。

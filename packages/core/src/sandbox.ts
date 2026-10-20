@@ -15,6 +15,7 @@
  * `bwrap` kind is reserved so callers and events do not need to change later.
  */
 
+import { spawnSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 
@@ -85,6 +86,50 @@ export function seatbeltSandbox(extraWriteRoots: string[] = []): Sandbox {
   }
 }
 
+/**
+ * bubblewrap: namespaces instead of a policy engine. `/` is read-only, the
+ * workspace (and any worktree) is bound read-write, `/tmp` is shared, and the
+ * network namespace is dropped unless it is explicitly allowed.
+ */
+export function bwrapArgs(opts: { cwd: string; writeRoots: string[]; network: boolean }): string[] {
+  const roots = [...new Set(opts.writeRoots)]
+  const args = [
+    '--ro-bind', '/', '/',
+    '--dev', '/dev',
+    '--proc', '/proc',
+    '--bind', '/tmp', '/tmp',
+    ...roots.flatMap((r) => ['--bind', r, r]),
+    '--unshare-pid',
+    '--die-with-parent',
+    '--new-session',
+    '--chdir', opts.cwd,
+  ]
+  if (!opts.network) args.push('--unshare-net')
+  return args
+}
+
+export function bwrapSandbox(extraWriteRoots: string[] = []): Sandbox {
+  return {
+    kind: 'bwrap',
+    wrap(command, opts) {
+      return {
+        command: 'bwrap',
+        args: [...bwrapArgs({ cwd: opts.cwd, writeRoots: [opts.cwd, ...extraWriteRoots], network: opts.network }), '--', '/bin/sh', '-c', command],
+      }
+    },
+  }
+}
+
+/** Whether bubblewrap can actually create the namespaces we need. */
+function bwrapUsable(): boolean {
+  const probe = spawnSync(
+    'bwrap',
+    ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--unshare-net', '--', '/bin/true'],
+    { timeout: 3000, stdio: 'ignore' },
+  )
+  return probe.status === 0
+}
+
 /** `which`, without spawning a process; injectable so tests are deterministic. */
 export function whichIsDefault(bin: string): boolean {
   if (process.platform === 'darwin' && bin === 'sandbox-exec') return existsSync('/usr/bin/sandbox-exec')
@@ -96,23 +141,34 @@ export function whichIsDefault(bin: string): boolean {
 
 export function detectSandbox(
   mode: SandboxMode,
-  opts: { has?: (bin: string) => boolean; extraWriteRoots?: string[] } = {},
+  opts: {
+    has?: (bin: string) => boolean
+    /** Can the platform's primitive actually run here? Injectable for tests. */
+    probe?: () => boolean
+    extraWriteRoots?: string[]
+    platform?: NodeJS.Platform
+  } = {},
 ): SandboxResult {
   if (mode === 'off') return { sandbox: null }
   const has = opts.has ?? whichIsDefault
+  const platform = opts.platform ?? process.platform
+  const probe = opts.probe ?? bwrapUsable
 
-  if (process.platform === 'darwin' && has('sandbox-exec')) {
+  if (platform === 'darwin' && has('sandbox-exec')) {
     return { sandbox: seatbeltSandbox(opts.extraWriteRoots ?? []) }
   }
+  if (platform === 'linux' && has('bwrap') && probe()) {
+    return { sandbox: bwrapSandbox(opts.extraWriteRoots ?? []) }
+  }
 
-  // Linux (bubblewrap) is the next milestone; until then the honest answer is
-  // "unavailable", not a silent no-op.
   const reason =
-    process.platform === 'darwin'
+    platform === 'darwin'
       ? 'sandbox-exec not found'
-      : process.platform === 'linux'
-        ? 'no supported sandbox on this platform yet (bubblewrap lands in the next milestone)'
-        : `no OS sandbox for ${process.platform}`
+      : platform === 'linux'
+        ? has('bwrap')
+          ? 'bubblewrap cannot create the namespaces it needs (unprivileged user namespaces disabled?)'
+          : 'bubblewrap is not installed'
+        : `no OS sandbox for ${platform}`
 
   if (mode === 'require') throw new Error(`sandbox required but unavailable: ${reason}`)
   return { sandbox: null, notice: `sandbox requested but unavailable (${reason}); running without it` }

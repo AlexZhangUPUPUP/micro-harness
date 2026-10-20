@@ -8,9 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Optional macOS Seatbelt sandbox for the shell tool (`--sandbox=auto|require`,
-  `MICRO_SANDBOX`): deny-by-default writes outside the workspace, and no
-  network unless `--sandbox-net` is passed.
+- Optional OS sandbox for the shell tool (`--sandbox=auto|require`,
+  `MICRO_SANDBOX`): Seatbelt on macOS, bubblewrap (`bwrap`) on Linux;
+  deny-by-default writes outside the workspace, and no network unless
+  `--sandbox-net` is passed.
 
 ## [0.1.0] — 2026-10-19
 

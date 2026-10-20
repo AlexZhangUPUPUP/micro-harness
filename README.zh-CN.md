@@ -37,7 +37,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 - **一条事件流，四个视图。** 同一批带标签的事件既是会话日志，也是 SSE、回放、Trace 与 Inspector 的数据源。“模型看到了什么”是被记录下来的，而不是从另一套 UI 状态反推的。
 - **能力即权限模型。** `read-only` / `workspace` / `full` / `auto-review` 决定哪些工具存在、有没有 shell、`network` 工具是否逐次审批。
 - **带审阅的委派。** 子 Agent 拥有独立上下文（可选独立 git worktree）；改动逐块落地，上下文漂移的 hunk 会被报告而不是错应用。
-- **测试与评测是一等公民。** 212 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
+- **测试与评测是一等公民。** 219 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
@@ -269,7 +269,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 
 **限制。**
 
-- **默认没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。可选的 macOS Seatbelt 沙箱（`--sandbox=auto|require`、`MICRO_SANDBOX`）会把 shell 命令限制在工作区（外加 `/tmp` 与 `/dev`），默认断网，传 `--sandbox-net` 才放行网络；Linux 支持是下一个里程碑。符号链接会先解析再做检查，指向目录外的链接会被拒绝。显式启用 worktree 隔离时，目标目录必须是已有提交的 Git 仓库；隔离创建失败会停止子任务并返回原因，不会退回共享目录。
+- **默认没有操作系统级沙箱。** 路径检查与 Git worktree 只用于限定操作范围、分离改动，不是安全边界。可选的操作系统级沙箱（`--sandbox=auto|require`、`MICRO_SANDBOX`）会把 shell 命令限制在工作区（外加 `/tmp` 与 `/dev`），默认断网，传 `--sandbox-net` 才放行网络：macOS 用 Seatbelt，Linux 用 bubblewrap（`bwrap`，需要非特权 user namespace）。符号链接会先解析再做检查，指向目录外的链接会被拒绝。显式启用 worktree 隔离时，目标目录必须是已有提交的 Git 仓库；隔离创建失败会停止子任务并返回原因，不会退回共享目录。
 - **工具权限依赖能力声明。** `read-only` 会过滤声明为可写的外部工具；MCP 适配器遵循 `readOnlyHint`，未声明的按可写处理，因此只读会话无法调用。其他预设下，外部工具的文件访问范围仍由其服务端负责。
 - **MCP 不支持热插拔。** 配置在启动时读取，改完 `mcp.json` 需重启。
 - **成本是估算**，取决于你配置的价格；图片输入需要支持视觉的模型。
@@ -310,7 +310,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。完整套件是 `bun test`（212 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。完整套件是 `bun test`（219 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 
