@@ -9,7 +9,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - `edit_file`: exact-string replacement that refuses a missing or ambiguous match,
-  so a targeted change no longer rewrites the whole file.
+  so a targeted change no longer rewrites the whole file. A batch (`edits: [...]`)
+  is applied in order and atomically — if any edit fails, nothing is written.
 - Optional OS sandbox for the shell tool (`--sandbox=auto|require`,
   `MICRO_SANDBOX`): Seatbelt on macOS, bubblewrap (`bwrap`) on Linux;
   deny-by-default writes outside the workspace, and no network unless

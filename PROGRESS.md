@@ -73,3 +73,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 沙箱 · M2 验证：在 `oven/bun:1` 容器（bubblewrap 0.9.0）里跑 `sandbox.test.ts`，5 pass / 1 skip / 0 fail；bwrap 集成用例确认写工作区成功、写 `/root` 被拒、默认断网。
 - 2026-10-19 · 沙箱 · M3：`GET /api/sandbox`（mode/kind）、GUI 顶栏徽章与审批卡/Trace 的沙箱标识、`permission.request` 携带 sandbox；README 配置表补 `MICRO_SANDBOX`。220 测试（分支 feat/os-sandbox）
 - 2026-10-19 · 工具 · 新增 `edit_file`：精确字符串替换，默认要求唯一匹配（0 次/多次都报错且不写文件），支持 `replace_all`；`$&` 等替换模式按字面处理。workspace/full/auto-review 预设包含它，系统提示改为优先用它。225 测试（分支 feat/edit-file）
+- 2026-10-19 · 工具 · `edit_file` 支持批量原子编辑（`edits: [...]`，按顺序应用；任一处失败则整个不写），单条调用行为不变。228 测试（分支 feat/edit-file）

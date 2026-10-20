@@ -132,20 +132,36 @@ export function makeTools(): Tool[] {
         type: 'object',
         properties: {
           path: { type: 'string', description: 'file path, relative to the working directory' },
-          old_string: { type: 'string', description: 'exact text to replace (include enough context to be unique)' },
-          new_string: { type: 'string', description: 'replacement text' },
-          replace_all: { type: 'boolean', description: 'replace every occurrence (default false)' },
+          old_string: { type: 'string', description: 'exact text to replace (single edit)' },
+          new_string: { type: 'string', description: 'replacement text (single edit)' },
+          replace_all: { type: 'boolean', description: 'replace every occurrence (single edit, default false)' },
+          edits: {
+            type: 'array',
+            description:
+              'several replacements applied in order and atomically; if any fails, the file is not written',
+            items: {
+              type: 'object',
+              properties: {
+                old_string: { type: 'string' },
+                new_string: { type: 'string' },
+                replace_all: { type: 'boolean' },
+              },
+              required: ['old_string', 'new_string'],
+            },
+          },
         },
-        required: ['path', 'old_string', 'new_string'],
+        required: ['path'],
       },
       async run(args, ctx) {
         const fs = fsFor(ctx)
         const handle = fs.resolve(args.path)
         const rel = fs.rel(handle)
-        const oldText = String(args.old_string ?? '')
-        const newText = String(args.new_string ?? '')
-        if (!oldText) return { output: 'edit_file: old_string is required', isError: true }
-        if (oldText === newText) return { output: 'edit_file: old_string and new_string are identical', isError: true }
+
+        const batch = Array.isArray(args.edits) ? (args.edits as Array<Record<string, unknown>>) : null
+        if (batch && batch.length === 0) return { output: 'edit_file: edits must not be empty', isError: true }
+        const specs = batch ?? [
+          { old_string: args.old_string, new_string: args.new_string, replace_all: args.replace_all },
+        ]
 
         let original: string
         try {
@@ -154,25 +170,41 @@ export function makeTools(): Tool[] {
           return { output: `edit_file: ${(err as Error).message}`, isError: true }
         }
 
-        const count = original.split(oldText).length - 1
-        if (count === 0) return { output: `edit_file: old_string not found in ${rel}`, isError: true }
-        const all = args.replace_all === true
-        if (count > 1 && !all) {
-          return {
-            output: `edit_file: old_string matches ${count} times in ${rel}; add more context or pass replace_all: true`,
-            isError: true,
+        let content = original
+        let replacements = 0
+        for (const [i, spec] of specs.entries()) {
+          const at = batch ? `edit ${i + 1}: ` : ''
+          const oldText = String(spec.old_string ?? '')
+          const newText = String(spec.new_string ?? '')
+          if (!oldText) return { output: `edit_file: ${at}old_string is required`, isError: true }
+          if (oldText === newText) return { output: `edit_file: ${at}old_string and new_string are identical`, isError: true }
+
+          const count = content.split(oldText).length - 1
+          if (count === 0) return { output: `edit_file: ${at}old_string not found in ${rel}`, isError: true }
+          if (count > 1 && spec.replace_all !== true) {
+            return {
+              output: `edit_file: ${at}old_string matches ${count} times in ${rel}; add more context or pass replace_all: true`,
+              isError: true,
+            }
           }
+
+          // Avoid String.replace: `$&` and friends in new_string would be special.
+          content =
+            spec.replace_all === true
+              ? content.split(oldText).join(newText)
+              : (() => {
+                  const idx = content.indexOf(oldText)
+                  return content.slice(0, idx) + newText + content.slice(idx + oldText.length)
+                })()
+          replacements += spec.replace_all === true ? count : 1
         }
 
-        // Avoid String.replace: `$&` and friends in new_string would be special.
-        const updated = all
-          ? original.split(oldText).join(newText)
-          : (() => {
-              const at = original.indexOf(oldText)
-              return original.slice(0, at) + newText + original.slice(at + oldText.length)
-            })()
-        await fs.write(handle, updated)
-        return { output: `edited ${rel}: replaced ${all ? count : 1} occurrence${all && count !== 1 ? 's' : ''}` }
+        await fs.write(handle, content)
+        return {
+          output: batch
+            ? `edited ${rel}: ${specs.length} edit(s), ${replacements} replacement(s)`
+            : `edited ${rel}: replaced ${replacements} occurrence${replacements === 1 ? '' : 's'}`,
+        }
       },
     },
     {

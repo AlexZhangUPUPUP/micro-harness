@@ -78,3 +78,50 @@ test('edit_file rejects identical strings and missing files', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('edit_file applies a batch in order', async () => {
+  const { dir, ctx, tools } = await setup('a = 1\nb = 2\n')
+  try {
+    const res = await edit(tools, ctx, {
+      path: 'a.txt',
+      edits: [
+        { old_string: 'a = 1', new_string: 'a = 10' },
+        { old_string: 'b = 2', new_string: 'b = 20' },
+      ],
+    })
+    assert.equal(res.isError, undefined)
+    assert.match(res.output, /2 edit\(s\), 2 replacement\(s\)/)
+    assert.equal(await readFile(path.join(dir, 'a.txt'), 'utf8'), 'a = 10\nb = 20\n')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('edit_file writes nothing when any edit in the batch fails', async () => {
+  const { dir, ctx, tools } = await setup('a = 1\nb = 2\n')
+  try {
+    const res = await edit(tools, ctx, {
+      path: 'a.txt',
+      edits: [
+        { old_string: 'a = 1', new_string: 'a = 10' },
+        { old_string: 'missing', new_string: 'x' },
+      ],
+    })
+    assert.equal(res.isError, true)
+    assert.match(res.output, /edit 2: old_string not found/)
+    assert.equal(await readFile(path.join(dir, 'a.txt'), 'utf8'), 'a = 1\nb = 2\n')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('edit_file rejects an empty edits array', async () => {
+  const { dir, ctx, tools } = await setup('x\n')
+  try {
+    const res = await edit(tools, ctx, { path: 'a.txt', edits: [] })
+    assert.equal(res.isError, true)
+    assert.match(res.output, /must not be empty/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
