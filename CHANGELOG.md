@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-19
+
 ### Added
 
 - Usage panel redesigned around **model calls**: stacked bars per call (uncached /
@@ -82,4 +84,5 @@ First public release: a coding-agent runtime you can read end to end.
   validated IP, https only, same-host redirects only, with size and time caps.
 - No OS-level sandbox yet; see the limitations section of the README.
 
+[0.2.0]: https://github.com/AlexZhangUPUPUP/micro-harness/releases/tag/v0.2.0
 [0.1.0]: https://github.com/AlexZhangUPUPUP/micro-harness/releases/tag/v0.1.0

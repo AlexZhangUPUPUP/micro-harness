@@ -1,6 +1,6 @@
 {
   "name": "micro-harness",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A complete, plugin-based coding-agent harness: own agent loop, multi-agent orchestration, server + CLI + GUI, MCP/ACP.",
