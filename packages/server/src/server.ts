@@ -72,10 +72,10 @@ export const PERMISSIONS: Record<
   { tools: string[]; bash: boolean; net: boolean; approval: 'suggest' | 'auto-edit' | 'full-auto'; exp?: boolean }
 > = {
   'read-only': { tools: ['read_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
-  workspace: { tools: ['read_file', 'write_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
-  full: { tools: ['read_file', 'write_file', 'list_dir', 'bash'], bash: true, net: true, approval: 'full-auto' },
+  workspace: { tools: ['read_file', 'write_file', 'edit_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
+  full: { tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'bash'], bash: true, net: true, approval: 'full-auto' },
   'auto-review': {
-    tools: ['read_file', 'write_file', 'list_dir', 'bash'],
+    tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'bash'],
     bash: true,
     net: true,
     approval: 'auto-edit',

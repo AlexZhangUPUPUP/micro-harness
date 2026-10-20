@@ -123,6 +123,59 @@ export function makeTools(): Tool[] {
       },
     },
     {
+      name: 'edit_file',
+      description:
+        'Replace an exact string in a text file. old_string must match exactly once unless replace_all is true; ' +
+        'nothing is written when the match is missing or ambiguous.',
+      mutating: true,
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'file path, relative to the working directory' },
+          old_string: { type: 'string', description: 'exact text to replace (include enough context to be unique)' },
+          new_string: { type: 'string', description: 'replacement text' },
+          replace_all: { type: 'boolean', description: 'replace every occurrence (default false)' },
+        },
+        required: ['path', 'old_string', 'new_string'],
+      },
+      async run(args, ctx) {
+        const fs = fsFor(ctx)
+        const handle = fs.resolve(args.path)
+        const rel = fs.rel(handle)
+        const oldText = String(args.old_string ?? '')
+        const newText = String(args.new_string ?? '')
+        if (!oldText) return { output: 'edit_file: old_string is required', isError: true }
+        if (oldText === newText) return { output: 'edit_file: old_string and new_string are identical', isError: true }
+
+        let original: string
+        try {
+          original = await fs.read(handle)
+        } catch (err) {
+          return { output: `edit_file: ${(err as Error).message}`, isError: true }
+        }
+
+        const count = original.split(oldText).length - 1
+        if (count === 0) return { output: `edit_file: old_string not found in ${rel}`, isError: true }
+        const all = args.replace_all === true
+        if (count > 1 && !all) {
+          return {
+            output: `edit_file: old_string matches ${count} times in ${rel}; add more context or pass replace_all: true`,
+            isError: true,
+          }
+        }
+
+        // Avoid String.replace: `$&` and friends in new_string would be special.
+        const updated = all
+          ? original.split(oldText).join(newText)
+          : (() => {
+              const at = original.indexOf(oldText)
+              return original.slice(0, at) + newText + original.slice(at + oldText.length)
+            })()
+        await fs.write(handle, updated)
+        return { output: `edited ${rel}: replaced ${all ? count : 1} occurrence${all && count !== 1 ? 's' : ''}` }
+      },
+    },
+    {
       name: 'list_dir',
       description: 'List the entries of a directory (directories end with "/").',
       parameters: {
