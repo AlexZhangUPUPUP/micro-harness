@@ -19,4 +19,5 @@
 - 实测：写 `cwd` 成功；写工作区外失败（`Operation not permitted`）；默认断网时 `curl` 失败。
 - `detectSandbox`：`off` 不包装；`require` 缺原语抛错；`auto` 回退并给出 notice。
 - 测试：`bun test` **219 通过 / 0 失败**；`bun run typecheck` 通过。
-- Linux bwrap：参数（`--ro-bind / /`、bind 工作区、`--unshare-net`、`--die-with-parent`）与检测（缺 bwrap / userns 不可用）有单测；集成用例在非 Linux 环境跳过。
+- Linux bwrap：参数（`--ro-bind / /`、bind 工作区、`--unshare-net`、`--die-with-parent`）与检测（缺 bwrap / userns 不可用）有单测。
+- Linux 容器实测（`oven/bun:1` + bubblewrap 0.9.0，`bun test packages/core/test/sandbox.test.ts`）：5 pass / 1 skip（seatbelt 在 Linux 跳过）/ 0 fail；bwrap 集成用例验证了「写工作区成功、写 /root 被拒、默认断网」。

@@ -70,3 +70,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 发布 · ① 真实模型抽查（deepseek-chat，5 个确定性任务各 1 次）5/5 通过，写入 README；② CHANGELOG + v0.1.0 + release 工作流（macOS arm64 / Linux x64 单文件）；③ 文档站：截图转 WebP（3.0MB → 792KB）、Pagefind 搜索、每页 “Edit on GitHub”。212 测试
 - 2026-10-19 · 沙箱 · M0+M1：`Sandbox` 接口与 `detectSandbox`（off/auto/require）、macOS Seatbelt（deny default，写根 = cwd + /tmp + /dev，默认断网）、`bash` 执行前包装、CLI `--sandbox`/`--sandbox-net`、server `MICRO_SANDBOX`、`tool.call` 记录沙箱类型；写工作区外被拒、默认断网实测通过。215 测试（分支 feat/os-sandbox）
 - 2026-10-19 · 沙箱 · M2：Linux bubblewrap。`bwrapArgs`（ro-bind /、bind 工作区、/tmp 共享、unshare-pid、die-with-parent、默认 unshare-net）+ `detectSandbox` 探测 userns 是否可用；require 失败关闭、auto 警告。补参数/检测单测，Linux 集成用例在非 Linux 跳过。219 测试（分支 feat/os-sandbox）
+- 2026-10-19 · 沙箱 · M2 验证：在 `oven/bun:1` 容器（bubblewrap 0.9.0）里跑 `sandbox.test.ts`，5 pass / 1 skip / 0 fail；bwrap 集成用例确认写工作区成功、写 `/root` 被拒、默认断网。
