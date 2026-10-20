@@ -27,18 +27,29 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
   if (!open) return null
 
   const { points } = stats
-  const max = Math.max(1, ...points.map((p) => Math.max(p.input, p.output)))
+  const max = Math.max(1, ...points.flatMap((p) => [Math.max(0, p.input - p.cacheRead), p.cacheRead, p.output]))
   const W = 640
-  const H = 190
+  const H = 200
   const L = 46
   const R = 12
-  const T = 12
-  const B = 22
-  const px = (i: number): number =>
-    points.length <= 1 ? (L + W - R) / 2 : L + (i / (points.length - 1)) * (W - L - R)
+  const T = 14
+  const B = 26
+  const t0 = points[0]?.t ?? 0
+  const t1 = points[points.length - 1]?.t ?? t0
+  const span = t1 - t0
+  const px = (t: number): number => (span <= 0 ? (L + W - R) / 2 : L + ((t - t0) / span) * (W - L - R))
   const py = (v: number): number => T + (1 - v / max) * (H - T - B)
-  const poly = (key: 'input' | 'output'): string =>
-    points.map((p, i) => `${px(i).toFixed(1)},${py(p[key]).toFixed(1)}`).join(' ')
+  const series = [
+    { key: 'newInput' as const, color: 'stroke-teal', dot: 'fill-teal', legend: 'bg-teal', label: t('usage.newInput') },
+    { key: 'cacheRead' as const, color: 'stroke-sky-500', dot: 'fill-sky-500', legend: 'bg-sky-500', label: t('usage.cachedInput') },
+    { key: 'output' as const, color: 'stroke-gold', dot: 'fill-gold', legend: 'bg-gold', label: t('usage.output') },
+  ]
+  const value = (p: (typeof points)[number], key: 'newInput' | 'cacheRead' | 'output'): number =>
+    key === 'newInput' ? Math.max(0, p.input - p.cacheRead) : p[key]
+  const time = (ms: number): string =>
+    new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+  const ticks = span > 0 ? [t0, t0 + span / 2, t1] : [t0]
 
   return (
     <div
@@ -86,44 +97,45 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                       </text>
                     </g>
                   ))}
-                  <polyline
-                    points={poly('input')}
-                    fill="none"
-                    className="stroke-teal"
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  <polyline
-                    points={poly('output')}
-                    fill="none"
-                    className="stroke-gold"
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  {points.map((p, i) => (
-                    <g key={p.t}>
-                      <circle cx={px(i)} cy={py(p.input)} r={2.5} className="fill-teal" />
-                      <circle cx={px(i)} cy={py(p.output)} r={2.5} className="fill-gold" />
-                    </g>
+                  {series.map((s) => (
+                    <polyline
+                      key={s.key}
+                      points={points.map((p) => `${px(p.t).toFixed(1)},${py(value(p, s.key)).toFixed(1)}`).join(' ')}
+                      fill="none"
+                      className={s.color}
+                      strokeWidth={2}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
                   ))}
-                  <text x={L} y={H - 6} className="fill-muted-foreground text-[9px]">
-                    1
-                  </text>
-                  <text x={W - R} y={H - 6} textAnchor="end" className="fill-muted-foreground text-[9px]">
-                    {points.length}
-                  </text>
+                  {series.map((s) =>
+                    points.map((p, i) => (
+                      <circle key={`${s.key}-${i}`} cx={px(p.t)} cy={py(value(p, s.key))} r={2.2} className={s.dot}>
+                        <title>
+                          {`${time(p.t)} · ${t('usage.newInput')} ${fmtTokens(value(p, 'newInput'))} · ${t('usage.cachedInput')} ${fmtTokens(p.cacheRead)} · ${t('usage.output')} ${fmtTokens(p.output)}`}
+                        </title>
+                      </circle>
+                    )),
+                  )}
+                  {ticks.map((tick, i) => (
+                    <text
+                      key={tick}
+                      x={px(tick)}
+                      y={H - 8}
+                      textAnchor={i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle'}
+                      className="fill-muted-foreground text-[9px]"
+                    >
+                      {time(tick)}
+                    </text>
+                  ))}
                 </svg>
-                <div className="mt-2 flex items-center gap-4 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="h-1.5 w-3 rounded-full bg-teal" />
-                    {t('usage.input')}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-1.5 w-3 rounded-full bg-gold" />
-                    {t('usage.output')}
-                  </span>
+                <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-muted-foreground">
+                  {series.map((s) => (
+                    <span key={s.key} className="flex items-center gap-1">
+                      <span className={`h-1.5 w-3 rounded-full ${s.legend}`} />
+                      {s.label}
+                    </span>
+                  ))}
                   <span className="ml-auto">
                     {t('usage.turns')}: {stats.turns}
                   </span>
@@ -132,18 +144,22 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <Stat label={t('usage.total')} value={fmtTokens(stats.input + stats.output)} />
-                <Stat label={t('usage.input')} value={fmtTokens(stats.input)} />
+                <Stat label={t('usage.newInput')} value={fmtTokens(stats.newInput)} />
+                <Stat label={t('usage.cachedInput')} value={fmtTokens(stats.cacheRead)} />
                 <Stat label={t('usage.output')} value={fmtTokens(stats.output)} />
-                <Stat label={t('usage.cacheRead')} value={fmtTokens(stats.cacheRead)} />
                 <Stat
                   label={t('usage.cacheHit')}
                   value={stats.cacheHit == null ? '—' : `${Math.round(stats.cacheHit * 100)}%`}
                 />
-                <Stat label={t('usage.cost')} value={fmtCost(stats.cost)} />
+                <Stat label={t('usage.cost')} value={stats.priced ? fmtCost(stats.cost) : '—'} />
                 <Stat label={t('usage.turns')} value={String(stats.turns)} />
                 <Stat label={t('usage.avg')} value={fmtTokens(stats.avgPerTurn)} />
                 <Stat label={t('usage.peak')} value={fmtTokens(stats.peak)} />
               </div>
+
+              {!stats.priced && (
+                <p className="text-[11px] text-muted-foreground">{t('usage.unpricedHint')}</p>
+              )}
             </>
           )}
         </div>

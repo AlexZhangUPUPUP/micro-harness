@@ -264,9 +264,13 @@ export interface UsagePoint {
 export interface UsageStats {
   points: UsagePoint[]
   input: number
+  /** Input tokens that were not served from the provider cache (`input - cacheRead`). */
+  newInput: number
   output: number
   cacheRead: number
   cost: number
+  /** False when the provider prices are not configured, so cost is unknown. */
+  priced: boolean
   /** Share of input tokens served from the provider cache, 0..1. */
   cacheHit: number | null
   turns: number
@@ -281,6 +285,7 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
   let output = 0
   let cacheRead = 0
   let cost = 0
+  let priced = false
   let cumulative = 0
   for (const e of events) {
     if (e.event.type !== 'usage') continue
@@ -289,6 +294,7 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
     const o = Number(ev.output ?? 0)
     const c = Number(ev.cacheRead ?? 0)
     const money = Number(ev.cost ?? 0)
+    if (ev.cost !== undefined) priced = true
     input += i
     output += o
     cacheRead += c
@@ -300,9 +306,11 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
   return {
     points,
     input,
+    newInput: Math.max(0, input - cacheRead),
     output,
     cacheRead,
     cost,
+    priced,
     cacheHit: input > 0 ? cacheRead / input : null,
     turns: points.length,
     avgPerTurn: points.length ? Math.round((input + output) / points.length) : 0,

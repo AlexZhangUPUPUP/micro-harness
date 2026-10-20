@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CommandInfo, type FileAttachment, type ImageInput, type SessionMeta, type SkillInfo, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, deriveUsageStats, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
@@ -314,6 +314,7 @@ export default function App() {
 
   const shown = useMemo(() => (replayAt == null ? events : truncate(events, replayAt)), [events, replayAt])
   const usageSeries = useMemo(() => deriveUsageSeries(shown), [shown])
+  const usageStats = useMemo(() => deriveUsageStats(shown), [shown])
   const chat = useMemo(() => deriveChat(shown), [shown])
   // Chat + any not-yet-acknowledged local echoes.
   const items = useMemo(() => withOptimistic(chat, optimistic), [chat, optimistic])
@@ -523,6 +524,7 @@ export default function App() {
         current={current}
         tokens={tree.total.input + tree.total.output}
         cost={tree.total.cost}
+        priced={usageStats.priced}
         budget={budget}
         sandbox={sandbox}
         series={usageSeries}
