@@ -11,6 +11,7 @@ interface HeaderProps {
   tokens: number
   cost: number
   budget?: number | null
+  sandbox?: { mode: string; kind: string } | null
   series: number[]
   busy: boolean
   dark: boolean
@@ -25,7 +26,7 @@ interface HeaderProps {
 }
 
 /** Slim command bar: brand, current session, live usage, global actions. */
-export function Header({ current, tokens, cost, budget, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
+export function Header({ current, tokens, cost, budget, sandbox, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
   const { t, lang, setLang } = useT()
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 backdrop-blur">
@@ -82,6 +83,25 @@ export function Header({ current, tokens, cost, budget, series, busy, dark, webE
               </option>
             ))}
           </select>
+        )}
+        {sandbox && sandbox.kind !== 'none' && (
+          <span
+            title={t('sandbox.activeTitle', { kind: sandbox.kind })}
+            className="hidden items-center gap-1 rounded-full border border-teal/40 bg-teal/10 px-2 py-0.5 font-mono text-[10px] text-teal sm:flex"
+          >
+            <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <path d="M7 1.5 2.5 3v4c0 3 2 5 4.5 5.5C9.5 12 11.5 10 11.5 7V3L7 1.5Z" strokeLinejoin="round" />
+            </svg>
+            {sandbox.kind}
+          </span>
+        )}
+        {sandbox && sandbox.mode !== 'off' && sandbox.kind === 'none' && (
+          <span
+            title={t('sandbox.unavailableTitle')}
+            className="hidden items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-[10px] text-gold sm:flex"
+          >
+            {t('sandbox.unavailable')}
+          </span>
         )}
         <button
           onClick={onToggleWeb}

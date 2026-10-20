@@ -100,6 +100,7 @@ export function TracePanel({ events, replayAt, setReplayAt }: TracePanelProps) {
 
 function summarize(e: TaggedEvent): string {
   const ev = e.event as Record<string, unknown>
+  if (ev.type === 'tool.call' && typeof ev.sandbox === 'string') return `${ev.name} · ${ev.sandbox}`
   for (const key of ['text', 'message', 'name', 'content', 'output', 'stopReason', 'reason', 'model']) {
     if (typeof ev[key] === 'string') return String(ev[key]).replace(/\n/g, ' ').slice(0, 80)
   }

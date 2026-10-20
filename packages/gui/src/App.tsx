@@ -56,6 +56,7 @@ export default function App() {
   const [permission, setPermission] = useState('full')
   const [webEnabled, setWebEnabled] = useState(true)
   const [budget, setBudget] = useState<number | null>(null)
+  const [sandbox, setSandbox] = useState<{ mode: string; kind: string } | null>(null)
   const [commands, setCommands] = useState<CommandInfo[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [webProviders, setWebProviders] = useState<WebProvider[]>([])
@@ -157,6 +158,13 @@ export default function App() {
       .then(() => void refreshSessions())
       .catch((err: unknown) => setError(String((err as Error).message)))
   }
+
+  useEffect(() => {
+    void api
+      .sandbox()
+      .then(setSandbox)
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     void api
@@ -520,6 +528,7 @@ export default function App() {
         tokens={tree.total.input + tree.total.output}
         cost={tree.total.cost}
         budget={budget}
+        sandbox={sandbox}
         series={usageSeries}
         busy={busy}
         dark={dark}

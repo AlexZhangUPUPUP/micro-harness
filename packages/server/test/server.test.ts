@@ -1195,3 +1195,36 @@ test.skipIf(!canRunSeatbelt)('a sandboxed bash call cannot write outside the wor
     rmSync(outside, { recursive: true, force: true })
   }
 })
+
+test('/api/sandbox reports the requested mode and the active kind', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-sb-api-'))
+  const store = new SessionStore(dir)
+  const { provider } = echoProvider()
+  const srv = createServer({
+    store,
+    provider,
+    model: 'fake',
+    cwd: dir,
+    requireAuth: false,
+    sandbox: seatbeltSandbox(),
+    sandboxMode: 'require',
+  })
+  const plainDir = mkdtempSync(path.join(tmpdir(), 'mh-sb-api-plain-'))
+  const plainStore = new SessionStore(plainDir)
+  const plain = createServer({
+    store: plainStore,
+    provider,
+    model: 'fake',
+    cwd: plainDir,
+    requireAuth: false,
+  })
+  try {
+    expect(await (await fetch(`${srv.url}/api/sandbox`)).json()).toEqual({ mode: 'require', kind: 'seatbelt' })
+    expect(await (await fetch(`${plain.url}/api/sandbox`)).json()).toEqual({ mode: 'off', kind: 'none' })
+  } finally {
+    srv.stop(true)
+    plain.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(plainDir, { recursive: true, force: true })
+  }
+})

@@ -25,7 +25,7 @@ export type AgentEvent =
   | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number }
   | { type: 'context.trim'; dropped: number; tokens: number; strategy: string }
   | { type: 'agent.worktree'; path: string; branch: string; base: string }
-  | { type: 'permission.request'; id: string; tool: string; args: unknown }
+  | { type: 'permission.request'; id: string; tool: string; args: unknown; sandbox?: string }
   | { type: 'permission.result'; id: string; decision: 'allow' | 'deny' }
   | { type: 'turn.end'; stopReason: string; text: string }
   | { type: 'session.end'; reason: string }

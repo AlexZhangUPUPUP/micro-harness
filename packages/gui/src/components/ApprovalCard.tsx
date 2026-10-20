@@ -68,6 +68,11 @@ export function ApprovalCard({
             {resolved ? (decision ? '✓' : '✗') : busy ? '…' : '?'}
           </span>
           <span className="font-semibold">{approval.tool}</span>
+          {approval.sandbox && (
+            <span className="rounded-full border border-teal/40 bg-teal/10 px-1.5 py-px text-[10px] text-teal">
+              {t('approval.sandbox', { kind: approval.sandbox })}
+            </span>
+          )}
           <span className="ml-auto shrink-0 truncate text-muted-foreground">{approval.agentId}</span>
         </div>
 

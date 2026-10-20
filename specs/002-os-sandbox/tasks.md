@@ -11,6 +11,7 @@
 - [x] 平台可用时的写入/断网集成测试（macOS）。
 - [x] README 限制一节更新（中英）。
 - [x] 全量测试、类型检查（文档站构建随 M3）。
+- [x] M3：`GET /api/sandbox`、顶栏沙箱徽章、审批卡与 Trace 显示 `sandbox`、README 配置表补充 `MICRO_SANDBOX`。
 
 ## 验证记录
 

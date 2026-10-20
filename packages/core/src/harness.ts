@@ -324,7 +324,13 @@ export class Harness {
 
       if (this.#needsApproval(name)) {
         const id = `perm:${call.id}`
-        this.log.emit({ type: 'permission.request', id, tool: name, args })
+        this.log.emit({
+          type: 'permission.request',
+          id,
+          tool: name,
+          args,
+          ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
+        })
         let decision: 'allow' | 'deny' = 'deny'
         try {
           if (this.#confirm && (await this.#confirm({ id, tool: name, args, agentId: this.log.agentId }))) {
