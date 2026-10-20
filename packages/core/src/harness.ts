@@ -12,7 +12,7 @@
 
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { cacheReadTokens, userContent } from './model.ts'
+import { cacheReadTokens, reasoningTokens, userContent } from './model.ts'
 import {
   compactMessages,
   compactMessagesAsync,
@@ -248,6 +248,7 @@ export class Harness {
         const input = usage.prompt_tokens ?? 0
         const output = usage.completion_tokens ?? 0
         const cacheRead = cacheReadTokens(usage)
+        const reasoning = reasoningTokens(usage)
         const price = this.#pricing
         if (price) {
           this.#spent +=
@@ -261,6 +262,8 @@ export class Harness {
           output,
           // Only when the provider actually reported a hit, so events stay small.
           ...(cacheRead > 0 ? { cacheRead } : {}),
+          ...(reasoning > 0 ? { reasoning } : {}),
+          model: this.model,
           cost: price
             ? ((input - cacheRead) / 1e6) * price.input +
               (cacheRead / 1e6) * (price.inputCached ?? price.input) +

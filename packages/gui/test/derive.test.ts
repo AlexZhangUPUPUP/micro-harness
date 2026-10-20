@@ -357,3 +357,16 @@ test('deriveUsageStats handles an empty session', () => {
   expect(stats.priced).toBe(false)
   expect(stats.points).toEqual([])
 })
+
+
+test('deriveUsageStats groups by agent and model and counts reasoning', () => {
+  const events = [
+    ev('main', null, { type: 'usage', input: 100, output: 10, cacheRead: 40, cost: 0.001, model: 'deepseek-chat', reasoning: 5 }),
+    ev('main/agent-1', null, { type: 'usage', input: 50, output: 5, model: 'gpt-4o-mini' }),
+  ]
+  const stats = deriveUsageStats(events)
+  expect(stats.reasoning).toBe(5)
+  expect(stats.byAgent.map((b) => b.id)).toEqual(['main', 'main/agent-1'])
+  expect(stats.byModel.map((b) => b.id)).toEqual(['deepseek-chat', 'gpt-4o-mini'])
+  expect(stats.byAgent[0]).toMatchObject({ input: 100, output: 10, cacheRead: 40, cost: 0.001, turns: 1 })
+})

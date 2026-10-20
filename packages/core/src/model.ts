@@ -59,6 +59,7 @@ export interface Usage {
   prompt_cache_hit_tokens?: number // DeepSeek
   prompt_cache_miss_tokens?: number // DeepSeek
   prompt_tokens_details?: { cached_tokens?: number } // OpenAI
+  completion_tokens_details?: { reasoning_tokens?: number } // OpenAI-shaped reasoning
   cache_read_input_tokens?: number // Anthropic-shaped
 }
 
@@ -67,6 +68,11 @@ export interface Usage {
  * cache. Providers report this under different names, so normalize here rather than
  * making every caller know three dialects.
  */
+/** Reasoning tokens billed as output, when the provider reports them. */
+export function reasoningTokens(usage?: Usage): number {
+  return Number(usage?.completion_tokens_details?.reasoning_tokens ?? 0) || 0
+}
+
 export function cacheReadTokens(usage?: Usage): number {
   if (!usage) return 0
   return (

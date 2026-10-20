@@ -29,7 +29,7 @@ import {
   type McpServerConfig,
 } from '@micro-harness/core'
 import { createServer, PERMISSIONS, type PermissionPreset } from './server.ts'
-import { detectSandbox, type Sandbox, type SandboxMode } from '@micro-harness/core'
+import { detectSandbox, resolvePricing, type Sandbox, type SandboxMode } from '@micro-harness/core'
 import { SessionStore } from './store.ts'
 
 const port = Number(process.env.MICRO_PORT ?? 8787)
@@ -138,12 +138,11 @@ const server = createServer({
       : 'auto-review',
   roles,
   isolation: process.env.MICRO_ISOLATE === '1' ? 'worktree' : 'none',
-  pricing: (() => {
-    const input = Number(process.env.MICRO_PRICE_INPUT ?? 0)
-    const output = Number(process.env.MICRO_PRICE_OUTPUT ?? 0)
-    const inputCached = Number(process.env.MICRO_PRICE_INPUT_CACHED ?? 0)
-    return input > 0 || output > 0 ? { input, output, inputCached } : undefined
-  })(),
+  pricing: resolvePricing(model, {
+    input: Number(process.env.MICRO_PRICE_INPUT ?? 0),
+    output: Number(process.env.MICRO_PRICE_OUTPUT ?? 0),
+    inputCached: Number(process.env.MICRO_PRICE_INPUT_CACHED ?? 0),
+  }),
   maxToolOutput: Number(process.env.MICRO_MAX_TOOL_OUTPUT ?? 0) || undefined,
   maxCost: Number(process.env.MICRO_MAX_COST ?? 0) || undefined,
   sandbox: sandbox ?? undefined,

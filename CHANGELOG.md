@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Usage accounting: a dated built-in price table (env overrides win), per-agent
+  and per-model breakdowns, reasoning tokens, and per-point cache hit.
 - Usage panel (click the token pill): time-based x-axis, new-vs-cached input,
   per-point tooltips, and cost shown as unknown (`—`) when prices are not
   configured instead of a misleading `$0`.

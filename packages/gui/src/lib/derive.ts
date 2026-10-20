@@ -253,12 +253,24 @@ export function truncate(events: TaggedEvent[], upto: number): TaggedEvent[] {
 /** Tokens consumed per model call (input + output), in order — for a sparkline. */
 export interface UsagePoint {
   t: number
+  agentId: string
+  model?: string
+  input: number
+  output: number
+  cacheRead: number
+  reasoning: number
+  cost: number
+  total: number
+  cumulative: number
+}
+
+export interface UsageBucket {
+  id: string
   input: number
   output: number
   cacheRead: number
   cost: number
-  total: number
-  cumulative: number
+  turns: number
 }
 
 export interface UsageStats {
@@ -276,6 +288,9 @@ export interface UsageStats {
   turns: number
   avgPerTurn: number
   peak: number
+  reasoning: number
+  byAgent: UsageBucket[]
+  byModel: UsageBucket[]
 }
 
 /** Per-turn usage points plus the totals shown in the usage panel. */
@@ -287,21 +302,55 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
   let cost = 0
   let priced = false
   let cumulative = 0
+  let reasoning = 0
+  const byAgent = new Map<string, UsageBucket>()
+  const byModel = new Map<string, UsageBucket>()
+  const bump = (map: Map<string, UsageBucket>, id: string, i: number, o: number, c: number, money: number): void => {
+    const cur = map.get(id) ?? { id, input: 0, output: 0, cacheRead: 0, cost: 0, turns: 0 }
+    cur.input += i
+    cur.output += o
+    cur.cacheRead += c
+    cur.cost += money
+    cur.turns += 1
+    map.set(id, cur)
+  }
   for (const e of events) {
     if (e.event.type !== 'usage') continue
-    const ev = e.event as { input?: number; output?: number; cacheRead?: number; cost?: number }
+    const ev = e.event as {
+      input?: number
+      output?: number
+      cacheRead?: number
+      cost?: number
+      reasoning?: number
+      model?: string
+    }
     const i = Number(ev.input ?? 0)
     const o = Number(ev.output ?? 0)
     const c = Number(ev.cacheRead ?? 0)
     const money = Number(ev.cost ?? 0)
     if (ev.cost !== undefined) priced = true
+    const r = Number(ev.reasoning ?? 0)
     input += i
     output += o
     cacheRead += c
     cost += money
+    reasoning += r
+    bump(byAgent, e.agentId, i, o, c, money)
+    if (typeof ev.model === 'string' && ev.model) bump(byModel, ev.model, i, o, c, money)
     const total = i + o
     cumulative += total
-    points.push({ t: e.t, input: i, output: o, cacheRead: c, cost: money, total, cumulative })
+    points.push({
+      t: e.t,
+      agentId: e.agentId,
+      ...(typeof ev.model === 'string' ? { model: ev.model } : {}),
+      input: i,
+      output: o,
+      cacheRead: c,
+      reasoning: r,
+      cost: money,
+      total,
+      cumulative,
+    })
   }
   return {
     points,
@@ -315,6 +364,9 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
     turns: points.length,
     avgPerTurn: points.length ? Math.round((input + output) / points.length) : 0,
     peak: points.reduce((m, p) => Math.max(m, p.total), 0),
+    reasoning,
+    byAgent: [...byAgent.values()].sort((a, b) => b.input + b.output - (a.input + a.output)),
+    byModel: [...byModel.values()].sort((a, b) => b.input + b.output - (a.input + a.output)),
   }
 }
 

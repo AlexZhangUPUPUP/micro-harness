@@ -22,7 +22,7 @@ export type AgentEvent =
   | { type: 'thinking.delta'; text: string }
   | { type: 'tool.call'; id: string; name: string; args: unknown; sandbox?: string }
   | { type: 'tool.result'; id: string; name: string; ok: boolean; output: string; ms: number; elided?: number }
-  | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number }
+  | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number; model?: string; reasoning?: number }
   | { type: 'context.trim'; dropped: number; tokens: number; strategy: string }
   | { type: 'agent.worktree'; path: string; branch: string; base: string }
   | { type: 'permission.request'; id: string; tool: string; args: unknown; sandbox?: string }

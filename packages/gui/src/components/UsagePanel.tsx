@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import type { TaggedEvent } from '../lib/api.ts'
-import { deriveUsageStats } from '../lib/derive.ts'
+import { deriveUsageStats, type UsageBucket } from '../lib/derive.ts'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
 import { useT } from '../lib/i18n.tsx'
 
@@ -112,7 +112,9 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                     points.map((p, i) => (
                       <circle key={`${s.key}-${i}`} cx={px(p.t)} cy={py(value(p, s.key))} r={2.2} className={s.dot}>
                         <title>
-                          {`${time(p.t)} · ${t('usage.newInput')} ${fmtTokens(value(p, 'newInput'))} · ${t('usage.cachedInput')} ${fmtTokens(p.cacheRead)} · ${t('usage.output')} ${fmtTokens(p.output)}`}
+                          {`${time(p.t)} · ${t('usage.newInput')} ${fmtTokens(value(p, 'newInput'))} · ${t('usage.cachedInput')} ${fmtTokens(p.cacheRead)} · ${t('usage.output')} ${fmtTokens(p.output)}${
+                            p.input > 0 ? ` · ${t('usage.cacheHit')} ${Math.round((p.cacheRead / p.input) * 100)}%` : ''
+                          }${p.reasoning > 0 ? ` · ${t('usage.reasoning')} ${fmtTokens(p.reasoning)}` : ''}`}
                         </title>
                       </circle>
                     )),
@@ -155,7 +157,19 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                 <Stat label={t('usage.turns')} value={String(stats.turns)} />
                 <Stat label={t('usage.avg')} value={fmtTokens(stats.avgPerTurn)} />
                 <Stat label={t('usage.peak')} value={fmtTokens(stats.peak)} />
+                {stats.reasoning > 0 && <Stat label={t('usage.reasoning')} value={fmtTokens(stats.reasoning)} />}
               </div>
+
+              {(stats.byAgent.length > 1 || stats.byModel.length > 1) && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {stats.byAgent.length > 1 && (
+                    <BucketTable title={t('usage.byAgent')} rows={stats.byAgent} priced={stats.priced} />
+                  )}
+                  {stats.byModel.length > 1 && (
+                    <BucketTable title={t('usage.byModel')} rows={stats.byModel} priced={stats.priced} />
+                  )}
+                </div>
+              )}
 
               {!stats.priced && (
                 <p className="text-[11px] text-muted-foreground">{t('usage.unpricedHint')}</p>
@@ -173,6 +187,30 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-background/40 px-3 py-2">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-0.5 font-mono text-sm">{value}</div>
+    </div>
+  )
+}
+
+
+function BucketTable({ title, rows, priced }: { title: string; rows: UsageBucket[]; priced: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-background/40 p-3">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{title}</div>
+      <table className="mt-1 w-full text-[11px]">
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-t border-border/50">
+              <td className="max-w-[9rem] truncate py-1 pr-2 font-mono" title={r.id}>
+                {r.id}
+              </td>
+              <td className="py-1 text-right font-mono">{fmtTokens(r.input + r.output)}</td>
+              <td className="py-1 pl-3 text-right font-mono text-muted-foreground">
+                {priced ? fmtCost(r.cost) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
