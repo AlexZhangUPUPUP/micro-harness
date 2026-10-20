@@ -377,7 +377,6 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                         : ''}
                       {selectedCall.hasCost ? ` · ${fmtCost(selectedCall.cost)}` : ''}
                     </div>
-                    <div className="text-[10px] text-muted-foreground/80">{t('usage.noMessageLink')}</div>
                   </div>
                 ) : (
                   <div className="text-muted-foreground">{t('usage.pickCall')}</div>

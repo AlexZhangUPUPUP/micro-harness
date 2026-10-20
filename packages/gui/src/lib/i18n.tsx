@@ -140,7 +140,6 @@ const en: Dict = {
   'usage.byTime': '按时间',
   'usage.chart': '每次调用的 Token 用量',
   'usage.pickCall': '点击柱子查看单次调用。',
-  'usage.noMessageLink': 'usage 事件暂未记录消息 id，因此无法定位到对应消息。',
   'usage.table': '调用明细',
   'usage.time': '时间',
   'usage.model': '模型',
