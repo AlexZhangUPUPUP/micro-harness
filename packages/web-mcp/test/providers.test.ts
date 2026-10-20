@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { parseBing, parseBaidu, parseDeepseek, resolveProvider, providerIds } from '../src/providers.ts'
+import { parseBing, parseBaidu, parseDeepseek, pickProvider, resolveProvider, providerIds } from '../src/providers.ts'
 import { loadWebConfig } from '../src/config.ts'
 
 const BING = `<ol id="b_results"><li class="b_algo" data-id iid=SERP.1><h2><a href="https://www.deepseek.com/harness/" h="ID=SERP,1">DeepSeek Harness</a></h2><p class="b_lineclamp">The official harness.</p></li><li class="b_algo" data-id iid=SERP.2><h2><a href="https://github.com/deepseek-ai/deepseek-harness">GitHub - deepseek-ai/deepseek-harness</a></h2><p>Source &amp; docs.</p></li></ol>`
@@ -51,4 +51,12 @@ test('resolveProvider rejects unknown and unconfigured providers', () => {
   expect(() => resolveProvider('nope', cfg)).toThrow(/unknown search provider/)
   expect(() => resolveProvider('bocha', cfg)).toThrow(/not configured/)
   expect(() => resolveProvider('deepseek', cfg)).toThrow(/not configured/)
+})
+
+test('pickProvider falls back to bing when the preferred engine is unconfigured', () => {
+  const cfg = loadWebConfig({} as NodeJS.ProcessEnv)
+  expect(pickProvider('bing', cfg)).toEqual({ id: 'bing', fallback: false })
+  expect(pickProvider('bocha', cfg)).toEqual({ id: 'bing', fallback: true })
+  const withKey = loadWebConfig({ BOCHA_API_KEY: 'k' } as NodeJS.ProcessEnv)
+  expect(pickProvider('bocha', withKey)).toEqual({ id: 'bocha', fallback: false })
 })

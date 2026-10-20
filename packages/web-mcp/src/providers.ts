@@ -243,6 +243,21 @@ export function providerIds(): string[] {
   return Object.keys(PROVIDERS)
 }
 
+/**
+ * Pick the provider to use. A configured-but-unavailable preference (missing key
+ * or URL) falls back to bing, which needs no configuration — the default should
+ * always work, while expensive/alternate engines stay opt-in.
+ */
+export function pickProvider(preferred: string, cfg: WebConfig): { id: string; fallback: boolean } {
+  try {
+    resolveProvider(preferred, cfg)
+    return { id: preferred, fallback: false }
+  } catch {
+    resolveProvider('bing', cfg)
+    return { id: 'bing', fallback: true }
+  }
+}
+
 export function resolveProvider(id: string, cfg: WebConfig): SearchProvider {
   const provider = PROVIDERS[id]
   if (!provider) {

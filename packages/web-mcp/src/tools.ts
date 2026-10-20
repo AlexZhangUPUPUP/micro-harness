@@ -8,7 +8,7 @@ import { capabilities, runtimeEnabled, runtimeSettings, type WebConfig } from '.
 import { cacheGet, cacheKey, cacheSet } from './cache.ts'
 import { fetchText, WebError, type FetchedText } from './net.ts'
 import { htmlToText, titleOf } from './html.ts'
-import { resolveProvider } from './providers.ts'
+import { pickProvider, resolveProvider } from './providers.ts'
 
 export interface ToolDef {
   name: string
@@ -115,7 +115,10 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
         const query = String(args.query ?? '').trim()
         if (!query) return { text: 'web_search: query is required', isError: true }
         const maxResults = Number(args.maxResults) > 0 ? Math.min(Number(args.maxResults), 20) : 5
-        const id = String(args.provider ?? settings.provider ?? cfg.provider).toLowerCase()
+        const preferred = String(args.provider ?? settings.provider ?? cfg.provider).toLowerCase()
+        // Explicit per-call overrides must fail loudly; a stale config falls back to bing.
+        const picked = args.provider ? { id: preferred, fallback: false } : pickProvider(preferred, cfg)
+        const id = picked.id
         try {
           const provider = resolveProvider(id, cfg)
           const results = await provider.search(query, maxResults, cfg)
@@ -123,7 +126,8 @@ export function buildTools(cfg: WebConfig): ToolDef[] {
           const lines = results.map(
             (r, i) => `${i + 1}. ${r.title || '(no title)'}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ''}`,
           )
-          return { text: `${results.length} result(s) for "${query}" via ${id}\n\n${lines.join('\n\n')}` }
+          const note = picked.fallback ? ` (configured provider "${preferred}" unavailable; used bing)` : ''
+          return { text: `${results.length} result(s) for "${query}" via ${id}${note}\n\n${lines.join('\n\n')}` }
         } catch (err) {
           return errorResult(err)
         }

@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The format follows
 - Usage panel (click the token pill): time-based x-axis, new-vs-cached input,
   per-point tooltips, and cost shown as unknown (`—`) when prices are not
   configured instead of a misleading `$0`.
+- Web search defaults to bing and falls back to it when the preferred engine is
+  unconfigured; bocha / deepseek / baidu stay opt-in.
 - `edit_file`: exact-string replacement that refuses a missing or ambiguous match,
   so a targeted change no longer rewrites the whole file. A batch (`edits: [...]`)
   is applied in order and atomically — if any edit fails, nothing is written.
