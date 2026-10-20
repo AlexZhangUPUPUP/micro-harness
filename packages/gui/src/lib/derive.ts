@@ -24,6 +24,35 @@ export type ChatItem =
   | { kind: 'notice'; id: string; t: number; level: 'info' | 'error'; text: string }
 
 /** Turn a session's event stream into a renderable transcript. */
+/**
+ * Merge local echoes (sent but not yet acknowledged) with the transcript.
+ *
+ * An echo disappears as soon as a recorded user message with the same text
+ * exists — deriving this instead of relying on the SSE callback means a replay,
+ * a missed frame or a re-subscribe can never leave a duplicate bubble. Matching
+ * by count keeps a legitimately repeated prompt (e.g. "continue" twice) from
+ * swallowing the second echo.
+ */
+export function withOptimistic(chat: ChatItem[], echoes: Array<{ id: string; text: string; t: number }>): ChatItem[] {
+  const counts = new Map<string, number>()
+  for (const item of chat) {
+    if (item.kind !== 'user') continue
+    const key = item.text.trim()
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const pending: ChatItem[] = []
+  for (const echo of echoes) {
+    const key = echo.text.trim()
+    const n = counts.get(key) ?? 0
+    if (n > 0) {
+      counts.set(key, n - 1)
+      continue
+    }
+    pending.push({ kind: 'user', id: echo.id, t: echo.t, text: echo.text, at: -1, pending: true })
+  }
+  return [...chat, ...pending]
+}
+
 export function deriveChat(events: TaggedEvent[]): ChatItem[] {
   const items: ChatItem[] = []
   const current = new Map<string, Extract<ChatItem, { kind: 'assistant' }>>()

@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate, withOptimistic } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -313,3 +313,19 @@ test('sessionForest does not hang on self-parent or parent cycles', () => {
 
 import { ancestry, descendantCount, sessionForest } from '../src/lib/derive.ts'
 import type { SessionMeta } from '../src/lib/api.ts'
+
+test('withOptimistic drops an echo once the recorded message exists', () => {
+  const chat = [{ kind: 'user' as const, id: 'u1', t: 1, text: 'hello', at: 0 }]
+  expect(withOptimistic(chat, [{ id: 'o1', text: 'hello', t: 2 }])).toHaveLength(1)
+  expect(withOptimistic(chat, [{ id: 'o1', text: 'other', t: 2 }])).toHaveLength(2)
+})
+
+test('withOptimistic keeps a second echo for a repeated prompt', () => {
+  const chat = [{ kind: 'user' as const, id: 'u1', t: 1, text: 'continue', at: 0 }]
+  const items = withOptimistic(chat, [
+    { id: 'o1', text: 'continue', t: 2 },
+    { id: 'o2', text: 'continue', t: 3 },
+  ])
+  expect(items).toHaveLength(2)
+  expect(items[1]).toMatchObject({ kind: 'user', pending: true })
+})

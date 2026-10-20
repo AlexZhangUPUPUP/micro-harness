@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CommandInfo, type FileAttachment, type ImageInput, type SessionMeta, type SkillInfo, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
@@ -314,13 +314,7 @@ export default function App() {
   const usageSeries = useMemo(() => deriveUsageSeries(shown), [shown])
   const chat = useMemo(() => deriveChat(shown), [shown])
   // Chat + any not-yet-acknowledged local echoes.
-  const items = useMemo(
-    () => [
-      ...chat,
-      ...optimistic.map((o) => ({ kind: 'user' as const, id: o.id, t: o.t, text: o.text, at: -1, pending: true })),
-    ],
-    [chat, optimistic],
-  )
+  const items = useMemo(() => withOptimistic(chat, optimistic), [chat, optimistic])
   const tree = useMemo(() => deriveAgents(shown), [shown])
   const requests = useMemo(() => deriveInspector(shown), [shown])
   const approvals = useMemo(() => pendingApprovals(events), [events])
