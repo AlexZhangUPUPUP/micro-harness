@@ -120,6 +120,7 @@ trap cleanup EXIT INT TERM HUP
 MICRO_PORT="$SERVER_PORT" MICRO_CWD="$CWD" MICRO_DATA_DIR="$DATA_DIR" MICRO_MODEL="$MODEL" MICRO_MODELS="$MODELS" MICRO_ISOLATE="$ISOLATE" MICRO_PERMISSION="$PERMISSION" MICRO_API_KEY="$KEY" MICRO_SERVE_GUI="$([ "$SINGLE" = 1 ] && echo 1 || echo 0)" MICRO_EXIT_WITH_PARENT=1 \
 MICRO_PRICE_INPUT="${MICRO_PRICE_INPUT:-}" MICRO_PRICE_OUTPUT="${MICRO_PRICE_OUTPUT:-}" \
 MICRO_PRICE_INPUT_CACHED="${MICRO_PRICE_INPUT_CACHED:-}" MICRO_MAX_TOOL_OUTPUT="${MICRO_MAX_TOOL_OUTPUT:-}" \
+MICRO_MAX_COST="${MICRO_MAX_COST:-}" MICRO_SANDBOX="${MICRO_SANDBOX:-}" \
   bun packages/server/src/main.ts >"$LOG_DIR/micro-harness-server.log" 2>&1 &
 SRV=$!
 
@@ -159,6 +160,7 @@ cat <<EOF
     key     ${KEY:0:11}… (from $KEY_SRC)
     isolation $([ "$ISOLATE" = 1 ] && echo 'worktree (each agent gets its own git worktree)' || echo 'off (set MICRO_ISOLATE=1 to enable)')
     permission $PERMISSION
+    sandbox    ${MICRO_SANDBOX:-off}
     data    $DATA_DIR
     logs    $LOG_DIR/micro-harness-{server,gui}.log
 
