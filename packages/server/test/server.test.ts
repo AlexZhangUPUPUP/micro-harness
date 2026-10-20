@@ -13,6 +13,7 @@ import {
   worktreeDiff,
   type ChatMessage,
   type Provider,
+  seatbeltSandbox,
 } from '@micro-harness/core'
 import { createApprovalBroker } from '../src/approvals.ts'
 import type { AgentEvent } from '@micro-harness/core'
@@ -1129,5 +1130,68 @@ test('/api/commands lists templates and skills; /name expands on send', async ()
   } finally {
     srv.stop(true)
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+const canRunSeatbelt = process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')
+
+test.skipIf(!canRunSeatbelt)('a sandboxed bash call cannot write outside the workspace', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-sb-srv-'))
+  const outside = mkdtempSync(path.join(tmpdir(), 'mh-sb-srv-out-'))
+  const store = new SessionStore(dir)
+  const target = path.join(outside, 'nope.txt')
+  let turn = 0
+  const provider: Provider = {
+    name: 'scripted',
+    async chat() {
+      turn++
+      if (turn === 1) {
+        return {
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'b1',
+                type: 'function',
+                function: { name: 'bash', arguments: JSON.stringify({ command: `echo x > "${target}"` }) },
+              },
+            ],
+          },
+        }
+      }
+      return { message: { role: 'assistant', content: 'done' } }
+    },
+  }
+  const srv = createServer({
+    store,
+    provider,
+    model: 'fake',
+    cwd: dir,
+    requireAuth: false,
+    permission: 'full',
+    sandbox: seatbeltSandbox(),
+  })
+  try {
+    const created = (await (
+      await fetch(`${srv.url}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'go' }),
+      })
+    ).json()) as { session: { id: string } }
+    await srv.idle(created.session.id)
+
+    const events = store.events(created.session.id).map((e) => e.event)
+    const call = events.find((e) => e.type === 'tool.call') as { sandbox?: string }
+    const result = events.find((e) => e.type === 'tool.result') as { ok: boolean; output: string }
+    expect(call.sandbox).toBe('seatbelt')
+    expect(result.ok).toBe(false)
+    expect(result.output).toMatch(/not permitted|Operation not permitted/i)
+    expect(existsSync(target)).toBe(false)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(outside, { recursive: true, force: true })
   }
 })
