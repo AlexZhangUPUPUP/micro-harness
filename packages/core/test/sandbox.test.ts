@@ -20,6 +20,7 @@ test('the seatbelt profile denies by default and confines writes', () => {
 
 test('detect: off is a no-op, require fails closed, auto warns', () => {
   expect(detectSandbox('off').sandbox).toBeNull()
+  expect(detectSandbox('' as never).sandbox).toBeNull() // empty env var
   expect(() => detectSandbox('require', { has: () => false })).toThrow(/sandbox required/)
   const auto = detectSandbox('auto', { has: () => false })
   expect(auto.sandbox).toBeNull()

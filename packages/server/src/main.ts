@@ -108,7 +108,8 @@ if (mcpServers.length) {
 
 const store = new SessionStore(dataDir)
 const provider = openaiProvider({ baseUrl, apiKey })
-const sandboxMode = (process.env.MICRO_SANDBOX ?? 'off') as SandboxMode
+const rawSandbox = (process.env.MICRO_SANDBOX ?? '').trim()
+const sandboxMode: SandboxMode = rawSandbox === 'auto' || rawSandbox === 'require' ? rawSandbox : 'off'
 let sandbox: Sandbox | null = null
 try {
   const detected = detectSandbox(sandboxMode)

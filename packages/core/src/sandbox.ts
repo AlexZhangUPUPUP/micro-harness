@@ -149,7 +149,8 @@ export function detectSandbox(
     platform?: NodeJS.Platform
   } = {},
 ): SandboxResult {
-  if (mode === 'off') return { sandbox: null }
+  // Anything that is not a real mode (empty env vars, typos) means "off".
+  if (mode !== 'auto' && mode !== 'require') return { sandbox: null }
   const has = opts.has ?? whichIsDefault
   const platform = opts.platform ?? process.platform
   const probe = opts.probe ?? bwrapUsable
