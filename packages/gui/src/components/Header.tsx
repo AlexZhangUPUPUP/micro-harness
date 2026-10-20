@@ -23,10 +23,11 @@ interface HeaderProps {
   onToggleWeb: () => void
   onToggleSessions: () => void
   onTogglePanel: () => void
+  onShowUsage: () => void
 }
 
 /** Slim command bar: brand, current session, live usage, global actions. */
-export function Header({ current, tokens, cost, budget, sandbox, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel }: HeaderProps) {
+export function Header({ current, tokens, cost, budget, sandbox, series, busy, dark, webEnabled, webProvider, webProviders, onChangeProvider, onToggleTheme, onToggleWeb, onToggleSessions, onTogglePanel, onShowUsage }: HeaderProps) {
   const { t, lang, setLang } = useT()
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-card/60 px-3 backdrop-blur">
@@ -52,9 +53,12 @@ export function Header({ current, tokens, cost, budget, sandbox, series, busy, d
       </span>
 
       <div className="ml-auto flex items-center gap-1.5">
-        <span
-          className="hidden items-center gap-2 rounded-full border border-border bg-background/60 px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground md:flex"
-          aria-label={busy ? t('composer.running') : t('header.idle')}
+        <button
+          type="button"
+          onClick={onShowUsage}
+          title={t('usage.open')}
+          className="hidden items-center gap-2 rounded-full border border-border bg-background/60 px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:bg-muted hover:text-foreground md:flex"
+          aria-label={t('usage.open')}
         >
           <Sparkline values={series} className="text-teal/70" />
           <RollingNumber value={tokens} format={fmtTokens} /> tok
@@ -68,7 +72,7 @@ export function Header({ current, tokens, cost, budget, sandbox, series, busy, d
               </span>
             </>
           )}
-        </span>
+        </button>
         {webProviders.length > 1 && (
           <select
             value={webProvider}

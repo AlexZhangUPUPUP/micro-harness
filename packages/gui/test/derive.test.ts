@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate, withOptimistic } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, deriveUsageStats, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate, withOptimistic } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -328,4 +328,29 @@ test('withOptimistic keeps a second echo for a repeated prompt', () => {
   ])
   expect(items).toHaveLength(2)
   expect(items[1]).toMatchObject({ kind: 'user', pending: true })
+})
+
+
+test('deriveUsageStats totals the turns and keeps per-turn points', () => {
+  const events = [
+    ev('main', null, { type: 'usage', input: 100, output: 20, cacheRead: 40, cost: 0.001 }),
+    ev('main', null, { type: 'usage', input: 200, output: 30, cacheRead: 100, cost: 0.002 }),
+  ]
+  const stats = deriveUsageStats(events)
+  expect(stats.turns).toBe(2)
+  expect(stats.input).toBe(300)
+  expect(stats.output).toBe(50)
+  expect(stats.cacheRead).toBe(140)
+  expect(stats.cacheHit).toBeCloseTo(140 / 300)
+  expect(stats.cost).toBeCloseTo(0.003)
+  expect(stats.points.map((p) => p.cumulative)).toEqual([120, 350])
+  expect(stats.peak).toBe(230)
+  expect(stats.avgPerTurn).toBe(175)
+})
+
+test('deriveUsageStats handles an empty session', () => {
+  const stats = deriveUsageStats([])
+  expect(stats.turns).toBe(0)
+  expect(stats.cacheHit).toBeNull()
+  expect(stats.points).toEqual([])
 })

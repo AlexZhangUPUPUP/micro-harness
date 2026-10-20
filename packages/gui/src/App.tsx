@@ -13,6 +13,7 @@ import { ChangesPanel } from './components/ChangesPanel.tsx'
 import { InspectorPanel } from './components/InspectorPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
 import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
+import { UsagePanel } from './components/UsagePanel.tsx'
 
 type View = 'chat' | 'trace' | 'changes' | 'inspector'
 const VIEWS: View[] = ['chat', 'trace', 'changes', 'inspector']
@@ -52,6 +53,7 @@ export default function App() {
   const [runTick, setRunTick] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [usageOpen, setUsageOpen] = useState(false)
   const [models, setModels] = useState<string[]>([])
   const [permission, setPermission] = useState('full')
   const [webEnabled, setWebEnabled] = useState(true)
@@ -534,6 +536,7 @@ export default function App() {
         onToggleWeb={toggleWeb}
         onToggleSessions={() => setShowSidebar((v) => !v)}
         onTogglePanel={() => setShowPanel((v) => !v)}
+        onShowUsage={() => setUsageOpen(true)}
       />
 
       {error && (
@@ -672,6 +675,7 @@ export default function App() {
       </div>
 
       <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <UsagePanel open={usageOpen} events={events} onClose={() => setUsageOpen(false)} />
 
       <CommandPalette
         open={paletteOpen}

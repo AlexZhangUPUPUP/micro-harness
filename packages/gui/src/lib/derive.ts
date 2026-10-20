@@ -251,6 +251,65 @@ export function truncate(events: TaggedEvent[], upto: number): TaggedEvent[] {
 }
 
 /** Tokens consumed per model call (input + output), in order — for a sparkline. */
+export interface UsagePoint {
+  t: number
+  input: number
+  output: number
+  cacheRead: number
+  cost: number
+  total: number
+  cumulative: number
+}
+
+export interface UsageStats {
+  points: UsagePoint[]
+  input: number
+  output: number
+  cacheRead: number
+  cost: number
+  /** Share of input tokens served from the provider cache, 0..1. */
+  cacheHit: number | null
+  turns: number
+  avgPerTurn: number
+  peak: number
+}
+
+/** Per-turn usage points plus the totals shown in the usage panel. */
+export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
+  const points: UsagePoint[] = []
+  let input = 0
+  let output = 0
+  let cacheRead = 0
+  let cost = 0
+  let cumulative = 0
+  for (const e of events) {
+    if (e.event.type !== 'usage') continue
+    const ev = e.event as { input?: number; output?: number; cacheRead?: number; cost?: number }
+    const i = Number(ev.input ?? 0)
+    const o = Number(ev.output ?? 0)
+    const c = Number(ev.cacheRead ?? 0)
+    const money = Number(ev.cost ?? 0)
+    input += i
+    output += o
+    cacheRead += c
+    cost += money
+    const total = i + o
+    cumulative += total
+    points.push({ t: e.t, input: i, output: o, cacheRead: c, cost: money, total, cumulative })
+  }
+  return {
+    points,
+    input,
+    output,
+    cacheRead,
+    cost,
+    cacheHit: input > 0 ? cacheRead / input : null,
+    turns: points.length,
+    avgPerTurn: points.length ? Math.round((input + output) / points.length) : 0,
+    peak: points.reduce((m, p) => Math.max(m, p.total), 0),
+  }
+}
+
 export function deriveUsageSeries(events: TaggedEvent[]): number[] {
   const out: number[] = []
   for (const e of events) {
