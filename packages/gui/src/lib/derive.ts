@@ -260,61 +260,92 @@ export interface UsagePoint {
   cacheRead: number
   reasoning: number
   cost: number
+  /** False when the provider/pricing did not report a cost for this call. */
+  hasCost: boolean
   total: number
   cumulative: number
 }
 
-export interface UsageBucket {
-  id: string
-  input: number
-  output: number
-  cacheRead: number
-  cost: number
-  turns: number
+export interface UsageCall extends UsagePoint {
+  /** 1-based model-call index within the session. */
+  index: number
+  cacheHit: number | null
 }
 
-export interface UsageStats {
-  points: UsagePoint[]
+export type UsagePricing = 'full' | 'partial' | 'none'
+
+export interface UsageSummary {
   input: number
-  /** Input tokens that were not served from the provider cache (`input - cacheRead`). */
+  /** Input tokens not served from the provider cache (`input - cacheRead`). */
   newInput: number
   output: number
   cacheRead: number
-  cost: number
-  /** False when the provider prices are not configured, so cost is unknown. */
-  priced: boolean
-  /** Share of input tokens served from the provider cache, 0..1. */
-  cacheHit: number | null
-  turns: number
-  avgPerTurn: number
-  peak: number
   reasoning: number
-  byAgent: UsageBucket[]
-  byModel: UsageBucket[]
+  total: number
+  cost: number
+  pricing: UsagePricing
+  /** Number of model calls, not user turns. */
+  count: number
+  avgPerCall: number
+  peak: number
+  cacheHit: number | null
 }
 
-/** Per-turn usage points plus the totals shown in the usage panel. */
-export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
-  const points: UsagePoint[] = []
+export interface UsageStats extends UsageSummary {
+  calls: UsageCall[]
+  /** Estimated context size of the most recent request, when recorded. */
+  contextTokens: number | null
+  agents: string[]
+  models: string[]
+}
+
+/** Totals for a (possibly filtered) set of calls. */
+export function summarizeCalls(calls: UsageCall[]): UsageSummary {
   let input = 0
   let output = 0
   let cacheRead = 0
-  let cost = 0
-  let priced = false
-  let cumulative = 0
   let reasoning = 0
-  const byAgent = new Map<string, UsageBucket>()
-  const byModel = new Map<string, UsageBucket>()
-  const bump = (map: Map<string, UsageBucket>, id: string, i: number, o: number, c: number, money: number): void => {
-    const cur = map.get(id) ?? { id, input: 0, output: 0, cacheRead: 0, cost: 0, turns: 0 }
-    cur.input += i
-    cur.output += o
-    cur.cacheRead += c
-    cur.cost += money
-    cur.turns += 1
-    map.set(id, cur)
+  let cost = 0
+  let priced = 0
+  for (const c of calls) {
+    input += c.input
+    output += c.output
+    cacheRead += c.cacheRead
+    reasoning += c.reasoning
+    cost += c.cost
+    if (c.hasCost) priced += 1
   }
+  const count = calls.length
+  const total = input + output
+  return {
+    input,
+    newInput: Math.max(0, input - cacheRead),
+    output,
+    cacheRead,
+    reasoning,
+    total,
+    cost,
+    pricing: priced === 0 ? 'none' : priced === count ? 'full' : 'partial',
+    count,
+    avgPerCall: count ? Math.round(total / count) : 0,
+    peak: calls.reduce((m, c) => Math.max(m, c.total), 0),
+    cacheHit: input > 0 ? cacheRead / input : null,
+  }
+}
+
+/** Per-call usage points plus the totals shown in the usage panel. */
+export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
+  const points: UsageCall[] = []
+  let cumulative = 0
+  let contextTokens: number | null = null
+  const agents = new Set<string>()
+  const models = new Set<string>()
   for (const e of events) {
+    if (e.event.type === 'model.request') {
+      const tokens = Number((e.event as { tokens?: number }).tokens ?? 0)
+      if (tokens > 0) contextTokens = tokens
+      continue
+    }
     if (e.event.type !== 'usage') continue
     const ev = e.event as {
       input?: number
@@ -327,46 +358,36 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
     const i = Number(ev.input ?? 0)
     const o = Number(ev.output ?? 0)
     const c = Number(ev.cacheRead ?? 0)
-    const money = Number(ev.cost ?? 0)
-    if (ev.cost !== undefined) priced = true
     const r = Number(ev.reasoning ?? 0)
-    input += i
-    output += o
-    cacheRead += c
-    cost += money
-    reasoning += r
-    bump(byAgent, e.agentId, i, o, c, money)
-    if (typeof ev.model === 'string' && ev.model) bump(byModel, ev.model, i, o, c, money)
+    const money = Number(ev.cost ?? 0)
     const total = i + o
     cumulative += total
+    agents.add(e.agentId)
+    const model = typeof ev.model === 'string' && ev.model ? ev.model : undefined
+    if (model) models.add(model)
     points.push({
       t: e.t,
       agentId: e.agentId,
-      ...(typeof ev.model === 'string' ? { model: ev.model } : {}),
+      ...(model ? { model } : {}),
       input: i,
       output: o,
       cacheRead: c,
       reasoning: r,
       cost: money,
+      hasCost: ev.cost !== undefined,
       total,
       cumulative,
+      index: points.length + 1,
+      cacheHit: i > 0 ? c / i : null,
     })
   }
+  const summary = summarizeCalls(points)
   return {
-    points,
-    input,
-    newInput: Math.max(0, input - cacheRead),
-    output,
-    cacheRead,
-    cost,
-    priced,
-    cacheHit: input > 0 ? cacheRead / input : null,
-    turns: points.length,
-    avgPerTurn: points.length ? Math.round((input + output) / points.length) : 0,
-    peak: points.reduce((m, p) => Math.max(m, p.total), 0),
-    reasoning,
-    byAgent: [...byAgent.values()].sort((a, b) => b.input + b.output - (a.input + a.output)),
-    byModel: [...byModel.values()].sort((a, b) => b.input + b.output - (a.input + a.output)),
+    ...summary,
+    calls: points,
+    contextTokens,
+    agents: [...agents],
+    models: [...models],
   }
 }
 

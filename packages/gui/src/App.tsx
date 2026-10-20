@@ -524,7 +524,7 @@ export default function App() {
         current={current}
         tokens={tree.total.input + tree.total.output}
         cost={tree.total.cost}
-        priced={usageStats.priced}
+        priced={usageStats.pricing !== 'none'}
         budget={budget}
         sandbox={sandbox}
         series={usageSeries}

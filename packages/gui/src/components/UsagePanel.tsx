@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { TaggedEvent } from '../lib/api.ts'
-import { deriveUsageStats, type UsageBucket } from '../lib/derive.ts'
+import { deriveUsageStats, summarizeCalls, type UsageCall } from '../lib/derive.ts'
 import { fmtCost, fmtTokens } from '../lib/format.ts'
 import { useT } from '../lib/i18n.tsx'
 
@@ -10,10 +10,47 @@ interface UsagePanelProps {
   onClose: () => void
 }
 
-/** Click the header's token pill to see per-turn usage and the totals. */
+type SeriesKey = 'newInput' | 'cacheRead' | 'output'
+
+const SERIES: Array<{ key: SeriesKey; bar: string; legend: string; label: string }> = [
+  { key: 'newInput', bar: 'fill-teal', legend: 'bg-teal', label: 'usage.newInput' },
+  { key: 'cacheRead', bar: 'fill-sky-500', legend: 'bg-sky-500', label: 'usage.cachedInput' },
+  { key: 'output', bar: 'fill-gold', legend: 'bg-gold', label: 'usage.output' },
+]
+
+const clock = (ms: number): string =>
+  new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+/** Time label for an axis tick; include the date when the session crosses days. */
+const axisTime = (ms: number, reference: number): string => {
+  const a = new Date(ms)
+  const b = new Date(reference)
+  const sameDay = a.toDateString() === b.toDateString()
+  return sameDay ? clock(ms) : a.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })
+}
+
+const stamp = (ms: number): string => {
+  const d = new Date(ms)
+  return `${d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })} ${d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })}`
+}
+
+/**
+ * Token usage detail: what was spent, where it went, and which call was large.
+ * Data comes from `usage` events; a call is one model request, not a user turn.
+ */
 export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
   const { t } = useT()
   const stats = useMemo(() => deriveUsageStats(events), [events])
+  const [agent, setAgent] = useState('all')
+  const [model, setModel] = useState('all')
+  const [view, setView] = useState<'call' | 'time'>('call')
+  const [hidden, setHidden] = useState<Set<SeriesKey>>(new Set())
+  const [selected, setSelected] = useState<number | null>(null)
+  const [sort, setSort] = useState<'index' | 'total' | 'cost'>('index')
 
   useEffect(() => {
     if (!open) return
@@ -24,42 +61,70 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  const filtered = useMemo(
+    () =>
+      stats.calls.filter(
+        (c) => (agent === 'all' || c.agentId === agent) && (model === 'all' || c.model === model),
+      ),
+    [stats.calls, agent, model],
+  )
+  const summary = useMemo(() => summarizeCalls(filtered), [filtered])
+  const filteredActive = agent !== 'all' || model !== 'all'
+  const ordered = useMemo(
+    () => (view === 'call' ? filtered : [...filtered].sort((a, b) => a.t - b.t)),
+    [filtered, view],
+  )
+  const rows = useMemo(() => {
+    const list = [...filtered]
+    if (sort === 'total') list.sort((a, b) => b.total - a.total)
+    if (sort === 'cost') list.sort((a, b) => b.cost - a.cost)
+    return list
+  }, [filtered, sort])
+  const selectedCall = filtered.find((c) => c.index === selected) ?? null
+
+  useEffect(() => {
+    if (selected != null && !filtered.some((c) => c.index === selected)) setSelected(null)
+  }, [filtered, selected])
+
   if (!open) return null
 
-  const { points } = stats
-  const max = Math.max(1, ...points.flatMap((p) => [Math.max(0, p.input - p.cacheRead), p.cacheRead, p.output]))
-  const W = 640
-  const H = 200
-  const L = 46
-  const R = 12
-  const T = 14
-  const B = 26
-  const t0 = points[0]?.t ?? 0
-  const t1 = points[points.length - 1]?.t ?? t0
-  const span = t1 - t0
-  const px = (t: number): number => (span <= 0 ? (L + W - R) / 2 : L + ((t - t0) / span) * (W - L - R))
-  const py = (v: number): number => T + (1 - v / max) * (H - T - B)
-  const series = [
-    { key: 'newInput' as const, color: 'stroke-teal', dot: 'fill-teal', legend: 'bg-teal', label: t('usage.newInput') },
-    { key: 'cacheRead' as const, color: 'stroke-sky-500', dot: 'fill-sky-500', legend: 'bg-sky-500', label: t('usage.cachedInput') },
-    { key: 'output' as const, color: 'stroke-gold', dot: 'fill-gold', legend: 'bg-gold', label: t('usage.output') },
-  ]
-  const value = (p: (typeof points)[number], key: 'newInput' | 'cacheRead' | 'output'): number =>
-    key === 'newInput' ? Math.max(0, p.input - p.cacheRead) : p[key]
-  const time = (ms: number): string =>
-    new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const visible = SERIES.filter((s) => !hidden.has(s.key))
+  const W = Math.max(640, ordered.length * 10)
+  const H = 168
+  const L = 42
+  const R = 10
+  const T = 10
+  const B = 22
+  const slot = ordered.length ? (W - L - R) / ordered.length : W - L - R
+  const barW = Math.max(3, slot * 0.62)
+  const value = (c: UsageCall, key: SeriesKey): number =>
+    key === 'newInput' ? Math.max(0, c.input - c.cacheRead) : c[key]
+  const max = Math.max(
+    1,
+    ...ordered.map((c) => visible.reduce((sum, s) => sum + value(c, s.key), 0)),
+  )
+  const y = (v: number): number => T + (1 - v / max) * (H - T - B)
+  const x = (i: number): number => L + i * slot + (slot - barW) / 2
 
-  const ticks = span > 0 ? [t0, t0 + span / 2, t1] : [t0]
+  const totalOf = (c: UsageCall): number => visible.reduce((sum, s) => sum + value(c, s.key), 0)
+
+  const toggle = (key: SeriesKey): void =>
+    setHidden((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[10vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[7vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="w-full max-w-3xl rounded-xl border border-border bg-card shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex max-h-[86vh] w-full max-w-4xl flex-col rounded-xl border border-border bg-card shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2.5">
           <div>
             <h2 className="text-sm font-semibold">{t('usage.title')}</h2>
             <p className="text-[11px] text-muted-foreground">{t('usage.subtitle')}</p>
@@ -74,106 +139,328 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
           </button>
         </div>
 
-        <div className="space-y-4 p-4">
-          {points.length === 0 ? (
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {stats.calls.length === 0 ? (
             <div className="py-12 text-center text-xs text-muted-foreground">{t('usage.empty')}</div>
           ) : (
             <>
-              <div className="rounded-lg border border-border bg-background/50 p-3">
-                <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={t('usage.title')}>
-                  {[0, 0.5, 1].map((f) => (
-                    <g key={f}>
-                      <line
-                        x1={L}
-                        x2={W - R}
-                        y1={py(max * f)}
-                        y2={py(max * f)}
-                        className="stroke-border"
-                        strokeWidth={1}
-                        strokeDasharray={f === 0 ? undefined : '3 4'}
-                      />
-                      <text x={L - 6} y={py(max * f) + 3} textAnchor="end" className="fill-muted-foreground text-[9px]">
-                        {fmtTokens(Math.round(max * f))}
-                      </text>
-                    </g>
-                  ))}
-                  {series.map((s) => (
-                    <polyline
-                      key={s.key}
-                      points={points.map((p) => `${px(p.t).toFixed(1)},${py(value(p, s.key)).toFixed(1)}`).join(' ')}
-                      fill="none"
-                      className={s.color}
-                      strokeWidth={2}
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
-                  ))}
-                  {series.map((s) =>
-                    points.map((p, i) => (
-                      <circle key={`${s.key}-${i}`} cx={px(p.t)} cy={py(value(p, s.key))} r={2.2} className={s.dot}>
-                        <title>
-                          {`${time(p.t)} · ${t('usage.newInput')} ${fmtTokens(value(p, 'newInput'))} · ${t('usage.cachedInput')} ${fmtTokens(p.cacheRead)} · ${t('usage.output')} ${fmtTokens(p.output)}${
-                            p.input > 0 ? ` · ${t('usage.cacheHit')} ${Math.round((p.cacheRead / p.input) * 100)}%` : ''
-                          }${p.reasoning > 0 ? ` · ${t('usage.reasoning')} ${fmtTokens(p.reasoning)}` : ''}`}
-                        </title>
-                      </circle>
-                    )),
+              {/* Filters: only shown when the data actually has more than one value. */}
+              {(stats.agents.length > 1 || stats.models.length > 1) && (
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  {stats.agents.length > 1 && (
+                    <label className="flex items-center gap-1">
+                      {t('usage.filterAgent')}
+                      <select
+                        value={agent}
+                        onChange={(e) => setAgent(e.target.value)}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground"
+                      >
+                        <option value="all">{t('usage.allAgents')}</option>
+                        {stats.agents.map((a) => (
+                          <option key={a} value={a}>
+                            {a}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   )}
-                  {ticks.map((tick, i) => (
-                    <text
-                      key={tick}
-                      x={px(tick)}
-                      y={H - 8}
-                      textAnchor={i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle'}
-                      className="fill-muted-foreground text-[9px]"
-                    >
-                      {time(tick)}
-                    </text>
-                  ))}
-                </svg>
-                <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-muted-foreground">
-                  {series.map((s) => (
-                    <span key={s.key} className="flex items-center gap-1">
-                      <span className={`h-1.5 w-3 rounded-full ${s.legend}`} />
-                      {s.label}
-                    </span>
-                  ))}
-                  <span className="ml-auto">
-                    {t('usage.turns')}: {stats.turns}
-                  </span>
+                  {stats.models.length > 1 && (
+                    <label className="flex items-center gap-1">
+                      {t('usage.filterModel')}
+                      <select
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground"
+                      >
+                        <option value="all">{t('usage.allModels')}</option>
+                        {stats.models.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <Stat label={t('usage.total')} value={fmtTokens(stats.input + stats.output)} />
-                <Stat label={t('usage.newInput')} value={fmtTokens(stats.newInput)} />
-                <Stat label={t('usage.cachedInput')} value={fmtTokens(stats.cacheRead)} />
-                <Stat label={t('usage.output')} value={fmtTokens(stats.output)} />
-                <Stat
-                  label={t('usage.cacheHit')}
-                  value={stats.cacheHit == null ? '—' : `${Math.round(stats.cacheHit * 100)}%`}
+              {/* Primary metrics: cost, input, output, calls. */}
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <Card
+                  label={t('usage.cost')}
+                  value={summary.pricing === 'none' ? t('usage.unpriced') : fmtCost(summary.cost)}
+                  hint={summary.pricing === 'partial' ? t('usage.partial') : undefined}
                 />
-                <Stat label={t('usage.cost')} value={stats.priced ? fmtCost(stats.cost) : '—'} />
-                <Stat label={t('usage.turns')} value={String(stats.turns)} />
-                <Stat label={t('usage.avg')} value={fmtTokens(stats.avgPerTurn)} />
-                <Stat label={t('usage.peak')} value={fmtTokens(stats.peak)} />
-                {stats.reasoning > 0 && <Stat label={t('usage.reasoning')} value={fmtTokens(stats.reasoning)} />}
+                <Card
+                  label={t('usage.input')}
+                  value={fmtTokens(summary.input)}
+                  hint={`${t('usage.newInput')} ${fmtTokens(summary.newInput)} · ${t('usage.cachedInput')} ${fmtTokens(summary.cacheRead)}`}
+                />
+                <Card
+                  label={t('usage.output')}
+                  value={fmtTokens(summary.output)}
+                  hint={summary.reasoning > 0 ? `${t('usage.reasoning')} ${fmtTokens(summary.reasoning)}` : undefined}
+                />
+                <Card label={t('usage.calls')} value={String(summary.count)} />
               </div>
 
-              {(stats.byAgent.length > 1 || stats.byModel.length > 1) && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {stats.byAgent.length > 1 && (
-                    <BucketTable title={t('usage.byAgent')} rows={stats.byAgent} priced={stats.priced} />
-                  )}
-                  {stats.byModel.length > 1 && (
-                    <BucketTable title={t('usage.byModel')} rows={stats.byModel} priced={stats.priced} />
-                  )}
-                </div>
-              )}
+              {/* Secondary, compact: totals and ratios, not nine equal cards. */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+                <span>
+                  {t('usage.total')} <b className="font-mono text-foreground">{fmtTokens(summary.total)}</b>
+                </span>
+                <span>
+                  {t('usage.avgPerCall')} <b className="font-mono text-foreground">{fmtTokens(summary.avgPerCall)}</b>
+                </span>
+                <span>
+                  {t('usage.peak')} <b className="font-mono text-foreground">{fmtTokens(summary.peak)}</b>
+                </span>
+                <span>
+                  {t('usage.cacheHit')}{' '}
+                  <b className="font-mono text-foreground">
+                    {summary.cacheHit == null ? '—' : `${Math.round(summary.cacheHit * 100)}%`}
+                  </b>
+                </span>
+                {stats.contextTokens != null && (
+                  <span>
+                    {t('usage.context')}{' '}
+                    <b className="font-mono text-foreground">{fmtTokens(stats.contextTokens)}</b>
+                  </span>
+                )}
+                <span className="ml-auto">{filteredActive ? t('usage.filtered') : t('usage.wholeSession')}</span>
+              </div>
 
-              {!stats.priced && (
-                <p className="text-[11px] text-muted-foreground">{t('usage.unpricedHint')}</p>
-              )}
+              {/* Stacked bars, one per model call; equal width so idle gaps do not dominate. */}
+              <div className="rounded-lg border border-border bg-background/50 p-2">
+                <div className="flex items-center gap-2 pb-1 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-1" role="group" aria-label={t('usage.legend')}>
+                    {SERIES.map((s) => (
+                      <button
+                        key={s.key}
+                        type="button"
+                        onClick={() => toggle(s.key)}
+                        aria-pressed={!hidden.has(s.key)}
+                        className={`flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-muted ${
+                          hidden.has(s.key) ? 'line-through opacity-50' : ''
+                        }`}
+                      >
+                        <span className={`h-1.5 w-2.5 rounded-sm ${s.legend}`} />
+                        {t(s.label)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ml-auto flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setView('call')}
+                      aria-pressed={view === 'call'}
+                      className={`rounded px-1.5 py-0.5 ${view === 'call' ? 'bg-muted text-foreground' : ''}`}
+                    >
+                      {t('usage.byCall')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setView('time')}
+                      aria-pressed={view === 'time'}
+                      className={`rounded px-1.5 py-0.5 ${view === 'time' ? 'bg-muted text-foreground' : ''}`}
+                    >
+                      {t('usage.byTime')}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <svg width={W} height={H} className="block" role="img" aria-label={t('usage.chart')}>
+                    {[0, 0.5, 1].map((f) => (
+                      <g key={f}>
+                        <line
+                          x1={L}
+                          x2={W - R}
+                          y1={y(max * f)}
+                          y2={y(max * f)}
+                          className="stroke-border"
+                          strokeWidth={1}
+                          strokeDasharray={f === 0 ? undefined : '3 4'}
+                        />
+                        <text x={L - 5} y={y(max * f) + 3} textAnchor="end" className="fill-muted-foreground text-[9px]">
+                          {fmtTokens(Math.round(max * f))}
+                        </text>
+                      </g>
+                    ))}
+                    {ordered.map((c, i) => {
+                      let base = 0
+                      const parts = visible.map((s) => {
+                        const v = value(c, s.key)
+                        const h = (v / max) * (H - T - B)
+                        const rect = (
+                          <rect
+                            key={s.key}
+                            x={x(i)}
+                            y={y(base + v)}
+                            width={barW}
+                            height={Math.max(0, h)}
+                            className={s.bar}
+                          />
+                        )
+                        base += v
+                        return rect
+                      })
+                      return (
+                        <g
+                          key={c.index}
+                          onClick={() => setSelected(c.index)}
+                          className="cursor-pointer"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`#${c.index} ${fmtTokens(totalOf(c))}`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') setSelected(c.index)
+                          }}
+                        >
+                          {parts}
+                          {selected === c.index && (
+                            <rect
+                              x={x(i) - 1}
+                              y={y(totalOf(c)) - 1}
+                              width={barW + 2}
+                              height={(totalOf(c) / max) * (H - T - B) + 2}
+                              fill="none"
+                              className="stroke-foreground"
+                              strokeWidth={1}
+                            />
+                          )}
+                          <rect x={L + i * slot} y={T} width={slot} height={H - T - B} fill="transparent" />
+                          <title>
+                            {`#${c.index} · ${stamp(c.t)}${c.model ? ` · ${c.model}` : ''} · ${t('usage.newInput')} ${fmtTokens(value(c, 'newInput'))} · ${t('usage.cachedInput')} ${fmtTokens(c.cacheRead)} · ${t('usage.output')} ${fmtTokens(c.output)} · ${t('usage.total')} ${fmtTokens(c.total)}${
+                              c.hasCost ? ` · ${fmtCost(c.cost)}` : ''
+                            }${stats.agents.length > 1 ? ` · ${c.agentId}` : ''}`}
+                          </title>
+                        </g>
+                      )
+                    })}
+                    {[...new Set([0, Math.floor(ordered.length / 2), ordered.length - 1])].map((idx, i, list) => {
+                      const c = ordered[idx]
+                      if (!c) return null
+                      const first = i === 0
+                      const last = i === list.length - 1
+                      return (
+                        <text
+                          key={idx}
+                          x={x(idx)}
+                          y={H - 6}
+                          textAnchor={first ? 'start' : last ? 'end' : 'middle'}
+                          className="fill-muted-foreground text-[9px]"
+                        >
+                          {view === 'time' ? axisTime(c.t, ordered[0]!.t) : `#${c.index}`}
+                        </text>
+                      )
+                    })}
+                  </svg>
+                </div>
+              </div>
+
+              {/* Selected call, or a hint. Message ids are not recorded in usage events. */}
+              <div className="rounded-lg border border-border bg-background/40 px-3 py-2 text-[11px]">
+                {selectedCall ? (
+                  <div className="space-y-0.5">
+                    <div className="font-mono text-foreground">
+                      #{selectedCall.index} · {stamp(selectedCall.t)}
+                      {selectedCall.model ? ` · ${selectedCall.model}` : ''}
+                      {stats.agents.length > 1 ? ` · ${selectedCall.agentId}` : ''}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {t('usage.newInput')} {fmtTokens(Math.max(0, selectedCall.input - selectedCall.cacheRead))} ·{' '}
+                      {t('usage.cachedInput')} {fmtTokens(selectedCall.cacheRead)} · {t('usage.output')}{' '}
+                      {fmtTokens(selectedCall.output)} · {t('usage.total')} {fmtTokens(selectedCall.total)}
+                      {selectedCall.cacheHit != null
+                        ? ` · ${t('usage.cacheHit')} ${Math.round(selectedCall.cacheHit * 100)}%`
+                        : ''}
+                      {selectedCall.hasCost ? ` · ${fmtCost(selectedCall.cost)}` : ''}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/80">{t('usage.noMessageLink')}</div>
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground">{t('usage.pickCall')}</div>
+                )}
+              </div>
+
+              {/* Compact table, linked to the chart selection. */}
+              <div className="rounded-lg border border-border">
+                <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+                  <span className="text-[11px] font-medium">{t('usage.table')}</span>
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={() => setSort('total')}
+                      aria-pressed={sort === 'total'}
+                      className={`rounded px-1.5 py-0.5 ${sort === 'total' ? 'bg-muted text-foreground' : ''}`}
+                    >
+                      {t('usage.sortTotal')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSort('cost')}
+                      aria-pressed={sort === 'cost'}
+                      className={`rounded px-1.5 py-0.5 ${sort === 'cost' ? 'bg-muted text-foreground' : ''}`}
+                    >
+                      {t('usage.sortCost')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSort('index')}
+                      aria-pressed={sort === 'index'}
+                      className={`rounded px-1.5 py-0.5 ${sort === 'index' ? 'bg-muted text-foreground' : ''}`}
+                    >
+                      {t('usage.byCall')}
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-56 overflow-auto">
+                  <table className="w-full text-[10.5px]">
+                    <thead className="sticky top-0 bg-card text-muted-foreground">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium">#</th>
+                        <th className="px-2 py-1 text-left font-medium">{t('usage.time')}</th>
+                        <th className="px-2 py-1 text-left font-medium">{t('usage.model')}</th>
+                        <th className="px-2 py-1 text-right font-medium">{t('usage.newInput')}</th>
+                        <th className="px-2 py-1 text-right font-medium">{t('usage.cachedInput')}</th>
+                        <th className="px-2 py-1 text-right font-medium">{t('usage.output')}</th>
+                        <th className="px-2 py-1 text-right font-medium">{t('usage.total')}</th>
+                        <th className="px-2 py-1 text-right font-medium">{t('usage.cost')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((c) => (
+                        <tr
+                          key={c.index}
+                          tabIndex={0}
+                          onClick={() => setSelected(c.index)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') setSelected(c.index)
+                          }}
+                          aria-selected={selected === c.index}
+                          className={`cursor-pointer border-t border-border/40 ${
+                            selected === c.index ? 'bg-teal/10' : 'hover:bg-muted/40'
+                          }`}
+                        >
+                          <td className="px-2 py-0.5 font-mono">{c.index}</td>
+                          <td className="px-2 py-0.5 font-mono text-muted-foreground">{clock(c.t)}</td>
+                          <td className="max-w-[10rem] truncate px-2 py-0.5 font-mono" title={c.model ?? ''}>
+                            {c.model ?? '—'}
+                          </td>
+                          <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(Math.max(0, c.input - c.cacheRead))}</td>
+                          <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(c.cacheRead)}</td>
+                          <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(c.output)}</td>
+                          <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(c.total)}</td>
+                          <td className="px-2 py-0.5 text-right font-mono text-muted-foreground">
+                            {c.hasCost ? fmtCost(c.cost) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </>
           )}
         </div>
@@ -182,35 +469,14 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Card({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-lg border border-border bg-background/40 px-3 py-2">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-0.5 font-mono text-sm">{value}</div>
-    </div>
-  )
-}
-
-
-function BucketTable({ title, rows, priced }: { title: string; rows: UsageBucket[]; priced: boolean }) {
-  return (
-    <div className="rounded-lg border border-border bg-background/40 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{title}</div>
-      <table className="mt-1 w-full text-[11px]">
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-t border-border/50">
-              <td className="max-w-[9rem] truncate py-1 pr-2 font-mono" title={r.id}>
-                {r.id}
-              </td>
-              <td className="py-1 text-right font-mono">{fmtTokens(r.input + r.output)}</td>
-              <td className="py-1 pl-3 text-right font-mono text-muted-foreground">
-                {priced ? fmtCost(r.cost) : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mt-0.5 truncate font-mono text-sm text-foreground" title={value}>
+        {value}
+      </div>
+      {hint && <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{hint}</div>}
     </div>
   )
 }

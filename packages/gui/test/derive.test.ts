@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, deriveUsageStats, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate, withOptimistic } from '../src/lib/derive.ts'
+import { annotateDiff, deriveAgents, deriveChat, deriveUsageSeries, deriveUsageStats, summarizeCalls, filterTrace, groupSessions, cacheHitRate, deriveInspector, messagePreview, splitDiffHunks, toMarkdown, truncate, withOptimistic } from '../src/lib/derive.ts'
 import type { TaggedEvent } from '../src/lib/api.ts'
 
 let seq = 0
@@ -337,25 +337,27 @@ test('deriveUsageStats totals the turns and keeps per-turn points', () => {
     ev('main', null, { type: 'usage', input: 200, output: 30, cacheRead: 100, cost: 0.002 }),
   ]
   const stats = deriveUsageStats(events)
-  expect(stats.turns).toBe(2)
+  expect(stats.count).toBe(2)
   expect(stats.input).toBe(300)
   expect(stats.output).toBe(50)
   expect(stats.cacheRead).toBe(140)
   expect(stats.newInput).toBe(160)
-  expect(stats.priced).toBe(true)
+  expect(stats.pricing).toBe('full')
   expect(stats.cacheHit).toBeCloseTo(140 / 300)
   expect(stats.cost).toBeCloseTo(0.003)
-  expect(stats.points.map((p) => p.cumulative)).toEqual([120, 350])
+  expect(stats.calls.map((p) => p.cumulative)).toEqual([120, 350])
+  expect(stats.calls.map((p) => p.index)).toEqual([1, 2])
   expect(stats.peak).toBe(230)
-  expect(stats.avgPerTurn).toBe(175)
+  expect(stats.avgPerCall).toBe(175)
 })
 
 test('deriveUsageStats handles an empty session', () => {
   const stats = deriveUsageStats([])
-  expect(stats.turns).toBe(0)
+  expect(stats.count).toBe(0)
   expect(stats.cacheHit).toBeNull()
-  expect(stats.priced).toBe(false)
-  expect(stats.points).toEqual([])
+  expect(stats.pricing).toBe('none')
+  expect(stats.calls).toEqual([])
+  expect(stats.contextTokens).toBeNull()
 })
 
 
@@ -366,7 +368,12 @@ test('deriveUsageStats groups by agent and model and counts reasoning', () => {
   ]
   const stats = deriveUsageStats(events)
   expect(stats.reasoning).toBe(5)
-  expect(stats.byAgent.map((b) => b.id)).toEqual(['main', 'main/agent-1'])
-  expect(stats.byModel.map((b) => b.id)).toEqual(['deepseek-chat', 'gpt-4o-mini'])
-  expect(stats.byAgent[0]).toMatchObject({ input: 100, output: 10, cacheRead: 40, cost: 0.001, turns: 1 })
+  expect(stats.agents).toEqual(['main', 'main/agent-1'])
+  expect(stats.models).toEqual(['deepseek-chat', 'gpt-4o-mini'])
+
+  // Filtering recomputes the same summary over a subset.
+  const onlyMain = summarizeCalls(stats.calls.filter((c) => c.agentId === 'main'))
+  expect(onlyMain).toMatchObject({ count: 1, input: 100, output: 10, cacheRead: 40, cost: 0.001, pricing: 'full' })
+  const unpriced = summarizeCalls(stats.calls.filter((c) => c.agentId !== 'main'))
+  expect(unpriced.pricing).toBe('none')
 })

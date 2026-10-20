@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Usage panel redesigned around **model calls**: stacked bars per call (uncached /
+  cached / output), a sortable call table linked to the chart, agent/model
+  filters, a context estimate kept separate from cumulative usage, and honest
+  "prices not configured" / "lower bound" states instead of `$0`.
 - Usage accounting: a dated built-in price table (env overrides win), per-agent
   and per-model breakdowns, reasoning tokens, and per-point cache hit.
 - Usage panel (click the token pill): time-based x-axis, new-vs-cached input,
