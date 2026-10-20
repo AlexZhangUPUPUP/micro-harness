@@ -47,13 +47,6 @@
         "@micro-harness/core": "workspace:*",
       },
     },
-    "packages/web-mcp": {
-      "name": "@micro-harness/web-mcp",
-      "version": "0.1.0",
-      "bin": {
-        "micro-harness-web": "./src/server.ts",
-      },
-    },
   },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.3.0", "", {}, "sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA=="],
@@ -163,8 +156,6 @@
     "@micro-harness/gui": ["@micro-harness/gui@workspace:packages/gui"],
 
     "@micro-harness/server": ["@micro-harness/server@workspace:packages/server"],
-
-    "@micro-harness/web-mcp": ["@micro-harness/web-mcp@workspace:packages/web-mcp"],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 

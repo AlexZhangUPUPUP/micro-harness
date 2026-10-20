@@ -9,6 +9,8 @@
 import { exec, execFile } from 'node:child_process'
 import { localFs, type FileSystem } from './fs.ts'
 import type { Sandbox } from './sandbox.ts'
+import { loadWebConfig } from './web/config.ts'
+import { buildTools as buildWebTools } from './web/tools.ts'
 import type { ToolDef } from './model.ts'
 
 export interface ToolContext {
@@ -76,8 +78,8 @@ function sh(
   })
 }
 
-export function makeTools(): Tool[] {
-  return [
+export function makeTools(env: NodeJS.ProcessEnv = process.env): Tool[] {
+  const tools: Tool[] = [
     {
       name: 'read_file',
       description: 'Read a UTF-8 text file. Returns numbered lines.',
@@ -242,6 +244,25 @@ export function makeTools(): Tool[] {
       },
     },
   ]
+
+  // First-party web tools are built in, not a bundled MCP server: they read the
+  // same runtime toggle file and keep the `network` capability flag.
+  const web = loadWebConfig(env)
+  if (web.mode !== 'off') {
+    for (const def of buildWebTools(web)) {
+      tools.push({
+        name: def.name,
+        description: def.description,
+        parameters: def.inputSchema,
+        network: true,
+        async run(args) {
+          const result = await def.run(args)
+          return { output: result.text, isError: result.isError }
+        },
+      })
+    }
+  }
+  return tools
 }
 
 export function toolDefs(tools: Tool[]): ToolDef[] {

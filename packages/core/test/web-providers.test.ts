@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test'
-import { parseBing, parseBaidu, parseDeepseek, pickProvider, resolveProvider, providerIds } from '../src/providers.ts'
-import { loadWebConfig } from '../src/config.ts'
+import { parseBing, parseBaidu, parseDeepseek, pickProvider, resolveProvider, providerIds } from '../src/web/providers.ts'
+import { loadWebConfig } from '../src/web/config.ts'
 
 const BING = `<ol id="b_results"><li class="b_algo" data-id iid=SERP.1><h2><a href="https://www.deepseek.com/harness/" h="ID=SERP,1">DeepSeek Harness</a></h2><p class="b_lineclamp">The official harness.</p></li><li class="b_algo" data-id iid=SERP.2><h2><a href="https://github.com/deepseek-ai/deepseek-harness">GitHub - deepseek-ai/deepseek-harness</a></h2><p>Source &amp; docs.</p></li></ol>`
 

@@ -37,7 +37,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 - **一条事件流，四个视图。** 同一批带标签的事件既是会话日志，也是 SSE、回放、Trace 与 Inspector 的数据源。“模型看到了什么”是被记录下来的，而不是从另一套 UI 状态反推的。
 - **能力即权限模型。** `read-only` / `workspace` / `full` / `auto-review` 决定哪些工具存在、有没有 shell、`network` 工具是否逐次审批。
 - **带审阅的委派。** 子 Agent 拥有独立上下文（可选独立 git worktree）；改动逐块落地，上下文漂移的 hunk 会被报告而不是错应用。
-- **测试与评测是一等公民。** 235 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
+- **测试与评测是一等公民。** 230 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
@@ -160,11 +160,11 @@ MICRO_PERMISSION=auto-review microh
 `micro-harness mcp` 通过 stdio 说 MCP，别的 agent（或任意 MCP 客户端）就能调用这个 harness 的文件工具——正好和上面的编辑器方向相反。
 
 ```bash
-# 只暴露文件工具；外部调用默认没有 shell
+# 只暴露文件工具；外部调用默认没有 shell、也没有网络
 micro-harness mcp --dir /absolute/path/to/your-project
 
-# 显式加上 shell
-micro-harness mcp --dir /absolute/path/to/your-project --allow-bash
+# 显式加上 shell / 网络
+micro-harness mcp --dir /absolute/path/to/your-project --allow-bash --allow-net
 ```
 
 按普通 stdio MCP server 注册即可（`command: "micro-harness"`，`args: ["mcp", "--dir", "…"]`）。
@@ -291,7 +291,7 @@ CLI 还提供 `--max-depth`、`--max-concurrency`、`--agent-timeout`、`--agent
 }
 ```
 
-工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。Web 服务内置 `web_search` 与 `web_fetch`，可通过界面的联网开关和搜索引擎选择器调整。DeepSeek 需要 `DEEPSEEK_API_KEY`（与对话用的是同一个 key），Bocha 需要 `BOCHA_API_KEY`，SearXNG 需要 `MICRO_SEARXNG_URL`。同一 URL 的重复抓取会缓存五分钟。
+工具以 `<server>__<tool>` 命名；`GET /api/mcp` 可查看连接状态。`web_search` 与 `web_fetch` 是内核内置工具，可通过界面的联网开关和搜索引擎选择器调整。DeepSeek 需要 `DEEPSEEK_API_KEY`（与对话用的是同一个 key），Bocha 需要 `BOCHA_API_KEY`，SearXNG 需要 `MICRO_SEARXNG_URL`。同一 URL 的重复抓取会缓存五分钟。
 
 ## 测试与评测
 
@@ -311,7 +311,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。完整套件是 `bun test`（235 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。完整套件是 `bun test`（230 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 
@@ -319,10 +319,9 @@ bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 
 | 目录 | 职责 |
 |---|---|
-| [`packages/core`](packages/core) | Agent 循环、工具、上下文管理、多 Agent、CLI、MCP 与 ACP |
+| [`packages/core`](packages/core) | Agent 循环、内置工具（文件、shell、联网搜索/抓取）、上下文管理、多 Agent、CLI、MCP 与 ACP |
 | [`packages/server`](packages/server) | HTTP API、SSE 事件推送、会话存储与全文检索 |
 | [`packages/gui`](packages/gui) | React Web 界面、对话、轨迹、改动审阅与 Inspector |
-| [`packages/web-mcp`](packages/web-mcp) | 内置搜索与网页读取工具 |
 
 ### 两个设计取舍
 

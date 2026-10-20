@@ -115,7 +115,7 @@ So we kept the **seams**, deleted the **container**, and wrote the revival condi
 
 4. **Economics as a first-class concern.** Three vendors report prompt-cache hits under three different field names; we normalise them into `usage.cacheRead`, price them at cache rates and show the hit rate in the UI. Two companion decisions make caching actually work: tool results are truncated **on write** (never rewritten later), and compaction drops the **middle** rather than the front. Measured on real runs in this repo: 75% / 78% / 69%.
 
-5. **Web access as a first-party MCP server, not a built-in tool.** `MICRO_WEB` adds a bundled MCP server exposing `web_search` and `web_fetch`; the loop, tool registry and event contract do not know it exists. The same permission presets that gate the shell gate the network, and a runtime file (the GUI's 🌐 button) turns it off live without a restart. The fetcher is SSRF-guarded: it resolves the host, refuses non-public addresses, and pins the validated IP for the connection.
+5. **Web access is built in, not a separate MCP server.** `MICRO_WEB` gates `web_search` and `web_fetch` as ordinary `Tool`s carrying the `network` capability, so the same presets and approvals that gate the shell gate the network — and the CLI, the compiled binary and the GUI behave the same way. Keeping MCP for *external* tools avoids a special-cased server that only one entry point knows how to inject. A runtime file (the GUI's 🌐 button) turns web access off live without a restart. The fetcher is SSRF-guarded: it resolves the host, refuses non-public addresses, and pins the validated IP.
 
 ---
 

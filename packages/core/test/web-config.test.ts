@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { loadWebConfig, capabilities, runtimeEnabled, runtimeSettings } from '../src/config.ts'
+import { loadWebConfig, capabilities, runtimeEnabled, runtimeSettings } from '../src/web/config.ts'
 
 test('defaults: mode all, provider bing, no keys', () => {
   const cfg = loadWebConfig({} as NodeJS.ProcessEnv, '/home/x')

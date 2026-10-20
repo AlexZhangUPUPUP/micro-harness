@@ -83,7 +83,7 @@ export const PERMISSIONS: Record<
   },
 }
 
-/** Mirror of the web-mcp toggle file: a soft on/off plus an optional provider. */
+/** Mirror of the web toggle file: a soft on/off plus an optional provider. */
 function readWebSettings(file: string): { enabled: boolean; provider?: string } {
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as { enabled?: unknown; provider?: unknown }
@@ -230,7 +230,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     process.env.MICRO_WEB_TOGGLE_FILE || path.join(homedir(), '.micro-harness', 'web.json')
   const webMode = process.env.MICRO_WEB ?? 'all'
 
-  // Search backends the GUI may pick — keep in sync with packages/web-mcp/src/providers.ts.
+  // Search backends the GUI may pick — keep in sync with packages/core/src/web/providers.ts.
   const SEARCH_PROVIDERS: Array<{ id: string; label: string; needs: string[] }> = [
     { id: 'bing', label: 'Bing', needs: [] },
     { id: 'deepseek', label: 'DeepSeek', needs: ['DEEPSEEK_API_KEY', 'MICRO_DEEPSEEK_KEY'] },

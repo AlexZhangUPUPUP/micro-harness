@@ -37,7 +37,7 @@ Connect any OpenAI Chat Completions–compatible service to read projects, edit 
 - **One event stream, four views.** The same tagged events are the session log, the SSE feed, replay, Trace and Inspector. “What the model saw” is recorded, not reconstructed from a separate UI state.
 - **Capability *is* the permission model.** `read-only` / `workspace` / `full` / `auto-review` decide which tools exist, whether the shell is available, and whether `network` tools need approval per call.
 - **Delegation with a review step.** Sub-agents get separate context (optionally a git worktree); their diffs land hunk by hunk, and a drifted hunk is reported rather than mis-applied.
-- **Tests and evals as first-class.** 235 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
+- **Tests and evals as first-class.** 230 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
@@ -160,11 +160,11 @@ MICRO_PERMISSION=auto-review microh
 `micro-harness mcp` speaks MCP over stdio, so another agent (or an MCP client) can call this harness's file tools — the mirror image of the editor case above.
 
 ```bash
-# file tools only; the shell stays off for an external caller
+# file tools only; shell and network stay off for an external caller
 micro-harness mcp --dir /absolute/path/to/your-project
 
-# add the shell explicitly
-micro-harness mcp --dir /absolute/path/to/your-project --allow-bash
+# add the shell / the network explicitly
+micro-harness mcp --dir /absolute/path/to/your-project --allow-bash --allow-net
 ```
 
 Register it like any stdio MCP server (`command: "micro-harness"`, `args: ["mcp", "--dir", "…"]`).
@@ -291,7 +291,7 @@ Connect external tools through MCP (Model Context Protocol), using stdio or HTTP
 }
 ```
 
-Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. The web server bundles `web_search` and `web_fetch`, with a live web toggle and search-engine picker in the interface. DeepSeek needs `DEEPSEEK_API_KEY` (the same key the chat API uses), Bocha needs `BOCHA_API_KEY`, and SearXNG needs `MICRO_SEARXNG_URL`. Identical fetches are cached for five minutes.
+Tools are named `<server>__<tool>`; `GET /api/mcp` reports connection status. `web_search` and `web_fetch` are built into the core, with a live web toggle and search-engine picker in the interface. DeepSeek needs `DEEPSEEK_API_KEY` (the same key the chat API uses), Bocha needs `BOCHA_API_KEY`, and SearXNG needs `MICRO_SEARXNG_URL`. Identical fetches are cached for five minutes.
 
 ## Tests and evals
 
@@ -311,7 +311,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The full suite is `bun test` (235 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The full suite is `bun test` (230 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
 
 ## Architecture and documentation
 
@@ -319,10 +319,9 @@ The core runs the loop: request a model response, execute tools, and send the re
 
 | Directory | Responsibility |
 |---|---|
-| [`packages/core`](packages/core) | Agent loop, tools, context management, multiple agents, CLI, MCP, and ACP |
+| [`packages/core`](packages/core) | Agent loop, built-in tools (files, shell, web search/fetch), context management, multiple agents, CLI, MCP and ACP |
 | [`packages/server`](packages/server) | HTTP API, SSE streaming, session storage, and full-text search |
 | [`packages/gui`](packages/gui) | React interface, conversations, traces, change review, and Inspector |
-| [`packages/web-mcp`](packages/web-mcp) | Built-in search and page-fetching tools |
 
 ### Two design decisions
 

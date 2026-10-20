@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { isPublicAddress, isFetchableHost, resolvePublic, WebError } from '../src/net.ts'
+import { isPublicAddress, isFetchableHost, resolvePublic, WebError } from '../src/web/net.ts'
 
 test('isPublicAddress rejects the SSRF-relevant ranges', () => {
   for (const ip of [

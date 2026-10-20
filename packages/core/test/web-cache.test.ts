@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test'
-import { CACHE_LIMIT, CACHE_TTL_MS, cacheClear, cacheGet, cacheKey, cacheSet, cacheSize } from '../src/cache.ts'
+import { CACHE_LIMIT, CACHE_TTL_MS, cacheClear, cacheGet, cacheKey, cacheSet, cacheSize } from '../src/web/cache.ts'
 
 const page = (text: string) => ({
   text,

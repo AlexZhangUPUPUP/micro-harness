@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows
 - Usage panel (click the token pill): time-based x-axis, new-vs-cached input,
   per-point tooltips, and cost shown as unknown (`—`) when prices are not
   configured instead of a misleading `$0`.
+- First-party web tools are now built into the core instead of an auto-injected
+  MCP server: same names (`web_search` / `web_fetch`), same runtime toggle, and
+  they now work in the CLI and the compiled binary too, and `micro-harness mcp` exposes them to other agents only with `--allow-net`.
 - Web search defaults to bing and falls back to it when the preferred engine is
   unconfigured; bocha / deepseek / baidu stay opt-in.
 - `edit_file`: exact-string replacement that refuses a missing or ambiguous match,

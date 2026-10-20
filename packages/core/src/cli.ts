@@ -124,7 +124,7 @@ Usage:
   micro-harness run "task" …          queued run
   micro-harness run --auto --tasks f  unattended driver (budget/timeout)
   micro-harness acp                    ACP server over stdio (editor-driven)
-  micro-harness mcp [--allow-bash]      MCP server over stdio (tools for other agents)
+  micro-harness mcp [--allow-bash] [--allow-net]   MCP server over stdio (tools for other agents)
 
 Options:
   --model <id>            model id (env MICRO_MODEL, default deepseek-chat)
@@ -164,7 +164,10 @@ if (sub === 'mcp') {
   // Expose the tools over stdio. Shell access stays off unless asked for here:
   // the caller is another agent, not the person at this terminal.
   const allowMcpBash = argv.includes('--allow-bash')
-  const tools = makeTools().filter((t) => t.name !== 'bash' || allowMcpBash)
+  const allowMcpNet = argv.includes('--allow-net')
+  const tools = makeTools().filter(
+    (t) => (t.name !== 'bash' || allowMcpBash) && (!t.network || allowMcpNet),
+  )
   await runMcpServer({ tools, ctx: { cwd, allowBash: allowMcpBash, agentId: 'mcp' } })
   process.exit(0)
 }

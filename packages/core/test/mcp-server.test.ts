@@ -88,8 +88,34 @@ test('the CLI serves the same tools over stdio', async () => {
     expect(replies[0]).toMatchObject({ id: 1 })
     expect(JSON.stringify(replies[1])).toContain('read_file')
     expect(JSON.stringify(replies[2])).toContain('over the wire')
-    // bash stays off for an MCP client unless --allow-bash was passed
+    // shell and network tools stay off for an MCP client unless explicitly allowed
     expect(JSON.stringify(replies[1])).not.toContain('"bash"')
+    expect(JSON.stringify(replies[1])).not.toContain('web_search')
+  } finally {
+    child.kill('SIGTERM')
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+
+test('the CLI exposes network tools over MCP only with --allow-net', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-mcp-net-'))
+  const child = spawn(process.execPath, [cli, 'mcp', '--dir', dir, '--allow-net'], { stdio: ['pipe', 'pipe', 'pipe'] })
+  try {
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) + '\n')
+    const line = await new Promise<string>((resolve, reject) => {
+      let buffer = ''
+      const timer = setTimeout(() => reject(new Error('timed out waiting for tools/list')), 10_000)
+      child.stdout.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString('utf8')
+        const nl = buffer.indexOf('\n')
+        if (nl >= 0) {
+          clearTimeout(timer)
+          resolve(buffer.slice(0, nl))
+        }
+      })
+    })
+    expect(line).toContain('web_search')
   } finally {
     child.kill('SIGTERM')
     rmSync(dir, { recursive: true, force: true })

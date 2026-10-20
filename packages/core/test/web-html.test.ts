@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { decodeEntities, htmlToText, titleOf, firstTagText } from '../src/html.ts'
+import { decodeEntities, htmlToText, titleOf, firstTagText } from '../src/web/html.ts'
 
 test('decodeEntities handles named, decimal and hex', () => {
   expect(decodeEntities('a &amp; b')).toBe('a & b')
