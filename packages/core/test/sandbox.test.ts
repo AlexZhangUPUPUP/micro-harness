@@ -1,9 +1,9 @@
 import { test, expect } from 'bun:test'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
-import { bwrapArgs, bwrapSandbox, detectSandbox, seatbeltProfile, seatbeltSandbox } from '../src/sandbox.ts'
+import { bwrapArgs, bwrapSandbox, detectSandbox, scrubEnv, seatbeltProfile, seatbeltSandbox } from '../src/sandbox.ts'
 import { dispatch, makeTools } from '../src/tools.ts'
 
 test('the seatbelt profile denies by default and confines writes', () => {
@@ -115,5 +115,61 @@ test.skipIf(!canRunBwrap)('bwrap: writes stay inside the workspace', async () =>
     expect(net.isError).toBe(true)
   } finally {
     rmSync(cwd, { recursive: true, force: true })
+  }
+})
+
+
+test('the seatbelt profile can deny credential paths', () => {
+  const profile = seatbeltProfile({
+    writeRoots: ['/work'],
+    network: false,
+    denyRead: [
+      { path: '/Users/x/.ssh', dir: true },
+      { path: '/Users/x/.netrc', dir: false },
+    ],
+  })
+  expect(profile).toContain('(deny file-read* (subpath "/Users/x/.ssh"))')
+  expect(profile).toContain('(deny file-read* (literal "/Users/x/.netrc"))')
+})
+
+test('scrubEnv drops secret-looking names and keeps ordinary ones', () => {
+  expect(
+    scrubEnv({
+      PATH: '/bin',
+      HOME: '/h',
+      MICRO_API_KEY: 'k',
+      OPENAI_API_KEY: 'k',
+      SSH_AUTH_SOCK: '/s',
+      AWS_SECRET_ACCESS_KEY: 'x',
+      GIT_AUTHOR_NAME: 'a',
+    }),
+  ).toEqual({ PATH: '/bin', HOME: '/h', GIT_AUTHOR_NAME: 'a' })
+})
+
+test('bwrap hides credential paths with tmpfs or /dev/null', () => {
+  const args = bwrapArgs({
+    cwd: '/work',
+    writeRoots: ['/work'],
+    network: false,
+    hidePaths: [
+      { path: '/home/u/.ssh', dir: true },
+      { path: '/home/u/.netrc', dir: false },
+    ],
+  }).join(' ')
+  expect(args).toContain('--tmpfs /home/u/.ssh')
+  expect(args).toContain('--ro-bind /dev/null /home/u/.netrc')
+})
+
+test.skipIf(!canRunSeatbelt)('seatbelt actually denies a credential directory', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-secret-'))
+  const file = path.join(dir, 'key')
+  try {
+    writeFileSync(file, 'topsecret')
+    const profile = seatbeltProfile({ writeRoots: [dir], network: false, denyRead: [{ path: realpathSync(dir), dir: true }] })
+    const r = spawnSync('sandbox-exec', ['-p', profile, '/bin/sh', '-c', `cat "${file}"`], { encoding: 'utf8' })
+    expect(r.status).not.toBe(0)
+    expect(r.stdout ?? '').not.toContain('topsecret')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })

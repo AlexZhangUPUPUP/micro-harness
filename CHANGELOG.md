@@ -10,6 +10,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Sandbox secret hygiene: credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`,
+  `~/.config/gh`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`) are hidden from
+  sandboxed shells and secret-looking env vars are scrubbed; `--sandbox-secrets=allow`
+  restores the previous behaviour.
+
 - Approval cards render a line diff for `edit_file` / `write_file` (raw arguments
   stay one click away), so a write can be judged before it happens.
 - Usage: per-call latency and a context-vs-budget bar; `/api/limits` exposes the

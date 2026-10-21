@@ -64,10 +64,16 @@ function sh(
   command: string,
   cwd: string,
   timeout = 60_000,
-  wrap?: { command: string; args: string[] },
+  wrap?: { command: string; args: string[]; env?: NodeJS.ProcessEnv },
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const options = { cwd, timeout, maxBuffer: 1024 * 1024, encoding: 'utf8' as const }
+    const options = {
+      cwd,
+      timeout,
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8' as const,
+      ...(wrap?.env ? { env: wrap.env } : {}),
+    }
     const done = (err: unknown, stdout: string | Buffer, stderr: string | Buffer): void => {
       const code =
         err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0

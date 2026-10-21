@@ -80,3 +80,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 联网 · 默认引擎统一为 bing：本地 env 与 web.json 复位为 bing；`pickProvider` 在首选引擎未配置（缺 key/URL）时回退 bing 并在结果里注明；博查/DeepSeek/百度 保持显式选择。236 测试
 - 2026-10-19 · 架构 · 联网工具改为内置：`packages/web-mcp` 的实现移入 `packages/core/src/web/`，`makeTools()` 按 `MICRO_WEB` 注册 `web_search`/`web_fetch`（`network: true`），删除 server 的自动注入与整个 web-mcp 包；MCP 只留给外部工具。`micro-harness mcp` 新增 `--allow-net`（默认不暴露网络）。230 测试
 - 2026-10-19 · 体验 · ① 审批卡为 `edit_file`/`write_file` 渲染行级 diff（原始参数折叠保留），服务端在 permission.request 里带旧内容；② usage 记录 `durationMs`，面板增加平均耗时、明细耗时列、上下文/预算进度条；`GET /api/limits` 暴露上下文预算；③ CI 增加 Linux bubblewrap job。234 测试
+- 2026-10-19 · 沙箱 · M4：默认在沙箱内隐藏 `~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.config/gh`、`~/.kube`、`~/.docker/config.json`、`~/.netrc`（Seatbelt deny / bwrap tmpfs），并清洗 `*_KEY`/`*_TOKEN`/`SSH_AUTH_SOCK` 等环境变量；`--sandbox-secrets=allow` 可关闭。238 测试

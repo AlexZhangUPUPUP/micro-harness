@@ -90,9 +90,18 @@ if (!['off', 'auto', 'require'].includes(sandboxMode)) {
   console.error(`unknown --sandbox value: ${sandboxMode} (off | auto | require)`)
   process.exit(1)
 }
+const sandboxSecrets = (() => {
+  const value = opt('sandbox-secrets', process.env.MICRO_SANDBOX_SECRETS ?? 'deny')
+  if (value !== 'deny' && value !== 'allow') {
+    console.error(`unknown --sandbox-secrets value: ${value} (deny | allow)`)
+    process.exit(1)
+  }
+  return value
+})()
+
 let sandbox: Sandbox | null = null
 try {
-  const detected = detectSandbox(sandboxMode)
+  const detected = detectSandbox(sandboxMode, { secrets: sandboxSecrets })
   sandbox = detected.sandbox
   if (detected.notice) console.error(`sandbox: ${detected.notice}`)
 } catch (err) {
@@ -134,6 +143,7 @@ Options:
   --no-bash               disable the bash tool (enabled by default)
   --sandbox <mode>        off | auto | require (default off)
   --sandbox-net           allow network inside the sandbox
+  --sandbox-secrets <m>   deny | allow (default deny: hide ~/.ssh etc. and scrub env)
   --max-steps <n>         model loop step budget (default 24)
   --max-context <n>       context token budget (default 24000)
   --max-tool-output <n>   truncate tool output to n tokens

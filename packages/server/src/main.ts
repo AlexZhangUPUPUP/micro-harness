@@ -93,9 +93,10 @@ const store = new SessionStore(dataDir)
 const provider = openaiProvider({ baseUrl, apiKey })
 const rawSandbox = (process.env.MICRO_SANDBOX ?? '').trim()
 const sandboxMode: SandboxMode = rawSandbox === 'auto' || rawSandbox === 'require' ? rawSandbox : 'off'
+const sandboxSecrets = process.env.MICRO_SANDBOX_SECRETS === 'allow' ? 'allow' : 'deny'
 let sandbox: Sandbox | null = null
 try {
-  const detected = detectSandbox(sandboxMode)
+  const detected = detectSandbox(sandboxMode, { secrets: sandboxSecrets })
   sandbox = detected.sandbox
   if (detected.notice) console.error(`sandbox: ${detected.notice}`)
 } catch (err) {
