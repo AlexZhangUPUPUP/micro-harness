@@ -13,6 +13,7 @@ export interface PendingApproval {
   tool: string
   args?: unknown
   sandbox?: string
+  preview?: { before?: string }
   agentId: string
   t: number
 }
@@ -35,6 +36,7 @@ export function pendingApprovals(events: TaggedEvent[]): PendingApproval[] {
       tool: String(ev.tool ?? ''),
       args: ev.args,
       sandbox: typeof ev.sandbox === 'string' ? ev.sandbox : undefined,
+      preview: (ev.preview as { before?: string } | undefined) ?? undefined,
       agentId: e.agentId,
       t: e.t,
     })

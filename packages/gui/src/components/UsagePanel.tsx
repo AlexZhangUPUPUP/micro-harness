@@ -7,6 +7,8 @@ import { useT } from '../lib/i18n.tsx'
 interface UsagePanelProps {
   open: boolean
   events: TaggedEvent[]
+  /** Context budget from the server; 0 means unknown. */
+  maxContext?: number
   onClose: () => void
 }
 
@@ -42,7 +44,7 @@ const stamp = (ms: number): string => {
  * Token usage detail: what was spent, where it went, and which call was large.
  * Data comes from `usage` events; a call is one model request, not a user turn.
  */
-export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
+export function UsagePanel({ open, events, maxContext = 0, onClose }: UsagePanelProps) {
   const { t } = useT()
   const stats = useMemo(() => deriveUsageStats(events), [events])
   const [agent, setAgent] = useState('all')
@@ -221,10 +223,26 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                     {summary.cacheHit == null ? '—' : `${Math.round(summary.cacheHit * 100)}%`}
                   </b>
                 </span>
-                {stats.contextTokens != null && (
+                {summary.avgLatency != null && (
                   <span>
-                    {t('usage.context')}{' '}
-                    <b className="font-mono text-foreground">{fmtTokens(stats.contextTokens)}</b>
+                    {t('usage.latency')} <b className="font-mono text-foreground">{summary.avgLatency} ms</b>
+                  </span>
+                )}
+                {stats.contextTokens != null && maxContext > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    {t('usage.context')}
+                    <span className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                      <span
+                        className={`block h-full ${
+                          stats.contextTokens / maxContext >= 0.8 ? 'bg-destructive' : 'bg-teal'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.round((stats.contextTokens / maxContext) * 100))}%` }}
+                      />
+                    </span>
+                    <b className="font-mono text-foreground">
+                      {fmtTokens(stats.contextTokens)} / {fmtTokens(maxContext)}
+                    </b>
+                    <span>({Math.min(100, Math.round((stats.contextTokens / maxContext) * 100))}%)</span>
                   </span>
                 )}
                 <span className="ml-auto">{filteredActive ? t('usage.filtered') : t('usage.wholeSession')}</span>
@@ -425,6 +443,7 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                         <th className="px-2 py-1 text-right font-medium">{t('usage.cachedInput')}</th>
                         <th className="px-2 py-1 text-right font-medium">{t('usage.output')}</th>
                         <th className="px-2 py-1 text-right font-medium">{t('usage.total')}</th>
+                        <th className="px-2 py-1 text-right font-medium">{t('usage.duration')}</th>
                         <th className="px-2 py-1 text-right font-medium">{t('usage.cost')}</th>
                       </tr>
                     </thead>
@@ -451,6 +470,9 @@ export function UsagePanel({ open, events, onClose }: UsagePanelProps) {
                           <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(c.cacheRead)}</td>
                           <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(c.output)}</td>
                           <td className="px-2 py-0.5 text-right font-mono">{fmtTokens(c.total)}</td>
+                          <td className="px-2 py-0.5 text-right font-mono text-muted-foreground">
+                            {c.durationMs != null ? `${c.durationMs} ms` : '—'}
+                          </td>
                           <td className="px-2 py-0.5 text-right font-mono text-muted-foreground">
                             {c.hasCost ? fmtCost(c.cost) : '—'}
                           </td>

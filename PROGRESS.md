@@ -79,3 +79,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 用量面板 · 按规格重做：口径改为“模型调用”；顶部四个主指标（成本/输入/输出/调用数）；未缓存/缓存输入拆分；堆叠柱状图（按调用，可切时间，图例可隐藏系列）；点击柱子选中并在下方显示详情；可排序调用明细表；Agent/模型筛选与“当前筛选/整个会话”标识；上下文估算独立展示；成本缺失显示“未配置价格/下限”。235 测试
 - 2026-10-19 · 联网 · 默认引擎统一为 bing：本地 env 与 web.json 复位为 bing；`pickProvider` 在首选引擎未配置（缺 key/URL）时回退 bing 并在结果里注明；博查/DeepSeek/百度 保持显式选择。236 测试
 - 2026-10-19 · 架构 · 联网工具改为内置：`packages/web-mcp` 的实现移入 `packages/core/src/web/`，`makeTools()` 按 `MICRO_WEB` 注册 `web_search`/`web_fetch`（`network: true`），删除 server 的自动注入与整个 web-mcp 包；MCP 只留给外部工具。`micro-harness mcp` 新增 `--allow-net`（默认不暴露网络）。230 测试
+- 2026-10-19 · 体验 · ① 审批卡为 `edit_file`/`write_file` 渲染行级 diff（原始参数折叠保留），服务端在 permission.request 里带旧内容；② usage 记录 `durationMs`，面板增加平均耗时、明细耗时列、上下文/预算进度条；`GET /api/limits` 暴露上下文预算；③ CI 增加 Linux bubblewrap job。234 测试

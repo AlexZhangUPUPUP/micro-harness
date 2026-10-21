@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Added
+
+- Approval cards render a line diff for `edit_file` / `write_file` (raw arguments
+  stay one click away), so a write can be judged before it happens.
+- Usage: per-call latency and a context-vs-budget bar; `/api/limits` exposes the
+  configured context budget.
+
 ## [0.2.0] — 2026-10-19
 
 ### Added

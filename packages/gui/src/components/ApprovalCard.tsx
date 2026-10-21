@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PendingApproval } from '../lib/approvals.ts'
 import { useT } from '../lib/i18n.tsx'
+import { approvalDiff } from '../lib/approvalDiff.ts'
 
 type Phase = 'pending' | 'sending' | 'resolved'
 
@@ -37,6 +38,7 @@ export function ApprovalCard({
   }
 
   const argsJson = approval.args === undefined ? '{}' : JSON.stringify(approval.args, null, 2)
+  const diff = approvalDiff(approval.tool, approval.args, approval.preview?.before)
   const verdict = resolved ? (decision ? t('approval.allowed') : t('approval.denied')) : t('approval.title')
 
   return (
@@ -86,11 +88,39 @@ export function ApprovalCard({
 
         <div className="mt-1.5">
           <div className="mb-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-            {t('approval.arguments')}
+            {diff ? t('approval.diff') : t('approval.arguments')}
           </div>
-          <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
-            {argsJson}
-          </pre>
+          {diff ? (
+            <>
+              <pre className="max-h-48 overflow-auto rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[11px] leading-relaxed">
+                {diff.map((line, i) => (
+                  <div
+                    key={i}
+                    className={
+                      line.kind === 'add'
+                        ? 'bg-teal/10 text-teal'
+                        : line.kind === 'del'
+                          ? 'bg-destructive/10 text-destructive'
+                          : 'text-muted-foreground'
+                    }
+                  >
+                    {line.kind === 'add' ? '+ ' : line.kind === 'del' ? '- ' : '  '}
+                    {line.text || ' '}
+                  </div>
+                ))}
+              </pre>
+              <details className="mt-1">
+                <summary className="cursor-pointer text-[10px] text-muted-foreground">{t('approval.raw')}</summary>
+                <pre className="mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-muted/30 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                  {argsJson}
+                </pre>
+              </details>
+            </>
+          ) : (
+            <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-muted/40 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+              {argsJson}
+            </pre>
+          )}
         </div>
 
         {!resolved && (

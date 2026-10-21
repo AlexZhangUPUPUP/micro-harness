@@ -229,6 +229,7 @@ export class Harness {
         tokens: estimateTokens(this.messages),
       })
 
+      const startedAt = Date.now()
       const { message, usage } = await this.#provider.chat({
         model: this.model,
         messages: this.messages,
@@ -243,6 +244,7 @@ export class Harness {
           }
         },
       })
+      const durationMs = Date.now() - startedAt
       this.messages.push(message)
       if (usage) {
         const input = usage.prompt_tokens ?? 0
@@ -264,6 +266,7 @@ export class Harness {
           ...(cacheRead > 0 ? { cacheRead } : {}),
           ...(reasoning > 0 ? { reasoning } : {}),
           model: this.model,
+          durationMs,
           cost: price
             ? ((input - cacheRead) / 1e6) * price.input +
               (cacheRead / 1e6) * (price.inputCached ?? price.input) +
@@ -327,12 +330,26 @@ export class Harness {
 
       if (this.#needsApproval(name)) {
         const id = `perm:${call.id}`
+        // A write is easier to approve with the current content in hand.
+        let preview: { before?: string } | undefined
+        if ((name === 'write_file' || name === 'edit_file') && this.#toolCtx.fs) {
+          const target = (args as { path?: unknown })?.path
+          if (typeof target === 'string' && target) {
+            try {
+              const before = await this.#toolCtx.fs.read(this.#toolCtx.fs.resolve(target))
+              preview = { before: before.length > 200_000 ? before.slice(0, 200_000) : before }
+            } catch {
+              /* new file or unreadable: no preview */
+            }
+          }
+        }
         this.log.emit({
           type: 'permission.request',
           id,
           tool: name,
           args,
           ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
+          ...(preview ? { preview } : {}),
         })
         let decision: 'allow' | 'deny' = 'deny'
         try {

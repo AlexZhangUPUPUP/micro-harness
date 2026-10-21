@@ -259,6 +259,7 @@ export interface UsagePoint {
   output: number
   cacheRead: number
   reasoning: number
+  durationMs?: number
   cost: number
   /** False when the provider/pricing did not report a cost for this call. */
   hasCost: boolean
@@ -289,6 +290,8 @@ export interface UsageSummary {
   avgPerCall: number
   peak: number
   cacheHit: number | null
+  /** Mean model latency over calls that recorded it. */
+  avgLatency: number | null
 }
 
 export interface UsageStats extends UsageSummary {
@@ -307,6 +310,8 @@ export function summarizeCalls(calls: UsageCall[]): UsageSummary {
   let reasoning = 0
   let cost = 0
   let priced = 0
+  let latency = 0
+  let latencyCount = 0
   for (const c of calls) {
     input += c.input
     output += c.output
@@ -314,6 +319,10 @@ export function summarizeCalls(calls: UsageCall[]): UsageSummary {
     reasoning += c.reasoning
     cost += c.cost
     if (c.hasCost) priced += 1
+    if (c.durationMs != null) {
+      latency += c.durationMs
+      latencyCount += 1
+    }
   }
   const count = calls.length
   const total = input + output
@@ -330,6 +339,7 @@ export function summarizeCalls(calls: UsageCall[]): UsageSummary {
     avgPerCall: count ? Math.round(total / count) : 0,
     peak: calls.reduce((m, c) => Math.max(m, c.total), 0),
     cacheHit: input > 0 ? cacheRead / input : null,
+    avgLatency: latencyCount ? Math.round(latency / latencyCount) : null,
   }
 }
 
@@ -354,6 +364,7 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
       cost?: number
       reasoning?: number
       model?: string
+      durationMs?: number
     }
     const i = Number(ev.input ?? 0)
     const o = Number(ev.output ?? 0)
@@ -373,6 +384,7 @@ export function deriveUsageStats(events: TaggedEvent[]): UsageStats {
       output: o,
       cacheRead: c,
       reasoning: r,
+      ...(typeof ev.durationMs === 'number' ? { durationMs: ev.durationMs } : {}),
       cost: money,
       hasCost: ev.cost !== undefined,
       total,

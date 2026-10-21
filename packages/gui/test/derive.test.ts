@@ -358,6 +358,7 @@ test('deriveUsageStats handles an empty session', () => {
   expect(stats.pricing).toBe('none')
   expect(stats.calls).toEqual([])
   expect(stats.contextTokens).toBeNull()
+  expect(stats.avgLatency).toBeNull()
 })
 
 
@@ -376,4 +377,17 @@ test('deriveUsageStats groups by agent and model and counts reasoning', () => {
   expect(onlyMain).toMatchObject({ count: 1, input: 100, output: 10, cacheRead: 40, cost: 0.001, pricing: 'full' })
   const unpriced = summarizeCalls(stats.calls.filter((c) => c.agentId !== 'main'))
   expect(unpriced.pricing).toBe('none')
+})
+
+
+test('deriveUsageStats averages the latency of calls that recorded it', () => {
+  const events = [
+    ev('main', null, { type: 'usage', input: 10, output: 1, durationMs: 1000, model: 'm' }),
+    ev('main', null, { type: 'usage', input: 20, output: 2, durationMs: 3000, model: 'm' }),
+    ev('main', null, { type: 'usage', input: 30, output: 3, model: 'm' }),
+  ]
+  const stats = deriveUsageStats(events)
+  expect(stats.avgLatency).toBe(2000)
+  expect(stats.calls[0]?.durationMs).toBe(1000)
+  expect(stats.calls[2]?.durationMs).toBeUndefined()
 })

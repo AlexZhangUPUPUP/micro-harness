@@ -128,6 +128,8 @@ export interface ServerOptions {
   maxSteps?: number
   /** Stop a run once its cumulative cost exceeds this many USD. */
   maxCost?: number
+  /** Context budget used by compaction, exposed to the GUI. */
+  maxContextTokens?: number
   /** OS-level confinement for the shell tool (none when omitted). */
   sandbox?: Sandbox
   /** The requested mode, so the GUI can show "off" vs "unavailable". */
@@ -335,6 +337,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       sandbox: options.sandbox,
       network: spec.net,
       maxSteps: options.maxSteps,
+      maxContextTokens: options.maxContextTokens,
       systemPrompt: systemFor(sessionCwd),
       pricing: options.pricing,
       maxToolOutput: options.maxToolOutput,
@@ -507,6 +510,9 @@ export function createServer(options: ServerOptions): HarnessServer {
     }
     if (url.pathname === '/api/budget') {
       return json({ maxCost: options.maxCost ?? null })
+    }
+    if (url.pathname === '/api/limits') {
+      return json({ maxContext: options.maxContextTokens ?? 24_000 })
     }
     if (url.pathname === '/api/sandbox') {
       return json({

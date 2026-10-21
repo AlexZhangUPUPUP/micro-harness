@@ -59,6 +59,7 @@ export default function App() {
   const [webEnabled, setWebEnabled] = useState(true)
   const [budget, setBudget] = useState<number | null>(null)
   const [sandbox, setSandbox] = useState<{ mode: string; kind: string } | null>(null)
+  const [maxContext, setMaxContext] = useState(0)
   const [commands, setCommands] = useState<CommandInfo[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [webProviders, setWebProviders] = useState<WebProvider[]>([])
@@ -160,6 +161,13 @@ export default function App() {
       .then(() => void refreshSessions())
       .catch((err: unknown) => setError(String((err as Error).message)))
   }
+
+  useEffect(() => {
+    void api
+      .limits()
+      .then((d) => setMaxContext(d.maxContext))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     void api
@@ -677,7 +685,7 @@ export default function App() {
       </div>
 
       <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
-      <UsagePanel open={usageOpen} events={events} onClose={() => setUsageOpen(false)} />
+      <UsagePanel open={usageOpen} events={events} maxContext={maxContext} onClose={() => setUsageOpen(false)} />
 
       <CommandPalette
         open={paletteOpen}

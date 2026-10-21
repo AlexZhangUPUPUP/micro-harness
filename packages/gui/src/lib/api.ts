@@ -178,6 +178,8 @@ export const api = {
           body: JSON.stringify({ preset }),
         })
       : j<{ ok: boolean }>('/api/permission', { method: 'POST', body: JSON.stringify({ preset }) }),
+  /** The configured context budget. */
+  limits: () => j<{ maxContext: number }>('/api/limits'),
   /** The active OS sandbox (mode is the request, kind is what actually runs). */
   sandbox: () => j<{ mode: string; kind: string }>('/api/sandbox'),
   /** Prompt templates and skills loaded from the workspace. */

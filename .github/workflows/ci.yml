@@ -20,3 +20,17 @@ jobs:
       - run: bun run eval:mock
       - run: bun run docs:build
       - run: cd packages/gui && bun run build
+
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      # GitHub runners restrict unprivileged user namespaces on newer images;
+      # the test skips itself if bwrap still cannot start, so this never lies.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - run: bun test packages/core/test/sandbox.test.ts
