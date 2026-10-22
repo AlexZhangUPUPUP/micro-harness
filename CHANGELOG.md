@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+当前未发布的 v0.2.2 候选内容：
+
+### Added
+
+- Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
+- 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
+- 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。
+- 新增中文版本路线图，覆盖 core、server、GUI、协议、评测和发布门槛。
+
+### Fixed
+
+- 修复旧检查点恢复时已淘汰的用户消息可能重新变成最新证据的问题。
+- 修复不同工具输出截断方式导致同一个工具调用被重复记录的问题。
+- 修复上下文投影可能挤掉不可裁剪的最新用户输入的问题。
+
+### Validation
+
+- 53 个上下文、恢复、Provider 和 Server 定向测试通过。
+- TypeScript 与上下文 mock 评测通过；真实模型结果和限制见 `specs/007-task-state/tasks.md`。
+
+### Release notes
+
+- 以上内容尚未创建 v0.2.2 tag，也不代表完整任务状态、共享 Agent 预算或进程级恢复已经完成。
+
 ## [0.2.1] — 2026-10-21
 
 ### Added
