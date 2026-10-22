@@ -1,12 +1,15 @@
 import type { TaggedEvent } from '../events.ts'
 import { truncateToolOutput } from './budget.ts'
 import { userContent, type ChatMessage, type ToolCall } from '../model.ts'
+import { validateTaskState, type TaskStateSnapshot } from '../task/index.ts'
 
 /** 保存实际模型窗口及原始工具结果的截断策略。 */
 export interface ContextCheckpoint {
   version: 1
   messages: ChatMessage[]
   maxToolOutput: number
+  /** 可选来源状态与旧版窗口检查点兼容。 */
+  taskState?: TaskStateSnapshot
 }
 
 /** 检查持久化消息结构，避免损坏快照进入模型请求。 */
@@ -55,11 +58,13 @@ export function validateCheckpoint(input: unknown): input is ContextCheckpoint {
     && checkpoint.messages.every(validMessage)
     && typeof checkpoint.maxToolOutput === 'number'
     && Number.isFinite(checkpoint.maxToolOutput) && checkpoint.maxToolOutput >= 0
+    && (checkpoint.taskState === undefined || validateTaskState(checkpoint.taskState))
 }
 
 /** 克隆模型窗口，防止后续消息变更污染已发出的检查点。 */
-export function createCheckpoint(messages: ChatMessage[], maxToolOutput: number): ContextCheckpoint {
-  return { version: 1, messages: structuredClone(messages), maxToolOutput }
+export function createCheckpoint(messages: ChatMessage[], maxToolOutput: number, taskState?: TaskStateSnapshot): ContextCheckpoint {
+  return { version: 1, messages: structuredClone(messages), maxToolOutput,
+    ...(taskState ? { taskState: structuredClone(taskState) } : {}) }
 }
 
 /** 找到指定 Agent 最新的有效窗口替换事件。 */

@@ -2,6 +2,8 @@
 
 Autonomous run log. Newest last. One line per meaningful step: time · phase · what · verification.
 
+当前后续版本安排见 [版本功能计划](docs/version-plan.zh-CN.md)；以下日期日志为历史验证结果，不代表当前版本的全量回归。
+
 - 2026-10-15 · P0 · monorepo restructure (src→packages/core, workspaces, Bun toolchain, CI→bun) · `bun test` 7/7, `bun run typecheck` clean
 - 2026-10-15 · P1 · kernel: Context (provide/get/inject), plugin lifecycle (waiting/active/failed), scope fork+isolate, event bus, config schema · 17/17 tests, typecheck clean
 - 2026-10-15 · P2a · core event-driven: events.ts (AgentEvent + EventHub/AgentLog with agentId/parentId), provider.ts (Provider + openaiProvider), harness.ts emits events + parallel tool calls + abort signal · 22/22 tests, typecheck clean
@@ -81,3 +83,4 @@ Autonomous run log. Newest last. One line per meaningful step: time · phase · 
 - 2026-10-19 · 架构 · 联网工具改为内置：`packages/web-mcp` 的实现移入 `packages/core/src/web/`，`makeTools()` 按 `MICRO_WEB` 注册 `web_search`/`web_fetch`（`network: true`），删除 server 的自动注入与整个 web-mcp 包；MCP 只留给外部工具。`micro-harness mcp` 新增 `--allow-net`（默认不暴露网络）。230 测试
 - 2026-10-19 · 体验 · ① 审批卡为 `edit_file`/`write_file` 渲染行级 diff（原始参数折叠保留），服务端在 permission.request 里带旧内容；② usage 记录 `durationMs`，面板增加平均耗时、明细耗时列、上下文/预算进度条；`GET /api/limits` 暴露上下文预算；③ CI 增加 Linux bubblewrap job。234 测试
 - 2026-10-19 · 沙箱 · M4：默认在沙箱内隐藏 `~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.config/gh`、`~/.kube`、`~/.docker/config.json`、`~/.netrc`（Seatbelt deny / bwrap tmpfs），并清洗 `*_KEY`/`*_TOKEN`/`SSH_AUTH_SOCK` 等环境变量；`--sandbox-secrets=allow` 可关闭。238 测试
+- 2026-10-22 · 版本规划 · 新增 `docs/version-plan.zh-CN.md`：140 项具名清单，明确 v0.2.2～v0.11、v1.0 门槛及 v1.1+ 扩展；区分已推送基线、本地实现和尚未发布。ROADMAP 增加当前入口并保留历史基础建设记录。主 Agent 编写与校验，子 Agent 只读核查能力缺口；仅检查 Markdown 解析、相对链接、编号唯一性和 diff，未运行代码测试或发布。

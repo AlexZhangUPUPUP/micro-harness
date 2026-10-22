@@ -115,8 +115,8 @@ test('validity requires compaction across distinct stages', () => {
   expect(validityIssues('summarize', stages, 2)).toContain('summary adoption did not span two distinct stages')
 })
 
-// 摘要失忆必须能区分输入选择丢失与回答生成失败，诊断过程不调用网络。
-test('offline audit identifies facts excluded before summary generation', async () => {
+// 改进后关键进度可见，诊断仍重建真实摘要输入且不调用网络。
+test('offline audit confirms progress facts survive summary input selection', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'context-audit-test-'))
   try {
     const config = readConfig(['--mock', `--out-dir=${dir}`], {})
@@ -125,8 +125,10 @@ test('offline audit identifies facts excluded before summary generation', async 
     const audit = await auditSummaries({ version: 1, assessment: 'mechanism-only', config: config.report, attempts: [result] })
     expect(audit.networkCalls).toBe(0)
     expect(audit.inputs).toHaveLength(3)
-    expect(audit.misses.some((miss) => miss.sourceVisible && !miss.summaryInputVisible
-      && miss.location === 'pre-summary transcript selection')).toBe(true)
+    expect(result.status).toBe('pass')
+    expect(audit.misses).toEqual([])
+    const expected = scenario.stages[0]!.expected.completed_step!
+    expect(JSON.stringify(audit.inputs[0]!.messages)).toContain(expected)
   } finally {
     // 清理仅供诊断测试使用的临时日志。
     rmSync(dir, { recursive: true, force: true })

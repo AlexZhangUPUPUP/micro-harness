@@ -200,7 +200,8 @@ test('long summary input retains the initial constraint and latest pending corre
   expect(transcript).toContain('RULE: preserve public API')
   expect(transcript).toContain('LATEST CORRECTION: use port 9001')
   expect(transcript).toContain('PENDING: run smoke test')
-  expect(transcript).toContain('transcript middle omitted')
+  // 选择器以结构化省略记录替代旧的全局头尾标记。
+  expect(transcript).toContain('omitted_records')
 })
 
 test('late summary responses still report usage after parent cancellation', async () => {

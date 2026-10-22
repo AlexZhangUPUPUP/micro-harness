@@ -1,10 +1,12 @@
 import type { ChatMessage, ToolDef, Usage } from '../model.ts'
 import type { TaggedEvent } from '../events.ts'
 import { estimateRequestTokens, estimateTokens, truncateToolOutput } from './budget.ts'
-import { compactMessagesAsync } from './compact.ts'
+import { compactMessages, compactMessagesAsync } from './compact.ts'
 import { normalizeMessages } from './normalize.ts'
 import { capMessage, createCheckpoint, reconstructContext, type ContextCheckpoint } from './checkpoint.ts'
 import { DEFAULT_TOOL_OUTPUT_CHARS, type Summarizer, type TrimResult, type Truncated } from './types.ts'
+import { TaskState, isTaskProjection } from '../task/index.ts'
+import { restoreTaskState, taskProjection, withTaskProjection } from './task-state.ts'
 
 /** 统一管理模型窗口的预算、工具结果和恢复策略。 */
 export interface ContextManagerOptions {
@@ -47,6 +49,7 @@ export class ContextManager {
   private baseline?: UsageBaseline
   private readonly maxToolOutput: number
   private readonly maxTokens: number
+  private taskState = new TaskState()
 
   constructor(private readonly options: ContextManagerOptions) {
     this.maxToolOutput = options.maxToolOutput ?? DEFAULT_TOOL_OUTPUT_CHARS
@@ -60,6 +63,8 @@ export class ContextManager {
 
   /** 仅新加入的原始工具结果执行截断，既有窗口保持字节稳定。 */
   append(message: ChatMessage): ChatMessage {
+    // 状态在工具截断前观察原文，独立于后续可丢弃的模型窗口。
+    this.taskState.observe(message)
     const appended = capMessage(message, this.maxToolOutput)
     this.messages.push(appended)
     return appended
@@ -113,10 +118,7 @@ export class ContextManager {
     const correction = this.correction(normalized)
     const overhead = estimateRequestTokens(normalized, this.options.tools) - estimateTokens(normalized)
     const messageBudget = Math.max(0, this.inputLimit() - overhead - correction)
-    const result = await compactMessagesAsync(normalized, {
-      maxTokens: messageBudget, keepHead: this.options.compact !== 'tail', signal,
-      summarizer: this.options.compact === 'summarize' ? this.options.summarizer : undefined,
-    })
+    const result = await this.compactWindow(normalized, messageBudget, signal)
     signal?.throwIfAborted()
     // 压缩或规范化改变窗口后，原请求的 usage 校准失效。
     const changed = result.changed || JSON.stringify(result.messages) !== JSON.stringify(this.messages)
@@ -130,13 +132,40 @@ export class ContextManager {
       outputReserveTokens: this.outputReserve() }
   }
 
+  /** 来源投影只在压缩后启用，并在压缩前为自身预留完整成本。 */
+  private async compactWindow(messages: ChatMessage[], messageBudget: number, signal?: AbortSignal): Promise<TrimResult> {
+    const needsCompression = estimateTokens(messages) > messageBudget
+    // 正常短上下文直接复用，避免每次请求都计算最小裁剪方案。
+    if (!needsCompression && !messages.some(isTaskProjection)) {
+      return compactMessages(messages, { maxTokens: messageBudget, signal })
+    }
+    const source = messages.filter((message) => !isTaskProjection(message))
+    // 首条约束、最新输入和最新工具组不可被投影挤出窗口。
+    const minimum = compactMessages(source, { maxTokens: 0, keepHead: this.options.compact !== 'tail' })
+    const available = Math.max(0, messageBudget - estimateTokens(minimum.messages))
+    const projection = needsCompression || messages.some(isTaskProjection)
+      ? taskProjection(this.taskState, Math.min(900, Math.floor(messageBudget * 0.3), available)) : undefined
+    const projectionCost = projection ? estimateRequestTokens([projection]) : 0
+    const result = await compactMessagesAsync(source, {
+      maxTokens: Math.max(0, messageBudget - projectionCost), keepHead: this.options.compact !== 'tail', signal,
+      summarizer: this.options.compact === 'summarize' ? this.options.summarizer : undefined,
+    })
+    // 投影与摘要共享同一输入总预算，不能在验证后偷偷增加消息。
+    if (projection) result.messages = withTaskProjection(result.messages, projection)
+    result.tokens = estimateTokens(result.messages)
+    return result
+  }
+
   /** 恢复只替换模型窗口，后续新消息继续采用本次运行的配置。 */
   restore(events: TaggedEvent[], agentId = 'main'): void {
-    this.replace(reconstructContext(events, this.options.systemPrompt, agentId, this.maxToolOutput))
+    const taskState = restoreTaskState(events, agentId)
+    const messages = reconstructContext(events, this.options.systemPrompt, agentId, this.maxToolOutput)
+    this.replace(messages)
+    this.taskState = taskState
   }
 
   /** 保存实际窗口及当前运行策略，返回独立快照。 */
   checkpoint(): ContextCheckpoint {
-    return createCheckpoint(this.messages, this.maxToolOutput)
+    return createCheckpoint(this.messages, this.maxToolOutput, this.taskState.snapshot())
   }
 }
