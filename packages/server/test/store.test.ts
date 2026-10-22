@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { SessionStore, deriveMeta, ftsMatch } from '../src/store.ts'
@@ -100,6 +100,37 @@ test('index is disposable: delete index.sqlite and rebuild from JSONL', () => {
     expect(store.search('needle').length).toBeGreaterThan(0)
     store.close()
   } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// 连续重建必须保持主、子 Agent 总用量稳定，同时保留人工元数据。
+test('rebuilding repeatedly preserves usage totals and manually edited metadata', () => {
+  // 准备包含主、子 Agent 用量和后续人工重命名的会话。
+  const dir = sandbox()
+  const store = new SessionStore(dir)
+  try {
+    const initial = store.create({ model: 'm', cwd: '/w', parentId: 'parent' })
+    store.append(initial.id, tag('main', null, 1, { type: 'user.message', text: 'original title' }))
+    store.append(initial.id, tag('main', null, 2, { type: 'usage', input: 100, output: 20, cost: 0.01 }))
+    store.append(initial.id, tag('main/child', 'main', 1, { type: 'usage', input: 50, output: 10, cost: 0.02 }))
+    const renamed = store.renameSession(initial.id, 'manual title')
+
+    // 重复回放同一日志，索引和磁盘会话头都不得重复累计。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(store.rebuild()).toBe(3)
+      const restored = store.require(initial.id)
+      expect(restored).toMatchObject({
+        title: 'manual title', model: 'm', cwd: '/w', parentId: 'parent',
+        createdAt: renamed.createdAt, input: 150, output: 30,
+      })
+      expect(restored.cost).toBeCloseTo(0.03)
+      expect(JSON.parse(readFileSync(store.metaFile(initial.id), 'utf8'))).toEqual(restored)
+      expect(store.events(initial.id)).toHaveLength(3)
+    }
+  } finally {
+    // 关闭数据库后移除本用例的临时文件。
+    store.close()
     rmSync(dir, { recursive: true, force: true })
   }
 })

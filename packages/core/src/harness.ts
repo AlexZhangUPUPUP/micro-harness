@@ -13,20 +13,12 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { cacheReadTokens, reasoningTokens, userContent } from './model.ts'
-import {
-  compactMessages,
-  compactMessagesAsync,
-  DEFAULT_TOOL_OUTPUT_CHARS,
-  estimateTokens,
-  truncateToolOutput,
-  type Summarizer,
-} from './context.ts'
-import { makeSummarizer } from './compact.ts'
+import { ContextManager, makeSummarizer, type TrimResult } from './context/index.ts'
 import { localFs, type FileSystem } from './fs.ts'
-import type { ChatMessage, ToolCall } from './model.ts'
+import type { ChatMessage, ToolCall, Usage } from './model.ts'
 import type { Provider } from './provider.ts'
 import { dispatch, makeTools, toolDefs, type Tool, type ToolContext, type ToolResult } from './tools.ts'
-import { AgentLog, EventHub } from './events.ts'
+import { AgentLog, EventHub, type TaggedEvent } from './events.ts'
 import type { Sandbox } from './sandbox.ts'
 
 export interface HarnessOptions {
@@ -35,7 +27,12 @@ export interface HarnessOptions {
   cwd: string
   allowBash?: boolean
   maxSteps?: number
+  /** 完整请求的估算预算，包含输出预留和安全余量。 */
   maxContextTokens?: number
+  /** 模型输出预留；默认最多 4096 tokens，且不超过总预算的 15%。 */
+  contextOutputReserveTokens?: number
+  /** 本地粗估安全余量；默认最多 512 tokens，且不超过总预算的 5%。 */
+  contextSafetyMarginTokens?: number
   systemPrompt?: string
   /** Run the tool calls of one assistant message concurrently (default true). */
   parallelTools?: boolean
@@ -60,11 +57,9 @@ export interface HarnessOptions {
   /** Cap on a single tool result, in characters, applied when it is appended. */
   maxToolOutput?: number
   /**
-   * How the window is compacted when it fills:
-   *   `drop-middle` (default) — keep the head (constraints + cacheable prefix) and
-   *                             the newest turns, drop the middle
-   *   `tail`                  — keep only the newest turns (ablation; loses the head)
-   *   `summarize`             — fold the dropped turns into one model-written recap
+   * 工作窗口压缩策略：drop-middle 优先保留首轮约束和近期步骤，
+   * tail 仅保留近期内容，summarize 将移除历史转为有界交接摘要。
+   * 三种策略均由 ContextManager 在发送前检查完整请求估算预算。
    */
   compact?: 'drop-middle' | 'tail' | 'summarize'
   /** Stop the run once the cumulative cost passes this many USD. */
@@ -131,7 +126,9 @@ export function withProjectInstructions(prompt: string, cwd: string): string {
   return extra ? `${prompt}\n\nProject instructions (AGENTS.md; these override general defaults):\n\n${extra}` : prompt
 }
 
+/** 驱动模型和工具执行，所有模型窗口状态交由 ContextManager 管理。 */
 export class Harness {
+  /** 兼容历史观察入口；内部修改与恢复均通过 ContextManager。 */
   readonly messages: ChatMessage[]
   readonly hub: EventHub
   readonly log: AgentLog
@@ -139,14 +136,11 @@ export class Harness {
   readonly #provider: Provider
   readonly #tools: Tool[]
   readonly #system: string
-  readonly #maxToolOutput: number
-  readonly #compact: 'drop-middle' | 'tail' | 'summarize'
-  readonly #summarizer?: Summarizer
+  readonly #context: ContextManager
   readonly #maxCost?: number
   #spent = 0
   readonly #toolCtx: ToolContext
   readonly #maxSteps: number
-  readonly #maxContextTokens: number
   readonly #parallelTools: boolean
   readonly #approval: ApprovalMode
   readonly #confirm?: ConfirmFn
@@ -169,7 +163,6 @@ export class Harness {
       fs: opts.fs ?? localFs(opts.cwd),
     }
     this.#maxSteps = opts.maxSteps ?? 24
-    this.#maxContextTokens = opts.maxContextTokens ?? 24_000
     this.#parallelTools = opts.parallelTools ?? true
     this.#approval = opts.approval ?? 'full-auto'
     this.#confirm = opts.confirm
@@ -178,124 +171,140 @@ export class Harness {
 
     const system = opts.systemPrompt ?? defaultSystemPrompt(opts.cwd)
     this.#system = system
-    this.#maxToolOutput = opts.maxToolOutput ?? DEFAULT_TOOL_OUTPUT_CHARS
-    this.#compact = opts.compact ?? 'drop-middle'
-    this.#summarizer = opts.compact === 'summarize' ? makeSummarizer(opts.provider, opts.model) : undefined
     this.#maxCost = opts.maxCost
-    this.messages = [{ role: 'system', content: system }]
+    this.#context = this.#createContext(opts, system)
+    this.messages = this.#context.messages
     this.log.emit({ type: 'session.start', model: this.model, cwd: opts.cwd, parentId: opts.parentId ?? null })
   }
 
-  /** Run one user turn to completion; returns the final assistant text. */
-  async send(
-    prompt: string,
-    signal?: AbortSignal,
-    images?: Array<{ mimeType: string; data: string }>,
-  ): Promise<string> {
+  /** 创建工作窗口，摘要用量走与普通请求相同的计费入口。 */
+  #createContext(opts: HarnessOptions, systemPrompt: string): ContextManager {
+    const summarizer = opts.compact === 'summarize'
+      ? makeSummarizer(opts.provider, opts.model, {
+          maxInputTokens: Math.max(1, Math.floor((opts.maxContextTokens ?? 24_000) * 0.8)),
+          onUsage: (usage, durationMs) => this.#recordUsage(usage, durationMs, 'summary'),
+        })
+      : undefined
+    return new ContextManager({
+      systemPrompt, maxTokens: opts.maxContextTokens ?? 24_000,
+      maxToolOutput: opts.maxToolOutput, compact: opts.compact, summarizer,
+      tools: toolDefs(this.#tools), outputReserveTokens: opts.contextOutputReserveTokens,
+      safetyMarginTokens: opts.contextSafetyMarginTokens,
+    })
+  }
+
+  /** 从事件恢复工作窗口；原始日志与快照规则由上下文模块统一处理。 */
+  restore(events: TaggedEvent[]): void {
+    this.#context.restore(events, this.log.agentId)
+  }
+
+  /** 添加用户输入并驱动步骤，不直接改写上下文消息数组。 */
+  async send(prompt: string, signal?: AbortSignal, images?: Array<{ mimeType: string; data: string }>): Promise<string> {
+    signal?.throwIfAborted()
     this.#toolCtx.signal = signal
-    this.messages.push({ role: 'user', content: userContent(prompt, images) })
-    this.log.emit({ type: 'user.message', text: prompt })
-
+    this.#context.append({ role: 'user', content: userContent(prompt, images) })
+    this.log.emit({ type: 'user.message', text: prompt, ...(images?.length ? { images } : {}) })
+    // 每步的窗口准备、模型调用和工具执行各自承担单一职责。
     for (let step = 1; step <= this.#maxSteps; step++) {
-      this.log.emit({ type: 'turn.start', turn: step })
-      let streamedText = false
-
-      const trim =
-        this.#compact === 'summarize'
-          ? await compactMessagesAsync(this.messages, { maxTokens: this.#maxContextTokens, summarizer: this.#summarizer })
-          : compactMessages(this.messages, {
-              maxTokens: this.#maxContextTokens,
-              keepHead: this.#compact !== 'tail',
-            })
-      const { messages, dropped, tokens, strategy } = trim
-      if (dropped > 0) {
-        this.messages.splice(0, this.messages.length, ...messages)
-        this.log.emit({
-          type: 'context.trim',
-          dropped,
-          tokens,
-          strategy,
-        })
-      }
-
-      // The Inspector: record exactly what this turn hands to the model, after
-      // trimming. Shallow-copy the array so a later push cannot rewrite history.
-      this.log.emit({
-        type: 'model.request',
-        model: this.model,
-        system: this.#system,
-        tools: this.#tools.map((t) => t.name),
-        messages: [...this.messages],
-        tokens: estimateTokens(this.messages),
-      })
-
-      const startedAt = Date.now()
-      const { message, usage } = await this.#provider.chat({
-        model: this.model,
-        messages: this.messages,
-        tools: toolDefs(this.#tools),
-        signal,
-        onDelta: (delta) => {
-          if (delta.type === 'text') {
-            streamedText = true
-            this.log.emit({ type: 'text.delta', text: delta.text })
-          } else {
-            this.log.emit({ type: 'thinking.delta', text: delta.text })
-          }
-        },
-      })
-      const durationMs = Date.now() - startedAt
-      this.messages.push(message)
-      if (usage) {
-        const input = usage.prompt_tokens ?? 0
-        const output = usage.completion_tokens ?? 0
-        const cacheRead = cacheReadTokens(usage)
-        const reasoning = reasoningTokens(usage)
-        const price = this.#pricing
-        if (price) {
-          this.#spent +=
-            ((input - cacheRead) / 1e6) * price.input +
-            (cacheRead / 1e6) * (price.inputCached ?? price.input) +
-            (output / 1e6) * price.output
-        }
-        this.log.emit({
-          type: 'usage',
-          input,
-          output,
-          // Only when the provider actually reported a hit, so events stay small.
-          ...(cacheRead > 0 ? { cacheRead } : {}),
-          ...(reasoning > 0 ? { reasoning } : {}),
-          model: this.model,
-          durationMs,
-          cost: price
-            ? ((input - cacheRead) / 1e6) * price.input +
-              (cacheRead / 1e6) * (price.inputCached ?? price.input) +
-              (output / 1e6) * price.output
-            : undefined,
-        })
-      }
-      // Budget breaker: a run must not be able to spend without limit.
-      if (this.#maxCost !== undefined && this.#spent > this.#maxCost) {
-        const text = `stopped: cost budget of $${this.#maxCost} exceeded (spent $${this.#spent.toFixed(6)})`
-        this.log.emit({ type: 'error', message: text, fatal: true })
-        this.log.emit({ type: 'turn.end', stopReason: 'budget', text })
-        return text
-      }
-
-      if (message.content && !streamedText) this.log.emit({ type: 'text.delta', text: String(message.content) })
-
-      const calls = message.tool_calls ?? []
-      if (calls.length === 0) {
-        const text = String(message.content ?? '')
-        this.log.emit({ type: 'turn.end', stopReason: 'stop', text })
-        return text
-      }
-
-      await this.#runTools(calls)
+      const result = await this.#runStep(step, signal)
+      if (result !== undefined) return result
     }
+    return this.#finish('(reached the step limit without a final answer)', 'max_steps')
+  }
 
-    const text = '(reached the step limit without a final answer)'
-    this.log.emit({ type: 'turn.end', stopReason: 'max_steps', text })
+  /** 在完整工具步骤之间准备窗口，预算失败时不调用模型。 */
+  async #runStep(step: number, signal?: AbortSignal): Promise<string | undefined> {
+    signal?.throwIfAborted()
+    const existingLimit = this.#costLimit()
+    if (existingLimit) return this.#finish(existingLimit, 'budget')
+    this.log.emit({ type: 'turn.start', turn: step })
+    const prepared = await this.#context.prepare(signal)
+    // 摘要也可能耗尽费用预算，必须在正式请求前再次检查。
+    const summaryLimit = this.#costLimit()
+    if (summaryLimit) return this.#finish(summaryLimit, 'budget')
+    this.#recordContext(prepared)
+    // 只在压缩改变窗口时保存请求前快照，避免逐请求重复存储完整历史。
+    if (prepared.changed) this.#checkpoint()
+    const { message, streamedText } = await this.#requestModel(prepared.outputReserveTokens, signal)
+    // 提供方忽略取消信号时也不能在迟到响应后执行工具。
+    signal?.throwIfAborted()
+    this.#context.append(message)
+    const modelLimit = this.#costLimit()
+    if (modelLimit) return this.#finish(modelLimit, 'budget')
+    if (message.content && !streamedText) this.log.emit({ type: 'text.delta', text: String(message.content) })
+    // 没有工具调用时结束当前用户轮；否则完整执行后保存窗口。
+    const calls = message.tool_calls ?? []
+    if (calls.length === 0) return this.#finish(String(message.content ?? ''), 'stop')
+    await this.#runTools(calls)
+    this.#checkpoint()
+  }
+
+  /** 记录真实压缩与模型输入；快照不受后续消息修改影响。 */
+  #recordContext(prepared: TrimResult & { inputTokens: number }): void {
+    if (prepared.changed) {
+      this.log.emit({ type: 'context.trim', dropped: prepared.dropped, tokens: prepared.tokens, strategy: prepared.strategy })
+    }
+    this.log.emit({
+      type: 'model.request', model: this.model, system: this.#system,
+      tools: this.#tools.map((tool) => tool.name), messages: structuredClone(this.messages),
+      tokens: prepared.inputTokens,
+    })
+  }
+
+  /** 模型请求只消费已准备窗口，用量同时反馈给估算器和费用统计。 */
+  async #requestModel(maxTokens: number, signal?: AbortSignal): Promise<{ message: ChatMessage; streamedText: boolean }> {
+    let streamedText = false
+    const messages = structuredClone(this.messages)
+    const started = Date.now()
+    const { message, usage } = await this.#provider.chat({
+      model: this.model, messages, tools: toolDefs(this.#tools), signal, maxTokens,
+      onDelta: (delta) => {
+        if (delta.type === 'text') streamedText = true
+        this.log.emit({ type: delta.type === 'text' ? 'text.delta' : 'thinking.delta', text: delta.text })
+      },
+    })
+    if (usage) {
+      this.#context.observeUsage(usage, messages)
+      this.#recordUsage(usage, Date.now() - started)
+    }
+    return { message, streamedText }
+  }
+
+  /** 普通生成与摘要共用费用计算，保持现有 usage 事件字段。 */
+  #recordUsage(usage: Usage, durationMs: number, purpose?: 'summary'): void {
+    const input = usage.prompt_tokens ?? 0
+    const output = usage.completion_tokens ?? 0
+    const cacheRead = cacheReadTokens(usage)
+    const reasoning = reasoningTokens(usage)
+    const price = this.#pricing
+    const cost = price
+      ? ((input - cacheRead) / 1e6) * price.input + (cacheRead / 1e6) * (price.inputCached ?? price.input) + (output / 1e6) * price.output
+      : undefined
+    this.#spent += cost ?? 0
+    this.log.emit({
+      type: 'usage', input, output, model: this.model, durationMs,
+      ...(cacheRead > 0 ? { cacheRead } : {}), ...(reasoning > 0 ? { reasoning } : {}),
+      ...(cost !== undefined ? { cost } : {}), ...(purpose ? { purpose } : {}),
+    })
+  }
+
+  /** 超过费用上限时沿用原有可见失败与停止原因。 */
+  #costLimit(): string | undefined {
+    if (this.#maxCost === undefined || this.#spent <= this.#maxCost) return undefined
+    const text = `stopped: cost budget of $${this.#maxCost} exceeded (spent $${this.#spent.toFixed(6)})`
+    this.log.emit({ type: 'error', message: text, fatal: true })
+    return text
+  }
+
+  /** 在事件流中持久化当前模型工作窗口，存储层只负责写入。 */
+  #checkpoint(): void {
+    this.log.emit({ type: 'context.checkpoint', checkpoint: this.#context.checkpoint() })
+  }
+
+  /** 完成事件后保存窗口，恢复时不会再次追加已收录的最终回复。 */
+  #finish(text: string, stopReason: string): string {
+    this.log.emit({ type: 'turn.end', stopReason, text })
+    this.#checkpoint()
     return text
   }
 
@@ -311,104 +320,80 @@ export class Harness {
     }
   }
 
-  async #runTools(calls: ToolCall[]): Promise<void> {
-    const runOne = async (call: ToolCall): Promise<{ call: ToolCall; result: ToolResult }> => {
-      const name = call.function?.name ?? ''
-      let args: unknown = {}
-      try {
-        args = JSON.parse(call.function?.arguments || '{}')
-      } catch {
-        /* keep the raw string in the event */
-      }
-      this.log.emit({
-        type: 'tool.call',
-        id: call.id,
-        name,
-        args,
-        ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
-      })
-
-      if (this.#needsApproval(name)) {
-        const id = `perm:${call.id}`
-        // A write is easier to approve with the current content in hand.
-        let preview: { before?: string } | undefined
-        if ((name === 'write_file' || name === 'edit_file') && this.#toolCtx.fs) {
-          const target = (args as { path?: unknown })?.path
-          if (typeof target === 'string' && target) {
-            try {
-              const before = await this.#toolCtx.fs.read(this.#toolCtx.fs.resolve(target))
-              preview = { before: before.length > 200_000 ? before.slice(0, 200_000) : before }
-            } catch {
-              /* new file or unreadable: no preview */
-            }
-          }
-        }
-        this.log.emit({
-          type: 'permission.request',
-          id,
-          tool: name,
-          args,
-          ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
-          ...(preview ? { preview } : {}),
-        })
-        let decision: 'allow' | 'deny' = 'deny'
-        try {
-          if (this.#confirm && (await this.#confirm({ id, tool: name, args, agentId: this.log.agentId }))) {
-            decision = 'allow'
-          }
-        } catch {
-          decision = 'deny'
-        }
-        this.log.emit({ type: 'permission.result', id, decision })
-        if (decision === 'deny') {
-          this.log.emit({
-            type: 'tool.result',
-            id: call.id,
-            name,
-            ok: false,
-            output: `denied by approval policy: ${name}`,
-            ms: 0,
-          })
-          return { call, result: { output: `denied by approval policy: ${name}`, isError: true } }
-        }
-      }
-
-      const started = Date.now()
-      const result = await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
-      // Cap the result *now*, not at trim time: a stable prefix is what lets the
-      // provider's prompt cache hit, and rewriting history would throw it away.
-      const capped = truncateToolOutput(result.output, this.#maxToolOutput)
-      this.log.emit({
-        type: 'tool.result',
-        id: call.id,
-        name,
-        ok: !result.isError,
-        output: result.output,
-        ms: Date.now() - started,
-        ...(capped.elided > 0 ? { elided: capped.elided } : {}),
-      })
-      return { call, result: { ...result, output: capped.text } }
+  /** 读取写入前内容，仅用于现有审批预览，不影响上下文压缩。 */
+  async #preview(name: string, args: unknown): Promise<{ before?: string } | undefined> {
+    if (!['write_file', 'edit_file'].includes(name) || !this.#toolCtx.fs) return undefined
+    const target = (args as { path?: unknown })?.path
+    if (typeof target !== 'string' || !target) return undefined
+    try {
+      const before = await this.#toolCtx.fs.read(this.#toolCtx.fs.resolve(target))
+      return { before: before.length > 200_000 ? before.slice(0, 200_000) : before }
+    } catch {
+      // 新文件或不可读目标没有可展示的预览。
+      return undefined
     }
+  }
 
-    const settled =
-      this.#parallelTools && calls.length > 1
-        ? await Promise.all(calls.map(runOne))
-        : await calls.reduce<Promise<Array<{ call: ToolCall; result: ToolResult }>>>(
-            async (accP, call) => {
-              const acc = await accP
-              acc.push(await runOne(call))
-              return acc
-            },
-            Promise.resolve([]),
-          )
+  /** 保留原有审批语义，确认异常按拒绝处理。 */
+  async #approve(call: ToolCall, args: unknown): Promise<boolean> {
+    const name = call.function.name
+    if (!this.#needsApproval(name)) return true
+    const id = `perm:${call.id}`
+    const preview = await this.#preview(name, args)
+    this.log.emit({
+      type: 'permission.request', id, tool: name, args,
+      ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
+      ...(preview ? { preview } : {}),
+    })
+    let decision: 'allow' | 'deny' = 'deny'
+    try {
+      if (this.#confirm && await this.#confirm({ id, tool: name, args, agentId: this.log.agentId })) decision = 'allow'
+    } catch {
+      // 确认失败不能放行工具。
+      decision = 'deny'
+    }
+    this.log.emit({ type: 'permission.result', id, decision })
+    return decision === 'allow'
+  }
 
+  /** 执行工具并记录完整结果，截断统一留给 ContextManager。 */
+  async #runOne(call: ToolCall): Promise<{ call: ToolCall; result: ToolResult }> {
+    const name = call.function?.name ?? ''
+    let args: unknown = {}
+    try {
+      args = JSON.parse(call.function?.arguments || '{}')
+    } catch {
+      // 参数格式错误仍交给原有 dispatch 返回可见工具错误。
+    }
+    this.log.emit({
+      type: 'tool.call', id: call.id, name, args,
+      ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
+    })
+    const allowed = await this.#approve(call, args)
+    const started = Date.now()
+    const result = allowed
+      ? await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
+      : { output: `denied by approval policy: ${name}`, isError: true }
+    // 事件保留完整原文与省略量，实际入窗截断仍由 ContextManager 负责。
+    const { elided } = this.#context.previewToolOutput(result.output)
+    this.log.emit({ type: 'tool.result', id: call.id, name, ok: !result.isError,
+      output: result.output, ms: allowed ? Date.now() - started : 0,
+      ...(elided > 0 ? { elided } : {}),
+    })
+    return { call, result }
+  }
+
+  /** 保留既有并发策略，按调用顺序把原始结果交给上下文模块。 */
+  async #runTools(calls: ToolCall[]): Promise<void> {
+    const settled: Array<{ call: ToolCall; result: ToolResult }> = []
+    if (this.#parallelTools && calls.length > 1) {
+      settled.push(...await Promise.all(calls.map((call) => this.#runOne(call))))
+    } else {
+      // 串行模式等待前一工具完成后再执行下一条。
+      for (const call of calls) settled.push(await this.#runOne(call))
+    }
     for (const { call, result } of settled) {
-      this.messages.push({
-        role: 'tool',
-        tool_call_id: call.id,
-        name: call.function?.name ?? '',
-        content: result.output,
-      })
+      this.#context.append({ role: 'tool', tool_call_id: call.id, name: call.function?.name ?? '', content: result.output })
     }
   }
 }

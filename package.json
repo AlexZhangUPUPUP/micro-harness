@@ -18,6 +18,7 @@
     "build:bin": "bun build --compile --outfile dist/micro-harness packages/core/src/cli.ts",
     "eval": "bun scripts/evals/run.ts",
     "eval:mock": "bun scripts/evals/run.ts --mock",
+    "eval:context": "bun scripts/evals/context/run.ts",
     "docs:build": "bun scripts/build-docs.ts && pagefind --site site"
   },
   "engines": {

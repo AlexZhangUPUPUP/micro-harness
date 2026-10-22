@@ -30,11 +30,18 @@ function ShieldIcon({ active }: { active?: boolean }) {
   )
 }
 
-export function PermissionPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+// 权限未确认或提交中时展示状态并禁用菜单。
+export function PermissionPicker({ value, status, onChange }: { value?: string; status: 'loading' | 'ready' | 'saving' | 'unavailable'; onChange: (id: string) => void }) {
   const { t } = useT()
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+
+  // 状态或已确认权限变化后撤销旧菜单中的未提交选择。
+  useEffect(() => {
+    setOpen(false)
+    setPending(null)
+  }, [status, value])
 
   useEffect(() => {
     if (!open) return
@@ -59,7 +66,9 @@ export function PermissionPicker({ value, onChange }: { value: string; onChange:
   const label = (id: string): string => t(`perm.${id}`)
   const risky = (id: string): boolean => id === 'full' || id === 'auto-review'
 
+  // 保存中及未知权限状态不接受旧菜单回调。
   const choose = (id: string): void => {
+    if (status !== 'ready') return
     if (id === value) {
       setOpen(false)
       setPending(null)
@@ -74,7 +83,9 @@ export function PermissionPicker({ value, onChange }: { value: string; onChange:
     setPending(null)
   }
 
+  // 确认按钮同样校验最新状态，避免重复提交。
   const confirm = (): void => {
+    if (status !== 'ready') return
     if (pending) onChange(pending)
     setPending(null)
     setOpen(false)
@@ -84,6 +95,7 @@ export function PermissionPicker({ value, onChange }: { value: string; onChange:
     <div ref={ref} className="relative">
       <button
         type="button"
+        disabled={status !== 'ready'}
         onClick={() => {
           setOpen((v) => !v)
           setPending(null)
@@ -94,13 +106,13 @@ export function PermissionPicker({ value, onChange }: { value: string; onChange:
         className="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-px font-mono text-[10px] text-muted-foreground outline-none transition hover:border-teal/50 hover:text-foreground"
       >
         <ShieldIcon />
-        <span>{label(value)}</span>
+        <span>{status === 'loading' || status === 'saving' ? t('perm.loading') : value ? label(value) : t('perm.unavailable')}</span>
         <span aria-hidden="true" className="opacity-60">
           ▾
         </span>
       </button>
 
-      {open && (
+      {open && status === 'ready' && (
         <div
           role="menu"
           className="absolute bottom-full left-0 z-50 mb-1 w-64 rounded-lg border border-border bg-popover p-1 text-foreground shadow-xl"

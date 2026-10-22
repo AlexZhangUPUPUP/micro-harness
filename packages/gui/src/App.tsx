@@ -14,6 +14,8 @@ import { InspectorPanel } from './components/InspectorPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
 import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
 import { UsagePanel } from './components/UsagePanel.tsx'
+import { loadScoped, startSessionLifecycle } from './lib/sessionLifecycle.ts'
+import { createPermissionScope, type PermissionState } from './lib/permissionState.ts'
 
 type View = 'chat' | 'trace' | 'changes' | 'inspector'
 const VIEWS: View[] = ['chat', 'trace', 'changes', 'inspector']
@@ -55,7 +57,9 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [models, setModels] = useState<string[]>([])
-  const [permission, setPermission] = useState('full')
+  // 权限初始状态未知，禁止使用猜测的权限值。
+  const [permission, setPermission] = useState<PermissionState & { session: string | null }>({ status: 'loading', value: null, session: null })
+  const permissionScope = useRef<ReturnType<typeof createPermissionScope> | null>(null)
   const [webEnabled, setWebEnabled] = useState(true)
   const [budget, setBudget] = useState<number | null>(null)
   const [sandbox, setSandbox] = useState<{ mode: string; kind: string } | null>(null)
@@ -146,20 +150,23 @@ export default function App() {
     }
   }
 
-  // Permission preset: the session's own, else the server default.
+  // 权限读取和保存使用同一个会话作用域，切换后旧响应全部失效。
   useEffect(() => {
-    void api
-      .permission(current ?? undefined)
-      .then((d) => setPermission(d.session ?? d.default))
-      .catch(() => {})
+    const session = current
+    const scope = createPermissionScope({
+      load: () => api.permission(session ?? undefined).then((d) => d.session ?? d.default),
+      save: (preset) => api.setPermission(preset, session ?? undefined),
+      publish: (state) => setPermission({ ...state, session }),
+      fail: (err) => setError(String((err as Error).message)),
+    })
+    permissionScope.current = scope
+    return () => { scope.dispose(); permissionScope.current = null }
   }, [current])
 
+  // 加载中、提交中及跨会话的旧控件回调均不可发起修改。
   const changePermission = (preset: string): void => {
-    setPermission(preset)
-    void api
-      .setPermission(preset, current ?? undefined)
-      .then(() => void refreshSessions())
-      .catch((err: unknown) => setError(String((err as Error).message)))
+    if (permission.session !== current || permission.status !== 'ready') return
+    permissionScope.current?.change(preset)
   }
 
   useEffect(() => {
@@ -176,15 +183,16 @@ export default function App() {
       .catch(() => {})
   }, [])
 
+  // 工作目录变化时清空旧命令，并阻止旧目录响应覆盖当前会话。
   useEffect(() => {
-    void api
-      .commands(currentMeta?.cwd)
-      .then((d) => {
-        setCommands(d.templates)
-        setSkills(d.skills)
-      })
-      .catch(() => {})
-  }, [currentMeta?.cwd])
+    setCommands([])
+    setSkills([])
+    return loadScoped(
+      () => api.commands(currentMeta?.cwd),
+      (d) => { setCommands(d.templates); setSkills(d.skills) },
+      (err) => setError(String((err as Error).message)),
+    )
+  }, [current, currentMeta?.cwd])
 
   useEffect(() => {
     void api
@@ -253,46 +261,24 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  // Load + subscribe to the selected session. `runTick` re-subscribes after a
-  // follow-up, because the server closes each run's stream when it finishes.
+  // 快照和事件流共享生命周期，切换会话或重启订阅后旧回调全部失效。
   useEffect(() => {
-    if (!current) return
-    let live = true
-    let loaded = false
-    // Events that arrive while the snapshot is still loading. Appending them
-    // immediately would let the snapshot overwrite them; buffering and merging
-    // keeps both. The key includes `t` because older logs restarted `seq` on
-    // every resume (new runs now continue the sequence).
-    const buffered: TaggedEvent[] = []
-    const keyOf = (e: TaggedEvent): string => `${e.agentId}:${e.seq}:${e.t}`
-    const merge = (base: TaggedEvent[], extra: TaggedEvent[]): TaggedEvent[] => {
-      const seen = new Set(base.map(keyOf))
-      const out = base.slice()
-      for (const e of extra) {
-        const k = keyOf(e)
-        if (seen.has(k)) continue
-        seen.add(k)
-        out.push(e)
-      }
-      return out
+    // 新会话清除旧错误；空会话同时清除旧事件。
+    setError('')
+    if (!current) {
+      setEvents([])
+      return
     }
-    void api
-      .get(current)
-      .then((d) => {
-        if (!live) return
-        loaded = true
-        setEvents(merge(d.events, buffered))
-        buffered.length = 0
-      })
-      .catch(() => {
-        loaded = true
-        setEvents((prev) => merge(prev, buffered))
-        buffered.length = 0
-      })
-    const off = api.subscribe(current, {
-      onEvent: (e) => {
-        setError('')
-        // The server echoed a user message: drop the local optimistic copy.
+    return startSessionLifecycle({
+      load: () => api.get(current),
+      subscribe: (handlers) => api.subscribe(current, handlers),
+      replace: setEvents,
+      // 历史重放与实时流可能重复，按完整事件标识保留一份。
+      append: (e) => setEvents((prev) => prev.some((x) =>
+        x.agentId === e.agentId && x.seq === e.seq && x.t === e.t,
+      ) ? prev : [...prev, e]),
+      receive: (e) => {
+        // 服务端回显确认消息后移除本地乐观消息。
         if (e.event.type === 'user.message') {
           const ev = e.event as { content?: unknown; text?: unknown }
           const text = String(ev.content ?? ev.text ?? '')
@@ -304,20 +290,12 @@ export default function App() {
             return next
           })
         } else if (e.event.type === 'error') {
+          // 运行失败时撤销尚未确认的本地消息。
           setOptimistic([])
         }
-        if (!loaded) {
-          buffered.push(e)
-          return
-        }
-        setEvents((prev) => (prev.some((x) => keyOf(x) === keyOf(e)) ? prev : [...prev, e]))
       },
-      onError: () => setError('event stream disconnected'),
+      fail: (err) => setError(String((err as Error).message)),
     })
-    return () => {
-      live = false
-      off()
-    }
   }, [current, runTick])
 
   const shown = useMemo(() => (replayAt == null ? events : truncate(events, replayAt)), [events, replayAt])
@@ -641,7 +619,8 @@ export default function App() {
             setImages={setImages}
             files={files}
             setFiles={setFiles}
-            permission={permission}
+            permission={permission.session === current ? permission.value ?? undefined : undefined}
+            permissionStatus={permission.session === current ? permission.status : 'loading'}
             onPermission={changePermission}
           />
         </main>

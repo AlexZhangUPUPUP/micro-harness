@@ -7,9 +7,11 @@
  * multi-agent run can be reconstructed as a tree.
  */
 
+import type { ContextCheckpoint } from './context/checkpoint.ts'
+
 export type AgentEvent =
   | { type: 'session.start'; model: string; cwd: string; parentId?: string | null }
-  | { type: 'user.message'; text: string }
+  | { type: 'user.message'; text: string; images?: Array<{ mimeType: string; data: string }> }
   | { type: 'turn.start'; turn: number }
   /**
    * The exact payload handed to the model for one turn. This duplicates content
@@ -22,8 +24,10 @@ export type AgentEvent =
   | { type: 'thinking.delta'; text: string }
   | { type: 'tool.call'; id: string; name: string; args: unknown; sandbox?: string }
   | { type: 'tool.result'; id: string; name: string; ok: boolean; output: string; ms: number; elided?: number }
-  | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number; model?: string; reasoning?: number; durationMs?: number }
+  | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number; model?: string; reasoning?: number; durationMs?: number; purpose?: 'summary' }
   | { type: 'context.trim'; dropped: number; tokens: number; strategy: string }
+  /** 实际模型工作窗口，用于续聊恢复；原始事件仍完整保留。 */
+  | { type: 'context.checkpoint'; checkpoint: ContextCheckpoint }
   | { type: 'agent.worktree'; path: string; branch: string; base: string }
   | { type: 'permission.request'; id: string; tool: string; args: unknown; sandbox?: string; preview?: { before?: string } }
   | { type: 'permission.result'; id: string; decision: 'allow' | 'deny' }

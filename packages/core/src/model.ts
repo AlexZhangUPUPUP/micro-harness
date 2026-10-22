@@ -180,11 +180,98 @@ export async function chat(
   throw new Error('model request failed after retries: ' + String((lastErr as Error)?.message || lastErr))
 }
 
-/**
- * Streaming variant of `chat`: reads an OpenAI-compatible SSE stream, forwards
- * text/thinking deltas to `onDelta`, and still returns the fully-assembled
- * assistant message (including tool calls) so the loop is unchanged.
- */
+/** 流式响应累积状态，完成标记与输出内容分别记录。 */
+interface StreamState {
+  content: string
+  toolCalls: ToolCall[]
+  usage?: Usage
+  completed: boolean
+  done?: boolean
+}
+
+/** 合并工具调用分片，保留兼容接口要求的 function 类型。 */
+function appendToolCalls(state: StreamState, delta: StreamDeltaPayload): void {
+  // 按提供方给出的索引累积同一个调用的名称与参数。
+  for (const tc of delta.tool_calls ?? []) {
+    const index = tc.index ?? 0
+    if (!Number.isInteger(index) || index < 0) throw new Error('invalid streamed tool-call index')
+    const slot = (state.toolCalls[index] ??= { id: '', type: 'function', function: { name: '', arguments: '' } })
+    if (tc.id) slot.id = tc.id
+    if (tc.function?.name) slot.function.name += tc.function.name
+    if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
+  }
+}
+
+/** 解析数据帧；仅忽略 SSE 注释等非 data 行，不吞解析或回调异常。 */
+function handleStreamLine(line: string, state: StreamState, onDelta?: DeltaHandler): void {
+  // 完成标记允许没有 finish_reason 的兼容服务正常结束。
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('data:')) return
+  const data = trimmed.slice(5).trim()
+  if (data === '[DONE]') { state.completed = true; state.done = true; return }
+  if (!data) return
+  const payload = JSON.parse(data) as {
+    choices?: Array<{ delta?: StreamDeltaPayload; finish_reason?: string | null }>
+    usage?: Usage
+    error?: unknown
+  }
+  // 服务端错误或非响应对象不能作为成功输出继续执行工具。
+  if (!payload || typeof payload !== 'object' || payload.error || !Array.isArray(payload.choices)) {
+    throw new Error('invalid model stream payload')
+  }
+  if (payload.usage) state.usage = payload.usage
+  const choice = payload.choices[0]
+  const reason = choice?.finish_reason
+  if (reason) {
+    if (!['stop', 'tool_calls', 'function_call'].includes(reason)) {
+      throw new Error(`model stream ended unsuccessfully: ${reason}`)
+    }
+    state.completed = true
+  }
+  // 内容回调异常向上传递，防止调用方失败被当作畸形帧忽略。
+  const delta = choice?.delta
+  if (!delta) return
+  if (delta.content) {
+    state.content += delta.content
+    onDelta?.({ type: 'text', text: delta.content })
+  }
+  if (delta.reasoning_content) onDelta?.({ type: 'thinking', text: delta.reasoning_content })
+  appendToolCalls(state, delta)
+}
+
+/** 消费字节流并校验完成状态；异常时取消读取，始终释放 Reader 锁。 */
+async function readChatStream(body: ReadableStream<Uint8Array>, onDelta?: DeltaHandler): Promise<StreamState> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  const state: StreamState = { content: '', toolCalls: [], completed: false }
+  let buffer = ''
+  let exhausted = false
+  try {
+    // 保留跨网络分片的残行，EOF 时也解析最后一行。
+    while (!exhausted) {
+      const { done, value } = await reader.read()
+      exhausted = done
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        handleStreamLine(line, state, onDelta)
+        if (state.done) break
+      }
+      // DONE 代表协议结束，不等待服务端关闭长连接。
+      if (state.done) break
+    }
+    if (!state.done && buffer.trim()) handleStreamLine(buffer, state, onDelta)
+    if (!state.completed) throw new Error('model stream ended before completion marker')
+    return state
+  } finally {
+    // 取消失败不覆盖原始解析、网络或调用方异常。
+    if (!exhausted) await reader.cancel().catch(() => {})
+    reader.releaseLock()
+  }
+}
+
+/** 请求流式响应，只有明确完成后才返回可执行的助手消息。 */
 export async function chatStream(
   cfg: ModelConfig,
   messages: ChatMessage[],
@@ -192,93 +279,33 @@ export async function chatStream(
   signal: AbortSignal | undefined,
   onDelta?: DeltaHandler,
 ): Promise<ChatResult> {
+  // 构造与普通聊天兼容的请求，并启用用量尾帧。
   const url = cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions'
   const body: Record<string, unknown> = {
-    model: cfg.model,
-    messages,
-    temperature: cfg.temperature ?? 0.2,
-    stream: true,
-    stream_options: { include_usage: true },
+    model: cfg.model, messages, temperature: cfg.temperature ?? 0.2,
+    stream: true, stream_options: { include_usage: true },
   }
   if (cfg.maxTokens) body.max_tokens = cfg.maxTokens
-  if (tools.length) {
-    body.tools = tools
-    body.tool_choice = 'auto'
-  }
-
+  if (tools.length) { body.tools = tools; body.tool_choice = 'auto' }
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
-    body: JSON.stringify(body),
-    signal,
+    body: JSON.stringify(body), signal,
   })
+  // HTTP 错误与空响应体明确失败，避免返回空的成功答案。
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(`model request failed: HTTP ${res.status} ${text.slice(0, 500)}`)
   }
   if (!res.body) throw new Error('model returned no response body for stream')
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let content = ''
-  let reasoning = ''
-  const toolCalls: ToolCall[] = []
-  let usage: Usage | undefined
-
-  const handle = (payload: { choices?: Array<{ delta?: StreamDeltaPayload }>; usage?: Usage }): void => {
-    if (payload.usage) usage = payload.usage
-    const delta = payload.choices?.[0]?.delta
-    if (!delta) return
-    if (delta.content) {
-      content += delta.content
-      onDelta?.({ type: 'text', text: delta.content })
-    }
-    if (delta.reasoning_content) {
-      reasoning += delta.reasoning_content
-      onDelta?.({ type: 'thinking', text: delta.reasoning_content })
-    }
-    for (const tc of delta.tool_calls ?? []) {
-      const index = tc.index ?? 0
-      const slot = (toolCalls[index] ??= { id: '', type: 'function', function: { name: '', arguments: '' } })
-      // Some providers omit `type` on streamed tool-call deltas, but the value
-      // MUST be `function` when the message is sent back or the API rejects it.
-      slot.type = 'function'
-      if (tc.id) slot.id = tc.id
-      if (tc.function?.name) slot.function.name += tc.function.name
-      if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
-    }
-  }
-
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed.startsWith('data:')) continue
-      const data = trimmed.slice(5).trim()
-      if (!data || data === '[DONE]') continue
-      try {
-        handle(JSON.parse(data) as { choices?: Array<{ delta?: StreamDeltaPayload }>; usage?: Usage })
-      } catch {
-        /* ignore malformed keep-alive fragments */
-      }
-    }
-  }
-
-  toolCalls.forEach((c, i) => {
-    if (c && !c.id) c.id = `call_${i}_${Date.now().toString(36)}`
+  const state = await readChatStream(res.body, onDelta)
+  // 保留原有缺失调用 ID 的兼容行为。
+  state.toolCalls.forEach((call, index) => {
+    if (call && !call.id) call.id = `call_${index}_${Date.now().toString(36)}`
   })
-  const calls = toolCalls.filter((c) => c && (c.id || c.function.name || c.function.arguments))
+  const calls = state.toolCalls.filter((call) => call && (call.id || call.function.name || call.function.arguments))
   return {
-    message: {
-      role: 'assistant',
-      content: content || null,
-      tool_calls: calls.length ? calls : undefined,
-    },
-    usage,
+    message: { role: 'assistant', content: state.content || null, tool_calls: calls.length ? calls : undefined },
+    usage: state.usage,
   }
 }

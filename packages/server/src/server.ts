@@ -37,7 +37,6 @@ import {
   makeTaskTool,
   makeTools,
   promoteWorktree,
-  reconstructMessages,
   removeWorktree,
   skillsToPrompt,
   worktreeDiff,
@@ -128,7 +127,7 @@ export interface ServerOptions {
   maxSteps?: number
   /** Stop a run once its cumulative cost exceeds this many USD. */
   maxCost?: number
-  /** Context budget used by compaction, exposed to the GUI. */
+  /** 完整请求的估算预算（含输出预留），同时提供给 GUI 展示。 */
   maxContextTokens?: number
   /** OS-level confinement for the shell tool (none when omitted). */
   sandbox?: Sandbox
@@ -407,14 +406,13 @@ export function createServer(options: ServerOptions): HarnessServer {
       // synthesizes a result for anything still unanswered, so cap the wait.
       await Promise.race([active.done.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))])
     }
-    const system = systemFor(meta.cwd || cwd)
     const history = store.events(id)
-    const reconstructed = reconstructMessages(history, system, 'main')
     // Continue the recorded sequence: restarting it at 1 would make (agentId, seq)
     // repeat, and clients that dedupe by it would drop the new run's events.
     const lastSeq = history.reduce((max, e) => Math.max(max, e.seq), 0)
     const runtime = build({ ...meta, status: 'active' }, lastSeq)
-    runtime.harness.messages.splice(0, runtime.harness.messages.length, ...reconstructed)
+    // 统一恢复检查点窗口、工具结果与当前系统指令，避免复活已裁剪历史。
+    runtime.harness.restore(history)
     runtimes.set(id, runtime)
     start(runtime, expandCommand(prompt, meta.cwd || cwd), images)
     return runtime

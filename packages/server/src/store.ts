@@ -304,26 +304,30 @@ export class SessionStore {
       }))
   }
 
-  /**
-   * Drop the derived index and rebuild it from the JSONL/meta files on disk.
-   * This is the "index is disposable" guarantee: the files remain the truth.
-   */
+  /** 从磁盘日志重建索引；用量重新累计，保留手动编辑的会话元数据。 */
   rebuild(): number {
+    // 清空派生索引后，逐个恢复磁盘上的会话。
     this.db.exec('DELETE FROM events; DELETE FROM events_fts; DELETE FROM sessions;')
     let count = 0
     for (const id of readdirSync(this.sessionsDir)) {
       const metaPath = this.metaFile(id)
       const eventsPath = this.eventsFile(id)
+      // 缺少任一源文件的目录不能恢复为完整会话。
       if (!existsSync(metaPath) || !existsSync(eventsPath)) continue
       let meta = JSON.parse(readFileSync(metaPath, 'utf8')) as SessionMeta
+      // 文件已保存累计用量；回放前归零，避免每次重建重复计费。
+      meta = { ...meta, input: 0, output: 0, cost: 0 }
       this.#insertMeta(meta)
+      // 主 Agent 和子 Agent 的 usage 都通过同一折叠逻辑累计。
       for (const line of readFileSync(eventsPath, 'utf8').split('\n')) {
+        // JSONL 末尾空行不代表事件。
         if (!line.trim()) continue
         const event = JSON.parse(line) as TaggedEvent
         this.#insertEvent(id, event)
         meta = deriveMeta(meta, event)
         count++
       }
+      // 将重新计算的会话头同步回文件和索引。
       writeFileSync(metaPath, JSON.stringify(meta, null, 2))
       this.#insertMeta(meta)
     }

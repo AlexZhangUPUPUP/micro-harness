@@ -20,6 +20,8 @@ interface ComposerProps {
   setFiles?: (next: FileAttachment[]) => void
   /** Current permission preset and its setter (switching `full` asks first). */
   permission?: string
+  /** 权限未确认或正在保存时禁止选择。 */
+  permissionStatus?: 'loading' | 'ready' | 'saving' | 'unavailable'
   onPermission?: (id: string) => void
   /** Prompt templates (`/name`) loaded from the workspace. */
   commands?: Array<{ name: string; description: string }>
@@ -65,6 +67,7 @@ export function Composer({
   files = [],
   setFiles,
   permission,
+  permissionStatus = 'loading',
   onPermission,
   commands,
   skills,
@@ -346,7 +349,7 @@ export function Composer({
                   {t('composer.running')}
                 </span>
               )}
-              {onPermission && <PermissionPicker value={permission ?? 'full'} onChange={onPermission} />}
+              {onPermission && <PermissionPicker value={permission} status={permissionStatus} onChange={onPermission} />}
               {models && models.length > 1 && (
                 <select
                   value={model}

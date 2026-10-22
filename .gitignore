@@ -19,3 +19,6 @@ dist/
 
 # generated docs site
 site/
+
+# Context 专项评测生成的报告和事件轨迹不纳入源代码。
+/reports/context/

@@ -181,6 +181,9 @@ const en: Dict = {
   'approval.arguments': 'arguments',
   'approval.diff': 'proposed change',
   'approval.raw': 'raw arguments',
+  // 权限加载失败时不能展示猜测的预设。
+  'perm.loading': 'loading…',
+  'perm.unavailable': 'unavailable',
   'perm.title': 'permissions',
   'perm.read-only': 'read only',
   'perm.workspace': 'workspace write',
@@ -355,6 +358,9 @@ const zh: Dict = {
   'approval.arguments': '参数',
   'approval.diff': '改动预览',
   'approval.raw': '原始参数',
+  // 权限加载失败时不能展示猜测的预设。
+  'perm.loading': '加载中…',
+  'perm.unavailable': '不可用',
   'perm.title': '权限',
   'perm.read-only': '仅可查看',
   'perm.workspace': '工作区内修改',

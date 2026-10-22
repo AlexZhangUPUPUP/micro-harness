@@ -326,12 +326,15 @@ test("compact: 'summarize' folds the dropped turns into a recap", async () => {
       model: 'fake-model',
       cwd: dir,
       hub,
-      maxContextTokens: 60, // force compaction on every turn
+      // 使用可容纳规则、工具定义和输出预留的窗口，第三轮才触发摘要。
+      systemPrompt: 'sys',
+      tools: [],
+      maxContextTokens: 220,
       compact: 'summarize',
     })
-    await harness.send('first turn with some words in it to take up budget')
-    await harness.send('second turn with some more words to take up budget')
-    await harness.send('third turn')
+    await harness.send('first turn ' + 'a'.repeat(220))
+    await harness.send('second turn ' + 'b'.repeat(220))
+    await harness.send('third turn ' + 'c'.repeat(220))
 
     const trims = captured.map((e) => e.event).filter((e) => e.type === 'context.trim')
     expect(trims.length).toBeGreaterThan(0)

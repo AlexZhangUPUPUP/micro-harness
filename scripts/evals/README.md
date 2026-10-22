@@ -1,5 +1,8 @@
 # Evals (P10)
 
+Context retention, corrections, progress and checkpoint recovery have a separate
+[specialized evaluation](context/README.md), with paired full-history/drop-middle/summarize runs.
+
 A minimal but honest eval harness: **"did the agent actually do the task?"**
 
 Every task is a small, self-contained coding job. Most tasks have a *deterministic*

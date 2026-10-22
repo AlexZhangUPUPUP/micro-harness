@@ -54,7 +54,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 |---|---|---|
 | **统一的运行事件** | 模型请求、工具结果、用量与子 Agent 状态通过带有 Agent 标识的事件传递；日志、SSE 与界面消费这些事件。 | [事件定义](packages/core/src/events.ts)、[执行循环](packages/core/src/harness.ts) |
 | **可替换的能力接口** | 循环通过 `Provider` 调用模型，通过 `Tool` 执行操作，通过 `FileSystem` 访问文件；能力在代码中显式组装。 | [模型接口](packages/core/src/provider.ts)、[工具接口](packages/core/src/tools.ts)、[文件系统接口](packages/core/src/fs.ts) |
-| **按结构裁剪上下文** | 默认保留首轮与近期消息、裁剪中间内容；单轮任务过长时按工具步骤裁剪，保持工具调用与结果配对。也支持模型摘要策略。 | [上下文策略](packages/core/src/context.ts)、[机制测试](packages/core/test/context.test.ts) |
+| **独立上下文管理** | 工作窗口统一处理请求预算、工具配对、结构化摘要和 checkpoint 恢复。首轮要求优先保留，过大的工具历史按完整步骤裁剪；不可裁内容超出估算预算时明确失败。 | [上下文模块](packages/core/src/context/README.md)、[机制测试](packages/core/test/context.test.ts) |
 | **分离协作状态与代码改动** | 子 Agent 使用独立对话上下文；可选 Git worktree 分离工作目录，再通过 diff 与逐块应用整合改动。具体边界见[配置说明](#配置与限制)。 | [Agent runner](packages/core/src/agents.ts)、[隔离与整合](packages/core/src/isolation.ts)、[补丁应用](packages/core/src/patch.ts) |
 
 项目指令放在工作目录里：如果存在 `AGENTS.md`，其内容会追加到系统提示词（上限 8,000 字符）。Inspector 会显示某次运行实际收到的完整提示词，可据此核对模型被告知了什么。`prompts/` 或 `commands/` 下的提示词模板会以 `/name` 出现在输入框（`/name args` 由服务端展开），`skills/<name>/SKILL.md` 里的技能会追加到系统提示词；CLI 与 Web 读取同一批文件。

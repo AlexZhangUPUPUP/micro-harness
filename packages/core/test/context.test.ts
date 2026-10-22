@@ -159,8 +159,10 @@ test('compactMessagesAsync summarizer never orphans a tool result', async () => 
     { role: 'assistant', content: null, tool_calls: [{ id: '1', function: { name: 'read_file', arguments: '{}' } }] },
     { role: 'tool', tool_call_id: '1', name: 'read_file', content: 'r'.repeat(400) },
   ]
-  const r = await compactMessagesAsync(msgs, { maxTokens: 50, summarizer: async () => 'folded' })
+  // 为最新完整工具步骤和摘要同时留出空间，验证配对而非允许超预算。
+  const r = await compactMessagesAsync(msgs, { maxTokens: 200, summarizer: async () => 'folded' })
   assert.equal(r.strategy, 'summarize')
+  assert.ok(r.tokens <= 200)
   assert.ok(r.messages.some((m) => m.role === 'tool'), 'the tool result survives with its call')
   for (let i = 0; i < r.messages.length; i++) {
     if (r.messages[i]!.role === 'tool') {

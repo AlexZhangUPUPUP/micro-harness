@@ -10,6 +10,8 @@ export interface ChatRequest {
   messages: ChatMessage[]
   tools: ToolDef[]
   signal?: AbortSignal
+  /** 单次请求的输出上限；摘要等内部调用可独立限制。 */
+  maxTokens?: number
   /** When provided, the provider should stream text/thinking deltas. */
   onDelta?: DeltaHandler
 }
@@ -42,7 +44,9 @@ export function openaiProvider(cfg: OpenAIProviderConfig): Provider {
         apiKey: cfg.apiKey,
         model: req.model,
         temperature: cfg.temperature,
-        maxTokens: cfg.maxTokens,
+        // 内部请求可以收紧输出上限，但不能放宽 Provider 已配置的限制。
+        maxTokens: req.maxTokens === undefined ? cfg.maxTokens
+          : cfg.maxTokens === undefined ? req.maxTokens : Math.min(req.maxTokens, cfg.maxTokens),
       }
       const res = req.onDelta
         ? await chatStream(modelCfg, req.messages, req.tools, req.signal, req.onDelta)
