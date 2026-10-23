@@ -129,6 +129,7 @@ const server = createServer({
   }),
   maxToolOutput: Number(process.env.MICRO_MAX_TOOL_OUTPUT ?? 0) || undefined,
   maxCost: Number(process.env.MICRO_MAX_COST ?? 0) || undefined,
+  maxRunTokens: Number(process.env.MICRO_MAX_RUN_TOKENS ?? 0) || undefined,
   maxContextTokens: Number(process.env.MICRO_MAX_CONTEXT ?? 0) || undefined,
   sandbox: sandbox ?? undefined,
   sandboxMode,

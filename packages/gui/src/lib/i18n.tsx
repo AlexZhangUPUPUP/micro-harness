@@ -12,6 +12,7 @@ type Dict = Record<string, string>
 
 const en: Dict = {
   'tabs.chat': 'chat',
+  'tabs.task': 'task',
   'tabs.trace': 'trace',
   'tabs.changes': 'changes',
   'theme.toggle': 'Toggle theme',
@@ -205,6 +206,7 @@ const en: Dict = {
 
 const zh: Dict = {
   'tabs.chat': '对话',
+  'tabs.task': '任务',
   'tabs.trace': '轨迹',
   'tabs.changes': '改动',
   'theme.toggle': '切换主题',

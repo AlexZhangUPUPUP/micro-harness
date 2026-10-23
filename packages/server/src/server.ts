@@ -53,6 +53,7 @@ import {
   type TaggedEvent,
   type Tool,
   type McpServerInfo,
+  RunBudget,
 } from '@micro-harness/core'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -133,6 +134,8 @@ export interface ServerOptions {
   maxSteps?: number
   /** Stop a run once its cumulative cost exceeds this many USD. */
   maxCost?: number
+  /** Stop a Run once all model input/output tokens exceed this bound. */
+  maxRunTokens?: number
   /** 完整请求的估算预算（含输出预留），同时提供给 GUI 展示。 */
   maxContextTokens?: number
   /** OS-level confinement for the shell tool (none when omitted). */
@@ -163,6 +166,8 @@ export interface SessionRuntime {
   hub: Harness['hub']
   controller: AbortController
   done: Promise<void>
+  /** 当前 Run 是否仍有持久化监听器。 */
+  running: boolean
   /** Detach this run's store listener once it finishes. */
   off: () => void
 }
@@ -290,6 +295,8 @@ export function createServer(options: ServerOptions): HarnessServer {
 
   const build = (meta: SessionMeta, startSeq = 0): SessionRuntime => {
     const hub = new EventHub()
+    // 主 Agent、子 Agent 和摘要共享同一个 Run 预算实例。
+    const budget = new RunBudget({ maxCost: options.maxCost, maxTokens: options.maxRunTokens })
     // Attach persistence *before* the Harness emits its `session.start`.
     const off = hub.on((e: TaggedEvent) => store.append(meta.id, e))
     const sessionModel = meta.model || model
@@ -324,6 +331,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       maxTokens: options.agentMaxTokens,
       isolation: options.isolation,
       pricing: options.pricing,
+      budget,
       startSeq,
       sandbox: options.sandbox,
       network: spec.net,
@@ -347,6 +355,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       pricing: options.pricing,
       maxToolOutput: options.maxToolOutput,
       maxCost: options.maxCost,
+      budget,
       // Approvals: the loop emits `permission.request` and blocks until the client
       // answers through POST /api/sessions/:id/permissions/:requestId.
       approval: sessionApproval,
@@ -354,18 +363,22 @@ export function createServer(options: ServerOptions): HarnessServer {
       agentId: 'main',
       parentId: meta.parentId ?? null,
     })
-    return { meta, harness, hub, controller: new AbortController(), done: Promise.resolve(), off }
+    return { meta, harness, hub, controller: new AbortController(), done: Promise.resolve(), running: false, off }
   }
 
   type ImageInput = { mimeType: string; data: string }
 
   const start = (runtime: SessionRuntime, prompt: string, images?: ImageInput[]): void => {
+    runtime.running = true
+    updateTaskStatus(runtime.meta.id, 'running', prompt)
     runtime.done = (async () => {
       try {
         await runtime.harness.send(prompt, runtime.controller.signal, images)
+        updateTaskStatus(runtime.meta.id, 'awaiting_verification')
       } catch (err) {
         // A user interrupt is not a failure: stop quietly and record why.
         const aborted = runtime.controller.signal.aborted || (err as Error)?.name === 'AbortError'
+        updateTaskStatus(runtime.meta.id, aborted ? 'interrupted' : 'failed')
         try {
           store.update(runtime.meta.id, { status: aborted ? 'done' : 'error' })
         } catch {
@@ -381,6 +394,7 @@ export function createServer(options: ServerOptions): HarnessServer {
             : { type: 'error', message: String((err as Error)?.message || err), fatal: true },
         })
       } finally {
+        runtime.running = false
         runtime.off()
       }
     })()
@@ -397,8 +411,18 @@ export function createServer(options: ServerOptions): HarnessServer {
       event: { type: 'task.update', snapshot },
     }
     const runtime = runtimes.get(id)
-    if (runtime && !runtime.controller.signal.aborted) runtime.hub.forward(tagged)
+    if (runtime?.running && !runtime.controller.signal.aborted) runtime.harness.log.emit(tagged.event)
     else store.append(id, tagged)
+  }
+
+  /** 仅写入系统确认的生命周期状态；完成仍须显式验证后提交。 */
+  const updateTaskStatus = (id: string, status: import('@micro-harness/core').TaskStatus, goal?: string): void => {
+    try {
+      const current = deriveTaskState(store.events(id))
+      writeTaskSnapshot(id, applyTaskUpdate(current, { status, ...(goal && !current.goal ? { goal: goal.trim().slice(0, 2000) } : {}), expectedRevision: current.revision }))
+    } catch {
+      // 任务状态不能阻断主运行；状态冲突会通过后续事件和 API 暴露。
+    }
   }
 
   const create = (body: { prompt?: string; model?: string; cwd?: string; title?: string; images?: ImageInput[] }): SessionMeta => {
@@ -528,7 +552,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       return json({ ok: true, name: 'micro-harness', version: '0.1.0' })
     }
     if (url.pathname === '/api/budget') {
-      return json({ maxCost: options.maxCost ?? null })
+      return json({ maxCost: options.maxCost ?? null, maxTokens: options.maxRunTokens ?? null })
     }
     if (url.pathname === '/api/limits') {
       return json({ maxContext: options.maxContextTokens ?? 24_000 })

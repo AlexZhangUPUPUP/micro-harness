@@ -307,6 +307,16 @@ export default function App() {
   const items = useMemo(() => withOptimistic(chat, optimistic), [chat, optimistic])
   const tree = useMemo(() => deriveAgents(shown), [shown])
   const task = useMemo(() => deriveTask(shown), [shown])
+  const completeTask = useCallback(async () => {
+    if (!current || task.status !== 'awaiting_verification') return
+    try {
+      await api.updateTask(current, { status: 'completed', expectedRevision: task.revision })
+      const refreshed = await api.get(current)
+      setEvents(refreshed.events)
+    } catch (err) {
+      setError(String((err as Error).message))
+    }
+  }, [current, task.revision, task.status])
   const requests = useMemo(() => deriveInspector(shown), [shown])
   const approvals = useMemo(() => pendingApprovals(events), [events])
 
@@ -655,7 +665,7 @@ export default function App() {
             {view === 'chat' ? (
               <AgentsPanel roots={tree.roots} total={tree.total} />
             ) : view === 'task' ? (
-              <TaskPanel task={task} />
+              <TaskPanel task={task} onComplete={completeTask} />
             ) : view === 'trace' ? (
               <TracePanel events={events} replayAt={replayAt} setReplayAt={setReplayAt} />
             ) : view === 'inspector' ? (

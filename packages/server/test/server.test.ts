@@ -120,6 +120,22 @@ test('task endpoint persists structured state and rejects stale revisions', asyn
   }
 })
 
+// 运行生命周期只进入等待验证，不能把模型的自然语言完成声明当作已验证完成。
+test('session run updates task status and keeps completion explicit', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'verify this task' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await h.srv.idle(session.id)
+    const task = (await (await fetch(`${h.srv.url}/api/sessions/${session.id}/task`)).json()) as { task: { goal: string; status: string; revision: number } }
+    expect(task.task.goal).toBe('verify this task')
+    expect(task.task.status).toBe('awaiting_verification')
+    expect(task.task.revision).toBeGreaterThan(0)
+  } finally {
+    h.stop()
+  }
+})
+
 test('SSE stream replays recorded events and terminates', async () => {
   const h = boot()
   try {

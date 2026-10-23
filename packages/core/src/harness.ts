@@ -20,6 +20,7 @@ import type { Provider } from './provider.ts'
 import { dispatch, makeTools, toolDefs, type Tool, type ToolContext, type ToolResult } from './tools.ts'
 import { AgentLog, EventHub, type TaggedEvent } from './events.ts'
 import type { Sandbox } from './sandbox.ts'
+import type { RunBudget } from './runtime/budget.ts'
 
 export interface HarnessOptions {
   provider: Provider
@@ -64,6 +65,8 @@ export interface HarnessOptions {
   compact?: 'drop-middle' | 'tail' | 'summarize'
   /** Stop the run once the cumulative cost passes this many USD. */
   maxCost?: number
+  /** 与同一 Run 的子 Agent 共享预算。 */
+  budget?: RunBudget
   /**
    * USD per 1M tokens, used to stamp `usage` events with a `cost`. `inputCached` is
    * the discounted rate for input served from the provider's prompt cache.
@@ -145,12 +148,14 @@ export class Harness {
   readonly #approval: ApprovalMode
   readonly #confirm?: ConfirmFn
   readonly #pricing?: { input: number; output: number; inputCached?: number }
+  readonly #budget?: RunBudget
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
     this.model = opts.model
     this.#tools = opts.tools ?? makeTools()
     this.#pricing = opts.pricing
+    this.#budget = opts.budget
     this.#toolCtx = {
       cwd: opts.cwd,
       allowBash: !!opts.allowBash,
@@ -281,6 +286,7 @@ export class Harness {
       ? ((input - cacheRead) / 1e6) * price.input + (cacheRead / 1e6) * (price.inputCached ?? price.input) + (output / 1e6) * price.output
       : undefined
     this.#spent += cost ?? 0
+    this.#budget?.consume(input, output, cost ?? 0)
     this.log.emit({
       type: 'usage', input, output, model: this.model, durationMs,
       ...(cacheRead > 0 ? { cacheRead } : {}), ...(reasoning > 0 ? { reasoning } : {}),
@@ -290,8 +296,17 @@ export class Harness {
 
   /** 超过费用上限时沿用原有可见失败与停止原因。 */
   #costLimit(): string | undefined {
-    if (this.#maxCost === undefined || this.#spent <= this.#maxCost) return undefined
-    const text = `stopped: cost budget of $${this.#maxCost} exceeded (spent $${this.#spent.toFixed(6)})`
+    const exceeded = this.#budget?.exceeded() || (this.#maxCost !== undefined && this.#spent > this.#maxCost)
+    if (!exceeded) return undefined
+    const snapshot = this.#budget?.snapshot()
+    if (snapshot?.reason === 'tokens') {
+      const text = `stopped: token budget of ${snapshot.maxTokens} exceeded (spent ${snapshot.input + snapshot.output})`
+      this.log.emit({ type: 'error', message: text, fatal: true })
+      return text
+    }
+    const limit = snapshot?.maxCost ?? this.#maxCost ?? 0
+    const spent = snapshot?.cost ?? this.#spent
+    const text = `stopped: cost budget of $${limit} exceeded (spent $${spent.toFixed(6)})`
     this.log.emit({ type: 'error', message: text, fatal: true })
     return text
   }

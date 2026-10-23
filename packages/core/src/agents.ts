@@ -25,6 +25,7 @@ import { localFs, type FileSystem } from './fs.ts'
 import type { Sandbox } from './sandbox.ts'
 import type { Provider } from './provider.ts'
 import type { Tool, ToolContext, ToolResult } from './tools.ts'
+import type { RunBudget } from './runtime/budget.ts'
 
 // ---------------------------------------------------------------------- roles
 
@@ -177,6 +178,8 @@ export interface AgentRunnerOptions {
   /** Whether a sandboxed shell may reach the network. */
   network?: boolean
   pricing?: { input: number; output: number }
+  /** 与父 Harness 共享一次 Run 的预算。 */
+  budget?: RunBudget
 }
 
 interface SimpleSemaphore {
@@ -246,7 +249,7 @@ export class AgentRunner {
   }
 
   /** 校验任务并持有并发名额，所有初始化失败也必须释放资源。 */
-  async run(roleName: string, prompt: string, parentId: string, depth: number): Promise<AgentResult> {
+  async run(roleName: string, prompt: string, parentId: string, depth: number, parentSignal?: AbortSignal): Promise<AgentResult> {
     const role = this.roles.get(roleName)
     const started = Date.now()
     const agentId = `${parentId}/${roleName}-${++this.#counter}`
@@ -258,11 +261,14 @@ export class AgentRunner {
     if (!role) return fail(`unknown agent role: ${roleName} (known: ${this.roles.list().join(', ')})`)
     const maxDepth = this.#opts.maxDepth ?? 3
     if (depth >= maxDepth) return fail(`max agent depth ${maxDepth} reached (depth ${depth})`)
+    if (parentSignal?.aborted) return fail(String(parentSignal.reason?.message ?? parentSignal.reason ?? 'parent run aborted'))
 
     // 将隔离初始化纳入资源释放范围，禁止失败后使用共享工作区。
     const release = await this.#semaphore.acquire()
     // 保留原有计时起点，隔离准备时间也计入子任务超时。
     const controller = new AbortController()
+    const abortParent = () => controller.abort(parentSignal?.reason ?? new Error('parent run aborted'))
+    parentSignal?.addEventListener('abort', abortParent, { once: true })
     const timeoutMs = this.#opts.timeoutMs ?? 300_000
     const timer = setTimeout(() => controller.abort(new Error(`agent timed out after ${timeoutMs}ms`)), timeoutMs)
     try {
@@ -275,6 +281,7 @@ export class AgentRunner {
     } finally {
       // 初始化和执行共享同一个计时器与名额释放出口。
       clearTimeout(timer)
+      parentSignal?.removeEventListener('abort', abortParent)
       release()
     }
   }
@@ -308,6 +315,7 @@ export class AgentRunner {
       approval: this.#opts.approval,
       confirm: this.#opts.confirm,
       pricing: this.#opts.pricing,
+      budget: this.#opts.budget,
       tools: this.#childTools(role),
       hub: this.#opts.hub,
       agentId, parentId, depth: depth + 1,
@@ -335,7 +343,7 @@ export class AgentRunner {
       cost += e.event.cost ?? 0
       const overTokens = this.#opts.maxTokens !== undefined && input + output > this.#opts.maxTokens
       const overCost = this.#opts.maxCost !== undefined && cost > this.#opts.maxCost
-      if (overTokens || overCost) {
+      if (overTokens || overCost || this.#opts.budget?.exceeded()) {
         controller.abort(new Error(overTokens ? 'token budget exceeded' : 'cost budget exceeded'))
       }
     })
@@ -396,12 +404,12 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
   const roles = tasks.map((t) => t.role ?? 'agent')
 
   if (mode === 'single') {
-    const result = await runner.run(roles[0]!, tasks[0]!.prompt, parentId, depth)
+    const result = await runner.run(roles[0]!, tasks[0]!.prompt, parentId, depth, ctx.signal)
     return { output: summarize(result), isError: !result.ok }
   }
 
   if (mode === 'parallel') {
-    const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth)))
+    const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth, ctx.signal)))
     return { output: results.map((r) => summarize(r)).join('\n\n'), isError: results.every((r) => !r.ok) }
   }
 
@@ -410,7 +418,7 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
     let previous = ''
     for (let i = 0; i < tasks.length; i++) {
       const prompt = tasks[i]!.prompt.replaceAll('{previous}', previous)
-      const result = await runner.run(roles[i]!, prompt, parentId, depth)
+      const result = await runner.run(roles[i]!, prompt, parentId, depth, ctx.signal)
       results.push(result)
       previous = result.text
     }
@@ -418,7 +426,7 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
   }
 
   if (mode === 'race') {
-    const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth)))
+    const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth, ctx.signal)))
     const winnerIndex = results.reduce((best, r, i) => (r.durationMs < results[best]!.durationMs ? i : best), 0)
     return {
       output: results.map((r, i) => summarize(r, i === winnerIndex)).join('\n\n'),

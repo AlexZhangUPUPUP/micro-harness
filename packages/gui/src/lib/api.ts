@@ -39,7 +39,7 @@ export interface SearchHit {
   model?: string
 }
 
-export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'interrupted' | 'completed' | 'failed' | 'cancelled'
+export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'awaiting_verification' | 'interrupted' | 'completed' | 'failed' | 'cancelled'
 export type TaskStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
 export type VerificationStatus = 'not_run' | 'passed' | 'failed' | 'stale'
 export interface TaskStep { id: string; title: string; status: TaskStepStatus }
@@ -198,7 +198,7 @@ export const api = {
       `/api/commands${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''}`,
     ),
   /** The per-run cost budget, when one is configured. */
-  budget: () => j<{ maxCost: number | null }>('/api/budget'),
+  budget: () => j<{ maxCost: number | null; maxTokens: number | null }>('/api/budget'),
   /** The runtime web switch; the MCP server re-reads the toggle file per call. */
   web: () => j<WebState>('/api/web'),
   setWeb: (patch: { enabled?: boolean; provider?: string }) =>

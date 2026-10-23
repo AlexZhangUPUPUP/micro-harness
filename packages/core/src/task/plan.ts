@@ -1,5 +1,5 @@
 /** 结构化任务状态；它描述目标和验证进度，不从助手文本推断完成。 */
-export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'interrupted' | 'completed' | 'failed' | 'cancelled'
+export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'awaiting_verification' | 'interrupted' | 'completed' | 'failed' | 'cancelled'
 export type TaskStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
 export type VerificationStatus = 'not_run' | 'passed' | 'failed' | 'stale'
 
@@ -38,7 +38,7 @@ export interface TaskUpdate {
   blockers?: string[]
 }
 
-const statuses = new Set<TaskStatus>(['queued', 'running', 'waiting_approval', 'interrupted', 'completed', 'failed', 'cancelled'])
+const statuses = new Set<TaskStatus>(['queued', 'running', 'waiting_approval', 'awaiting_verification', 'interrupted', 'completed', 'failed', 'cancelled'])
 const stepStatuses = new Set<TaskStepStatus>(['pending', 'in_progress', 'completed', 'skipped'])
 const verificationStatuses = new Set<VerificationStatus>(['not_run', 'passed', 'failed', 'stale'])
 const MAX_TEXT = 2000
