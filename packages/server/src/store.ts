@@ -208,9 +208,9 @@ export class SessionStore {
     `)
     // 版本号用于后续 schema migration；当前版本只增加索引和元数据表，不改写已有事件。
     const version = this.db.query<{ value: string }, [string]>('SELECT value FROM store_meta WHERE key = ?').get('schema_version')
-    if (!version) this.db.query('INSERT INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '3')
-    else if (Number(version.value) < 3) this.db.query('UPDATE store_meta SET value = ? WHERE key = ?').run('3', 'schema_version')
-    else if (Number(version.value) > 3) throw new Error(`unsupported storage schema: ${version.value}`)
+    if (!version) this.db.query('INSERT INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '4')
+    else if (Number(version.value) < 4) this.db.query('UPDATE store_meta SET value = ? WHERE key = ?').run('4', 'schema_version')
+    else if (Number(version.value) > 4) throw new Error(`unsupported storage schema: ${version.value}`)
   }
 
   dir(id: string): string {
