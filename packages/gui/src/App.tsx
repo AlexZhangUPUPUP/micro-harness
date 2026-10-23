@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CommandInfo, type FileAttachment, type ImageInput, type SessionMeta, type SkillInfo, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveInspector, deriveTask, deriveUsageSeries, deriveUsageStats, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveInspector, deriveTask, deriveUsageSeries, deriveUsageStats, IncrementalTaskProjector, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
@@ -42,6 +42,7 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [current, setCurrent] = useState<string | null>(null)
   const [events, setEvents] = useState<TaggedEvent[]>([])
+  const taskProjector = useRef(new IncrementalTaskProjector())
   const [input, setInput] = useState('')
   const [images, setImages] = useState<ImageInput[]>([])
   // Non-image files, read as text and sent with the prompt.
@@ -307,7 +308,7 @@ export default function App() {
   // Chat + any not-yet-acknowledged local echoes.
   const items = useMemo(() => withOptimistic(chat, optimistic), [chat, optimistic])
   const tree = useMemo(() => deriveAgents(shown), [shown])
-  const task = useMemo(() => deriveTask(shown), [shown])
+  const task = useMemo(() => replayAt == null ? taskProjector.current.update(events) : deriveTask(shown), [events, replayAt, shown])
   const completeTask = useCallback(async () => {
     if (!current || task.status !== 'awaiting_verification') return
     try {

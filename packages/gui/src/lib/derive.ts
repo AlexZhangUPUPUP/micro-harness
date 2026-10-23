@@ -18,6 +18,30 @@ export function deriveTask(events: TaggedEvent[]): TaskSnapshot {
   return state
 }
 
+/** 追加式任务投影：实时事件只扫描上次游标之后的部分。 */
+export class IncrementalTaskProjector {
+  #state: TaskSnapshot = { version: 1, revision: 0, goal: '', status: 'queued', constraints: [], steps: [], verifications: [], blockers: [], updatedAt: 0 }
+  #seen = 0
+  #firstKey = ''
+
+  update(events: TaggedEvent[]): TaskSnapshot {
+    // 事件回退或切换会话时丢弃旧投影，避免把两个历史拼在一起。
+    const firstKey = events[0] ? `${events[0].agentId}:${events[0].seq}:${events[0].t}` : ''
+    if (events.length < this.#seen || (this.#firstKey && firstKey && firstKey !== this.#firstKey)) {
+      this.#state = { version: 1, revision: 0, goal: '', status: 'queued', constraints: [], steps: [], verifications: [], blockers: [], updatedAt: 0 }
+      this.#seen = 0
+    }
+    for (const item of events.slice(this.#seen)) {
+      const snapshot = item.event.type === 'task.update' ? item.event.snapshot : undefined
+      const candidate = snapshot as Partial<TaskSnapshot> | undefined
+      if (candidate && typeof candidate === 'object' && candidate.version === 1 && typeof candidate.revision === 'number' && candidate.revision > this.#state.revision) this.#state = candidate as TaskSnapshot
+    }
+    this.#seen = events.length
+    this.#firstKey = firstKey
+    return this.#state
+  }
+}
+
 export type ChatItem =
   // `at` is the index of this event in the input `events` array (not its `seq`).
   // It is used to truncate a forked session when a user message is edited and resent.
