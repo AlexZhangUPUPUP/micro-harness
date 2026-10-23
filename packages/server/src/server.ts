@@ -261,6 +261,8 @@ function guiResponse(guiRoot: string, guiIndex: string, pathname: string): Respo
 
 export function createServer(options: ServerOptions): HarnessServer {
   const { store, provider, model } = options
+  // 启动时先收敛上次进程遗留的 active 会话，避免恢复状态与真实运行时不一致。
+  store.recoverActiveSessions()
   const hostname = options.hostname ?? '127.0.0.1'
   const authRequired = options.requireAuth ?? !isLoopback(hostname)
   if (authRequired && !options.token) throw new Error('a server token is required when binding beyond loopback')

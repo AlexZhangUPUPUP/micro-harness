@@ -71,6 +71,20 @@ function boot(overrides: { token?: string; requireAuth?: boolean; models?: strin
   }
 }
 
+test('server startup recovers sessions left active by a previous process', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mh-recover-'))
+  const store = new SessionStore(dir)
+  const meta = store.create({ title: 'stale', model: 'fake', cwd: dir })
+  const srv = createServer({ store, provider: echoProvider().provider, model: 'fake', cwd: dir })
+  try {
+    expect(store.require(meta.id).status).toBe('error')
+    expect(store.events(meta.id).some((item) => item.event.type === 'error' && item.event.message.includes('server restarted'))).toBe(true)
+  } finally {
+    srv.stop(true)
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('health, create, get, list and delete a session', async () => {
   const h = boot()
   try {

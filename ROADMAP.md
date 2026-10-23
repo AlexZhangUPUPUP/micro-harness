@@ -34,6 +34,8 @@
 
 发布矩阵已整理到 [docs/support-matrix.zh-CN.md](docs/support-matrix.zh-CN.md)，CI/Release 固定 Bun 1.4.3 并使用冻结 lockfile；真实模型和外部服务仍需按矩阵单独验证。
 
+启动恢复扫描已覆盖遗留 active 会话，恢复不会伪造仍在运行的状态。
+
 Provider 能力夹具已覆盖请求前拒绝路径，避免未验证的能力被静默降级。
 
 以上均为计划版本，尚未发布。下一项是整理 v0.2.2，再实现 v0.3；不因列入路线图而自动执行所有开发或发布操作。

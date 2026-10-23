@@ -321,6 +321,20 @@ export class SessionStore {
     ).all(id).map((record) => ({ ...record, reason: record.reason ?? undefined, output: record.output ?? undefined }))
   }
 
+  /** 将上次进程退出时仍 active 的会话标记为可恢复错误，并写入诊断事件。 */
+  recoverActiveSessions(): string[] {
+    const active = this.db.query<{ id: string }, []>("SELECT id FROM sessions WHERE status = 'active'").all().map((row) => row.id)
+    for (const id of active) {
+      const history = this.events(id)
+      const lastSeq = history.reduce((max, event) => Math.max(max, event.seq), 0)
+      this.append(id, {
+        agentId: 'main', parentId: null, seq: lastSeq + 1, t: Date.now(),
+        event: { type: 'error', message: 'server restarted while the session was active; resume to continue', fatal: true },
+      })
+    }
+    return active
+  }
+
   /** 将 SQLite 主存储重新导出为 JSONL 和元数据文件，修复中断的兼容导出。 */
   exportSession(id: string): void {
     const meta = this.require(id)
