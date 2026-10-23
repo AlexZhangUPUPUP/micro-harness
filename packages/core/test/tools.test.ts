@@ -55,3 +55,13 @@ test('bash is off by default and unknown tools fail cleanly', async () => {
   const unknown = await dispatch(tools, 'nope', '{}', ctx)
   assert.equal(unknown.isError, true)
 })
+
+test('bash cancellation terminates the managed process group', async () => {
+  const controller = new AbortController()
+  const started = Date.now()
+  const pending = dispatch(makeTools(), 'bash', JSON.stringify({ command: 'sleep 10' }), { cwd: process.cwd(), allowBash: true, signal: controller.signal })
+  setTimeout(() => controller.abort(new Error('cancel shell')), 20)
+  const result = await pending
+  assert.equal(result.isError, true)
+  assert.ok(Date.now() - started < 2_000)
+})

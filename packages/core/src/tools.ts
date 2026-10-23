@@ -73,6 +73,8 @@ function sh(
       timeout,
       maxBuffer: 1024 * 1024,
       encoding: 'utf8' as const,
+      // Unix 下建立独立进程组，取消时才能连同 shell 的后台子进程一起终止。
+      detached: process.platform !== 'win32',
       ...(signal ? { signal } : {}),
       ...(wrap?.env ? { env: wrap.env } : {}),
     }
@@ -81,8 +83,18 @@ function sh(
         err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : err ? 1 : 0
       resolve({ stdout: String(stdout || ''), stderr: String(stderr || ''), code })
     }
-    if (wrap) execFile(wrap.command, wrap.args, options, done)
-    else exec(command, options, done)
+    const child = wrap ? execFile(wrap.command, wrap.args, options, done) : exec(command, options, done)
+    const onAbort = (): void => {
+      if (!child.pid) return
+      try {
+        if (process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM')
+        else child.kill()
+      } catch {
+        // 子进程已经结束时无需再次处理。
+      }
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    child.once('close', () => signal?.removeEventListener('abort', onAbort))
   })
 }
 
