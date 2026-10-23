@@ -60,6 +60,8 @@ export interface McpConnection {
   info: McpServerInfo
   tools: Tool[]
   close(): Promise<void>
+  /** 重新建立独立连接并重新协商工具，不复用旧连接状态。 */
+  reconnect(): Promise<McpConnection>
 }
 
 interface JsonRpcResponse {
@@ -384,6 +386,7 @@ export async function connectMcpServer(
       info: { name, transport, status: 'ready', tools: tools.map((t) => t.name) },
       tools,
       close: async () => channel.close(),
+      reconnect: () => connectMcpServer(config, opts),
     }
   } catch (err) {
     channel.close()
@@ -392,6 +395,7 @@ export async function connectMcpServer(
       info: { name, transport, status: 'error', tools: [], error: message },
       tools: [],
       close: async () => undefined,
+      reconnect: () => connectMcpServer(config, opts),
     }
   }
 }

@@ -168,6 +168,15 @@ test('stdio MCP can terminate its process group on cancellation when configured'
   await conn.close()
 })
 
+test('MCP reconnect creates a fresh negotiated connection', async () => {
+  const conn = await connectMcpServer(stdioConfig, { timeoutMs: 10_000 })
+  await conn.close()
+  const fresh = await conn.reconnect()
+  expect(fresh.info.status).toBe('ready')
+  expect(await fresh.tools.find((tool) => tool.name === 'mock__echo')!.run({ text: 'reconnected' }, { cwd: '.', allowBash: false })).toMatchObject({ output: 'echo:reconnected' })
+  await fresh.close()
+})
+
 test('config: parses the Claude/Cursor shape and finds the standard paths', () => {
   const servers = parseMcpConfig('{"mcpServers":{"fs":{"command":"npx","args":["-y","x"]},"web":{"url":"https://x/mcp"}}}')
   expect(servers).toEqual([
