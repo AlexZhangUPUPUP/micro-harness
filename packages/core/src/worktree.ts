@@ -73,6 +73,36 @@ function repoRoot(cwd) {
   return gitText(['-C', cwd, 'rev-parse', '--show-toplevel']).trim();
 }
 
+/** 扫描仓库登记的 worktree，只读返回路径、分支和当前文件状态。 */
+function listWorktrees({ cwd }) {
+  const raw = gitText(['-C', cwd, 'worktree', 'list', '--porcelain']);
+  const entries = [];
+  let current = null;
+  const flush = () => {
+    if (!current) return;
+    let status = 'missing';
+    if (fs.existsSync(current.path)) {
+      try {
+        const changes = gitText(['-C', current.path, 'status', '--porcelain=v1']).trim();
+        status = changes ? 'dirty' : 'clean';
+      } catch {
+        status = 'unknown';
+      }
+    }
+    entries.push({ ...current, status });
+    current = null;
+  };
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.startsWith('worktree ')) {
+      flush();
+      current = { path: line.slice('worktree '.length), head: '', branch: null };
+    } else if (current && line.startsWith('HEAD ')) current.head = line.slice(5);
+    else if (current && line.startsWith('branch ')) current.branch = line.slice(7).replace(/^refs\/heads\//, '');
+  }
+  flush();
+  return entries;
+}
+
 /** Short sha1 of a string, via git hash-object (falls back to a djb2 hex). */
 function shortHash(text) {
   try {
@@ -324,6 +354,7 @@ function removeWorktree({ cwd, path: wt, branch }) {
 export {
   isGitRepo,
   repoRoot,
+  listWorktrees,
   createWorktree,
   worktreeDiff,
   promote,

@@ -21,6 +21,13 @@ export interface Worktree {
   base: string
 }
 
+export interface WorktreeInspection {
+  path: string
+  head: string
+  branch: string | null
+  status: 'clean' | 'dirty' | 'missing' | 'unknown'
+}
+
 export interface DiffFile {
   path: string
   add: number
@@ -75,6 +82,9 @@ export interface IntegrateAgent {
 export const isGitRepo = (cwd: string): boolean => worktree.isGitRepo(cwd) as boolean
 
 export const repoRoot = (cwd: string): string => worktree.repoRoot(cwd) as string
+
+/** 只读扫描 Git worktree，供恢复和审查流程识别遗留工作区。 */
+export const inspectWorktrees = (cwd: string): WorktreeInspection[] => worktree.listWorktrees({ cwd }) as WorktreeInspection[]
 
 export const createWorktree = (opts: { cwd: string; taskId: string; agentId: string }): Worktree =>
   worktree.createWorktree(opts) as Worktree

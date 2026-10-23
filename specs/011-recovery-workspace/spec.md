@@ -4,6 +4,8 @@
 
 当前已交付：SQLite 事实来源、迁移/导出/恢复命令、失败工作区清理、ArtifactStore、SSE 增量恢复。剩余重点是启动恢复扫描、文件基线归属和受保护撤销。
 
+新增只读 worktree 扫描，恢复和审查流程可识别 Git 登记的工作区是 clean、dirty、missing 或 unknown；扫描不会自动删除或覆盖用户产物。
+
 成功执行留下的 worktree 供人工审阅；取消、失败和服务停止中的运行在完成后自动清理。
 
 Artifact 生命周期通过 `artifact.created`/`artifact.deleted` 事件关联到会话。

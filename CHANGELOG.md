@@ -28,6 +28,7 @@ All notable changes to this project are documented here. The format follows
 - Unix shell 工具使用独立进程组，取消时终止整个受管理进程树。
 - 恢复时读取执行账本，对历史 unknown 工具调用默认阻止自动重放并要求人工核查。
 - 服务停止只清理取消/失败运行的临时 worktree，成功运行的 reviewable 产物继续保留。
+- 新增只读 worktree 生命周期扫描，可区分 clean、dirty、missing 和 unknown，便于恢复前人工审查遗留工作区。
 - Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - AgentResult 增加结构化终态，区分成功、普通失败、取消、超时和预算停止。
 - task 委派支持目标、验收条件和预期产物契约，并明确标记未独立验证的结果。

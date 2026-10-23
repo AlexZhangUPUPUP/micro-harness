@@ -10,6 +10,7 @@ import {
   createWorktree,
   integrateApply,
   integratePreview,
+  inspectWorktrees,
   isGitRepo,
   promoteWorktree,
   removeWorktree,
@@ -29,6 +30,21 @@ function gitRepo(): string {
   git('commit', '-qm', 'init')
   return dir
 }
+
+test('worktree inspection reports clean and dirty lifecycle states', () => {
+  const repo = gitRepo()
+  const wt = createWorktree({ cwd: repo, taskId: 'inspect', agentId: 'a1' })
+  try {
+    const clean = inspectWorktrees(repo)
+    expect(clean.length).toBeGreaterThan(0)
+    writeFileSync(path.join(wt.path, 'uncommitted.txt'), 'pending\n')
+    const dirty = inspectWorktrees(repo).find((item) => item.path.endsWith(path.basename(wt.path)))
+    expect(dirty?.status).toBe('dirty')
+  } finally {
+    removeWorktree({ cwd: repo, path: wt.path, branch: wt.branch })
+    rmSync(repo, { recursive: true, force: true })
+  }
+})
 
 test('worktree: create, diff, promote and remove', () => {
   const repo = gitRepo()
