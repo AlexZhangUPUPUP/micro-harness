@@ -26,6 +26,7 @@ All notable changes to this project are documented here. The format follows
 - `resume` 支持持久化 `Idempotency-Key`，客户端重试不会重复启动同一会话运行。
 - MCP HTTP 调用把取消信号传递到底层 fetch，stdio 调用发送 `$/cancelRequest` 通知。
 - Unix shell 工具使用独立进程组，取消时终止整个受管理进程树。
+- 恢复时读取执行账本，对历史 unknown 工具调用默认阻止自动重放并要求人工核查。
 - Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
 - 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
 - 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。

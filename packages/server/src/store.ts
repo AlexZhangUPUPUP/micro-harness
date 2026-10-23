@@ -514,7 +514,7 @@ export class SessionStore {
       'SELECT name, status, reason, output FROM tool_executions WHERE session_id = ? AND agent_id = ? AND call_id = ?',
     ).get(sessionId, tagged.agentId, event.id)
     const name = event.name
-    const status = event.type === 'tool.status' ? event.status : (event.ok ? 'succeeded' : 'failed')
+    const status = event.type === 'tool.status' ? event.status : (current?.status === 'unknown' ? 'unknown' : (event.ok ? 'succeeded' : 'failed'))
     const reason = event.type === 'tool.status' ? event.reason : current?.reason
     const output = event.type === 'tool.result' ? event.output : current?.output
     this.db.query(

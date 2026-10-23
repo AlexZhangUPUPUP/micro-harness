@@ -67,6 +67,8 @@ export interface HarnessOptions {
   maxCost?: number
   /** 与同一 Run 的子 Agent 共享预算。 */
   budget?: RunBudget
+  /** 从持久化执行账本恢复的未知调用，必须人工确认后才能重试。 */
+  blockedToolIds?: ReadonlySet<string>
   /**
    * USD per 1M tokens, used to stamp `usage` events with a `cost`. `inputCached` is
    * the discounted rate for input served from the provider's prompt cache.
@@ -153,6 +155,7 @@ export class Harness {
   readonly #budget?: RunBudget
   /** 当前运行内按模型调用 ID 记录已完成结果，避免恢复/重试重复副作用。 */
   readonly #completedTools = new Map<string, ToolResult>()
+  readonly #blockedToolIds: ReadonlySet<string>
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
@@ -160,6 +163,7 @@ export class Harness {
     this.#tools = opts.tools ?? makeTools()
     this.#pricing = opts.pricing
     this.#budget = opts.budget
+    this.#blockedToolIds = opts.blockedToolIds ?? new Set()
     this.#toolCtx = {
       cwd: opts.cwd,
       allowBash: !!opts.allowBash,
@@ -389,6 +393,12 @@ export class Harness {
       type: 'tool.call', id: call.id, name, args,
       ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
     })
+    if (this.#blockedToolIds.has(call.id)) {
+      const result = { output: `tool call ${call.id} has unknown side effects from a previous run; review before retrying`, isError: true }
+      this.log.emit({ type: 'tool.status', id: call.id, name, status: 'failed', reason: 'recovery_requires_review' })
+      this.log.emit({ type: 'tool.result', id: call.id, name, ok: false, output: result.output, ms: 0 })
+      return { call, result }
+    }
     const previous = this.#completedTools.get(call.id)
     if (previous) {
       // 已有确定结果时只回放结果，不再次触发文件、shell 或外部服务副作用。

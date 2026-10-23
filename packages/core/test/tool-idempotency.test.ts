@@ -27,3 +27,20 @@ test('重复的工具调用 ID 只执行一次并回放确定结果', async () =
   expect(events.filter((e) => e.event.type === 'tool.result').length).toBe(2)
   expect(events.some((e) => e.event.type === 'tool.status' && e.event.reason === 'replayed_result')).toBe(true)
 })
+
+test('恢复的 unknown 工具调用不会自动重放', async () => {
+  let executions = 0
+  let response = 0
+  const harness = new Harness({
+    provider: { name: 'fake', async chat() {
+      response += 1
+      return response === 1
+        ? { message: { role: 'assistant', content: null, tool_calls: [{ id: 'unknown-call', function: { name: 'mutate', arguments: '{}' } }] } }
+        : { message: { role: 'assistant', content: 'stopped' } }
+    } },
+    model: 'fake', cwd: process.cwd(), blockedToolIds: new Set(['unknown-call']),
+    tools: [{ name: 'mutate', description: 'mutate', parameters: { type: 'object' }, async run() { executions += 1; return { output: 'side effect' } } }],
+  })
+  await harness.send('continue')
+  expect(executions).toBe(0)
+})

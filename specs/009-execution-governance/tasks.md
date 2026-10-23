@@ -6,6 +6,7 @@
 - [x] shell/MCP 请求的取消信号传递与等待释放
 - [x] MCP HTTP fetch 取消与 stdio `$/cancelRequest` 通知
 - [x] Unix shell 取消时终止受管理进程组
+- [x] 恢复时阻止历史 unknown 工具自动重放
 - [x] 单次运行内重复工具调用 ID 的确定结果回放
 - [x] 编辑写入前文件指纹冲突检测
 - [x] 取消/失败运行自动回收子 Agent 临时工作区
