@@ -288,6 +288,7 @@ test('task tool preserves the declared agent contract as unverified metadata', a
       agentId: 'main/agent-1', role: 'agent', ok: true, status: 'succeeded' as const,
       text: '完成', input: 1, output: 1, cost: 0, durationMs: 1,
     }),
+    verifyArtifacts: async () => [],
   } as unknown as AgentRunner
   const result = await runTask(runner, {
     mode: 'single', prompt: '实现功能', goal: '完成代码检查',
@@ -308,6 +309,18 @@ test('task tool independently verifies declared checks before marking the contra
     }, { cwd: dir, allowBash: false, signal: new AbortController().signal })
     expect(result.isError).toBe(false)
     expect(result.output).toContain('状态 passed')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('task contract fails when a declared artifact is missing', async () => {
+  const dir = await sandbox()
+  try {
+    const { runner } = makeRunner(dir, { name: 'x', async chat() { return { message: { role: 'assistant', content: 'x' } } } })
+    const result = await runTask(runner, { mode: 'single', prompt: '产物', artifacts: ['reports/result.txt'] }, { cwd: dir, allowBash: false, signal: new AbortController().signal })
+    expect(result.isError).toBe(false)
+    expect(result.output).toContain('状态 failed')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

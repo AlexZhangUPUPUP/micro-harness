@@ -8,4 +8,5 @@
 
 - `goal`、`acceptance`、`artifacts` 会随委派结果返回并显示在摘要中。
 - `checks` 会由父任务独立执行，全部通过才会得到 `verification: passed`，任一失败得到 `failed`。
+- `artifacts` 会在当前工作区逐项检查存在性，并与 checks 一起决定验收结果。
 - 未声明检查时，结果保持 `verification: unverified`；这不等同于验收通过。

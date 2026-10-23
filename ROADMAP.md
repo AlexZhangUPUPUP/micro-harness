@@ -30,7 +30,7 @@
 
 第二至第四波已拆为独立 Spec：执行策略 [010](specs/010-execution-policy)、恢复工作区 [011](specs/011-recovery-workspace)、代码闭环 [012](specs/012-code-loop)、Agent 契约 [013](specs/013-agent-contract)、Provider 互操作 [014](specs/014-provider-protocols)、大会话体验 [015](specs/015-large-session-ux)。
 
-当前增量进度：第二波已覆盖工具状态、幂等/冲突、取消清理、未知副作用恢复和 worktree 扫描；第三波已覆盖 Agent 终态/契约、父任务 checks 验收、有界搜索、结构化验证命令和会话验证状态；第四波已覆盖 Provider 能力声明、MCP/ACP 取消、MCP stdio 进程组终止与显式重连、ArtifactStore、SSE 游标、慢消费者断开、事件分页、GUI 任务增量投影、产物面板和 Artifact Range 下载。剩余验收仍包括产物归属检查、完整协议夹具与发布矩阵。
+当前增量进度：第二波已覆盖工具状态、幂等/冲突、取消清理、未知副作用恢复和 worktree 扫描；第三波已覆盖 Agent 终态/契约、父任务 checks 与产物验收、有界搜索、结构化验证命令和会话验证状态；第四波已覆盖 Provider 能力声明、MCP/ACP 取消、MCP stdio 进程组终止与显式重连、ArtifactStore、SSE 游标、慢消费者断开、事件分页、GUI 任务增量投影、产物面板和 Artifact Range 下载。剩余验收仍包括完整协议夹具与发布矩阵。
 
 以上均为计划版本，尚未发布。下一项是整理 v0.2.2，再实现 v0.3；不因列入路线图而自动执行所有开发或发布操作。
 

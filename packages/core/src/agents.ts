@@ -250,6 +250,19 @@ export class AgentRunner {
     return results
   }
 
+  /** 校验契约声明的产物位于当前工作区且已生成。 */
+  async verifyArtifacts(paths: string[], ctx: ToolContext): Promise<AgentCheckResult[]> {
+    const fs = this.#opts.fs ?? localFs(ctx.cwd)
+    return Promise.all(paths.map(async (artifact) => {
+      try {
+        await fs.read(fs.resolve(artifact))
+        return { id: `artifact:${artifact}`, label: `产物 ${artifact}`, command: '', ok: true, output: 'artifact exists' }
+      } catch (err) {
+        return { id: `artifact:${artifact}`, label: `产物 ${artifact}`, command: '', ok: false, output: String((err as Error).message || err) }
+      }
+    }))
+  }
+
   /** Remove every worktree this runner created. Returns how many were removed. */
   cleanupWorktrees(): number {
     let n = 0
@@ -478,9 +491,11 @@ function contractFor(task: TaskSpec): AgentContract | undefined {
 async function attachContract(result: AgentResult, task: TaskSpec, runner: AgentRunner, ctx: ToolContext): Promise<void> {
   const contract = contractFor(task)
   if (!contract) return
-  if (task.checks?.length) {
-    const checks = await runner.verify(task.checks, ctx)
-    result.contract = { ...contract, checks, verification: checks.length === task.checks.length && checks.every((check) => check.ok) ? 'passed' : 'failed' }
+  const checks = task.checks?.length ? await runner.verify(task.checks, ctx) : []
+  const artifacts = task.artifacts?.length ? await runner.verifyArtifacts(task.artifacts, ctx) : []
+  if (checks.length || artifacts.length) {
+    const all = [...checks, ...artifacts]
+    result.contract = { ...contract, checks: all, verification: all.every((check) => check.ok) ? 'passed' : 'failed' }
     return
   }
   result.contract = contract
