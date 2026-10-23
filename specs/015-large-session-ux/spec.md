@@ -5,3 +5,5 @@
 Artifact API 已支持单段 HTTP Range 与 `Content-Range`，大日志和产物可以按需分段读取；完整下载仍保持原有校验和响应兼容。
 
 SSE 连接在消费者积压达到上限时主动结束并清理监听器，客户端使用最后收到的会话游标重连，避免慢客户端拖住运行时资源。
+
+Session 详情接口支持 `after`、`limit` 分页参数并返回 `next` 与 `total`，GUI API 保留完整读取兼容，同时可按页加载大历史。

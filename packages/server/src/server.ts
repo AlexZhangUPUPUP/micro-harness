@@ -1012,6 +1012,12 @@ export function createServer(options: ServerOptions): HarnessServer {
       if (action) return json({ error: 'not found' }, 404)
       if (req.method === 'GET') {
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        const page = url.searchParams.has('limit') || url.searchParams.has('after')
+        if (page) {
+          const after = Number(url.searchParams.get('after') ?? '0')
+          const limit = Number(url.searchParams.get('limit') ?? '200')
+          return json({ session: store.require(id), ...store.eventsPage(id, Number.isFinite(after) ? after : 0, Number.isFinite(limit) ? limit : 200) })
+        }
         return json({ session: store.require(id), events: store.events(id) })
       }
       if (req.method === 'DELETE') {

@@ -143,7 +143,10 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   list: () => j<{ sessions: SessionMeta[] }>('/api/sessions').then((d) => d.sessions),
-  get: (id: string) => j<{ session: SessionMeta; events: TaggedEvent[] }>(`/api/sessions/${id}`),
+  get: (id: string, page?: { after?: number; limit?: number }) => {
+    const query = page ? `?after=${page.after ?? 0}&limit=${page.limit ?? 200}` : ''
+    return j<{ session: SessionMeta; events: TaggedEvent[]; next?: number | null; total?: number }>(`/api/sessions/${id}${query}`)
+  },
   task: (id: string) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`),
   updateTask: (id: string, update: TaskUpdate) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`, { method: 'POST', body: JSON.stringify(update) }),
   verify: (id: string, input: { id: string; label: string; command: string; timeoutMs?: number }) =>

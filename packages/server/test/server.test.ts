@@ -105,6 +105,22 @@ test('health, create, get, list and delete a session', async () => {
   }
 })
 
+test('session event endpoint supports bounded pagination', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', body: JSON.stringify({ prompt: 'page me' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await h.srv.idle(session.id)
+    const first = await fetch(`${h.srv.url}/api/sessions/${session.id}?after=0&limit=1`)
+    const page = (await first.json()) as { events: unknown[]; next: number | null; total: number }
+    expect(page.events).toHaveLength(1)
+    expect(page.total).toBeGreaterThan(1)
+    expect(page.next).toBe(1)
+  } finally {
+    h.stop()
+  }
+})
+
 test('task endpoint persists structured state and rejects stale revisions', async () => {
   const h = boot()
   try {

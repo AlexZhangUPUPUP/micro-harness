@@ -300,6 +300,18 @@ export class SessionStore {
       .map((r) => JSON.parse(r.data) as TaggedEvent)
   }
 
+  /** 按会话内偏移分页读取事件，避免大 Session 每次都加载完整历史。 */
+  eventsPage(id: string, after = 0, limit = 200): { events: TaggedEvent[]; next: number | null; total: number } {
+    this.require(id)
+    const offset = Math.max(0, Math.floor(after))
+    const size = Math.min(1000, Math.max(1, Math.floor(limit)))
+    const rows = this.db.query<{ data: string }, [string, number, number]>(
+      'SELECT data FROM events WHERE session_id = ? ORDER BY rowid_idx LIMIT ? OFFSET ?',
+    ).all(id, size, offset)
+    const total = Number(this.db.query<{ count: number }, [string]>('SELECT COUNT(*) AS count FROM events WHERE session_id = ?').get(id)?.count ?? 0)
+    return { events: rows.map((row) => JSON.parse(row.data) as TaggedEvent), next: offset + rows.length < total ? offset + rows.length : null, total }
+  }
+
   /** 查询某个会话中已知的工具执行状态，供恢复和审计使用。 */
   toolExecutions(id: string): ToolExecutionRecord[] {
     this.require(id)
