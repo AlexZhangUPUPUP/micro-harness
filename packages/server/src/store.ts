@@ -12,7 +12,7 @@
  */
 
 import { Database } from 'bun:sqlite'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { eventText, type TaggedEvent } from '@micro-harness/core'
 
@@ -174,8 +174,11 @@ export class SessionStore {
         content
       );
     `)
-    // 版本号用于后续 schema migration；旧数据库没有该表时会安全初始化。
-    this.db.query('INSERT OR IGNORE INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '2')
+    // 版本号用于后续 schema migration；当前版本只增加索引和元数据表，不改写已有事件。
+    const version = this.db.query<{ value: string }, [string]>('SELECT value FROM store_meta WHERE key = ?').get('schema_version')
+    if (!version) this.db.query('INSERT INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '2')
+    else if (Number(version.value) < 2) this.db.query('UPDATE store_meta SET value = ? WHERE key = ?').run('2', 'schema_version')
+    else if (Number(version.value) > 2) throw new Error(`unsupported storage schema: ${version.value}`)
   }
 
   dir(id: string): string {
@@ -205,10 +208,11 @@ export class SessionStore {
       output: 0,
       cost: 0,
     }
+    if (this.has(meta.id)) throw new Error(`session already exists: ${meta.id}`)
+    this.#insertMeta(meta)
     mkdirSync(this.dir(meta.id), { recursive: true })
     writeFileSync(this.metaFile(meta.id), JSON.stringify(meta, null, 2))
     writeFileSync(this.eventsFile(meta.id), '')
-    this.#insertMeta(meta)
     return meta
   }
 
@@ -245,8 +249,16 @@ export class SessionStore {
   exportSession(id: string): void {
     const meta = this.require(id)
     const events = this.events(id)
-    writeFileSync(this.eventsFile(id), events.map((event) => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''))
-    writeFileSync(this.metaFile(id), JSON.stringify(meta, null, 2))
+    mkdirSync(this.dir(id), { recursive: true })
+    this.#atomicWrite(this.eventsFile(id), events.map((event) => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''))
+    this.#atomicWrite(this.metaFile(id), JSON.stringify(meta, null, 2))
+  }
+
+  /** 查询兼容导出的健康状态；SQLite 主存储成功后导出失败不会伪装成事务失败。 */
+  exportStatus(id: string): { ok: boolean; error?: string } {
+    this.require(id)
+    const row = this.db.query<{ value: string }, [string]>('SELECT value FROM store_meta WHERE key = ?').get(`export_error:${id}`)
+    return row ? { ok: false, error: row.value } : { ok: true }
   }
 
   append(id: string, event: TaggedEvent): SessionMeta {
@@ -259,8 +271,7 @@ export class SessionStore {
     })
     const next = write()
     // SQLite 提交成功后再更新兼容导出；导出失败不影响主存储可读性。
-    appendFileSync(this.eventsFile(id), JSON.stringify(event) + '\n')
-    writeFileSync(this.metaFile(id), JSON.stringify(next, null, 2))
+    this.#appendExport(id, event, next)
     return next
   }
 
@@ -277,15 +288,27 @@ export class SessionStore {
     })
     const meta = write()
     // 批量写入一次性追加，避免每个事件都单独刷新文件。
-    if (events.length) appendFileSync(this.eventsFile(id), events.map((event) => JSON.stringify(event)).join('\n') + '\n')
-    writeFileSync(this.metaFile(id), JSON.stringify(meta, null, 2))
+    if (events.length) {
+      try {
+        appendFileSync(this.eventsFile(id), events.map((event) => JSON.stringify(event)).join('\n') + '\n')
+        this.#atomicWrite(this.metaFile(id), JSON.stringify(meta, null, 2))
+        this.#clearExportError(id)
+      } catch (error) {
+        this.#recordExportFailure(id, error)
+      }
+    }
     return meta
   }
 
   update(id: string, patch: Partial<SessionMeta>): SessionMeta {
     const next = { ...this.require(id), ...patch, id, updatedAt: Date.now() }
     this.#insertMeta(next)
-    writeFileSync(this.metaFile(id), JSON.stringify(next, null, 2))
+    try {
+      this.#atomicWrite(this.metaFile(id), JSON.stringify(next, null, 2))
+      this.#clearExportError(id)
+    } catch (error) {
+      this.#recordExportFailure(id, error)
+    }
     return next
   }
 
@@ -297,9 +320,13 @@ export class SessionStore {
 
   delete(id: string): boolean {
     if (!this.has(id)) return false
-    this.db.query('DELETE FROM events WHERE session_id = ?').run(id)
-    this.db.query('DELETE FROM events_fts WHERE session_id = ?').run(id)
-    this.db.query('DELETE FROM sessions WHERE id = ?').run(id)
+    const remove = this.db.transaction(() => {
+      this.db.query('DELETE FROM events WHERE session_id = ?').run(id)
+      this.db.query('DELETE FROM events_fts WHERE session_id = ?').run(id)
+      this.db.query('DELETE FROM sessions WHERE id = ?').run(id)
+      this.db.query('DELETE FROM store_meta WHERE key = ?').run(`export_error:${id}`)
+    })
+    remove()
     rmSync(this.dir(id), { recursive: true, force: true })
     return true
   }
@@ -328,38 +355,56 @@ export class SessionStore {
       }))
   }
 
-  /** 从磁盘日志重建索引；用量重新累计，保留手动编辑的会话元数据。 */
+  /** 重建搜索索引；只有空数据库才从旧 JSONL 导入，避免覆盖已提交的 SQLite 事件。 */
   rebuild(): number {
-    // 清空派生索引后，逐个恢复磁盘上的会话。
-    this.db.exec('DELETE FROM events; DELETE FROM events_fts; DELETE FROM sessions;')
-    let count = 0
-    for (const id of readdirSync(this.sessionsDir)) {
-      const metaPath = this.metaFile(id)
-      const eventsPath = this.eventsFile(id)
-      // 缺少任一源文件的目录不能恢复为完整会话。
-      if (!existsSync(metaPath) || !existsSync(eventsPath)) continue
-      let meta = JSON.parse(readFileSync(metaPath, 'utf8')) as SessionMeta
-      // 文件已保存累计用量；回放前归零，避免每次重建重复计费。
-      meta = { ...meta, input: 0, output: 0, cost: 0 }
-      this.#insertMeta(meta)
-      // 主 Agent 和子 Agent 的 usage 都通过同一折叠逻辑累计。
-      for (const line of readFileSync(eventsPath, 'utf8').split('\n')) {
-        // JSONL 末尾空行不代表事件。
-        if (!line.trim()) continue
-        const event = JSON.parse(line) as TaggedEvent
-        this.#insertEvent(id, event)
-        meta = deriveMeta(meta, event)
-        count++
-      }
-      // 将重新计算的会话头同步回文件和索引。
-      writeFileSync(metaPath, JSON.stringify(meta, null, 2))
-      this.#insertMeta(meta)
-    }
-    return count
+    const existing = this.db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM sessions').get()?.count ?? 0
+    return existing ? this.#rebuildFts() : this.#importJsonl()
   }
 
   close(): void {
     this.db.close()
+  }
+
+  /** 只重建 FTS，不触碰 SQLite 事件和会话元数据。 */
+  #rebuildFts(): number {
+    const rebuild = this.db.transaction(() => {
+      this.db.exec('DELETE FROM events_fts;')
+      const rows = this.db.query<{ session_id: string; agent_id: string; type: string; data: string }, []>('SELECT session_id, agent_id, type, data FROM events ORDER BY rowid_idx').all()
+      for (const row of rows) this.#insertFts(row.session_id, JSON.parse(row.data) as TaggedEvent)
+      return rows.length
+    })
+    return rebuild()
+  }
+
+  /** 事务化导入旧 JSONL；解析失败时不会清空或污染现有数据库。 */
+  #importJsonl(): number {
+    const imports: Array<{ id: string; meta: SessionMeta; events: TaggedEvent[] }> = []
+    for (const id of readdirSync(this.sessionsDir)) {
+      const metaPath = this.metaFile(id)
+      const eventsPath = this.eventsFile(id)
+      if (!existsSync(metaPath) || !existsSync(eventsPath)) continue
+      let meta = JSON.parse(readFileSync(metaPath, 'utf8')) as SessionMeta
+      meta = { ...meta, input: 0, output: 0, cost: 0 }
+      const events = readFileSync(eventsPath, 'utf8').split('\n').filter((line) => line.trim()).map((line) => JSON.parse(line) as TaggedEvent)
+      for (const event of events) meta = deriveMeta(meta, event)
+      imports.push({ id, meta, events })
+    }
+    const write = this.db.transaction(() => {
+      this.db.exec('DELETE FROM events; DELETE FROM events_fts; DELETE FROM sessions;')
+      let count = 0
+      for (const item of imports) {
+        this.#insertMeta({ ...item.meta, input: 0, output: 0, cost: 0 })
+        for (const event of item.events) {
+          this.#insertEvent(item.id, event)
+          count++
+        }
+        this.#insertMeta(item.meta)
+      }
+      return count
+    })
+    const count = write()
+    for (const item of imports) this.#atomicWrite(this.metaFile(item.id), JSON.stringify(item.meta, null, 2))
+    return count
   }
 
   #insertMeta(meta: SessionMeta): void {
@@ -391,11 +436,48 @@ export class SessionStore {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(sessionId, event.agentId, event.parentId, event.seq, event.t, event.event.type, JSON.stringify(event))
+    this.#insertFts(sessionId, event)
+  }
+
+  /** 为单个事件写入全文索引。 */
+  #insertFts(sessionId: string, event: TaggedEvent): void {
     const text = eventText(event.event)
-    if (text) {
-      this.db
-        .query('INSERT INTO events_fts (session_id, agent_id, type, content) VALUES (?, ?, ?, ?)')
-        .run(sessionId, event.agentId, event.event.type, text)
+    if (!text) return
+    this.db.query('INSERT INTO events_fts (session_id, agent_id, type, content) VALUES (?, ?, ?, ?)').run(sessionId, event.agentId, event.event.type, text)
+  }
+
+  /** 兼容导出追加失败时记录可修复状态，避免调用方重复提交主事件。 */
+  #appendExport(id: string, event: TaggedEvent, meta: SessionMeta): void {
+    try {
+      mkdirSync(this.dir(id), { recursive: true })
+      appendFileSync(this.eventsFile(id), JSON.stringify(event) + '\n')
+      this.#atomicWrite(this.metaFile(id), JSON.stringify(meta, null, 2))
+      this.#clearExportError(id)
+    } catch (error) {
+      this.#recordExportFailure(id, error)
     }
+  }
+
+  /** 原子替换导出文件，避免进程中断留下半份 JSON。 */
+  #atomicWrite(file: string, content: string): void {
+    mkdirSync(path.dirname(file), { recursive: true })
+    const temporary = `${file}.tmp-${process.pid}`
+    writeFileSync(temporary, content)
+    renameSync(temporary, file)
+  }
+
+  /** 记录导出失败但不回滚已经提交的 SQLite 事务。 */
+  #recordExportFailure(id: string, error: unknown): void {
+    const message = String((error as Error)?.message ?? error)
+    try {
+      this.db.query('INSERT OR REPLACE INTO store_meta (key, value) VALUES (?, ?)').run(`export_error:${id}`, message)
+    } catch {
+      console.error(`[SessionStore] export failed for ${id}: ${message}`)
+    }
+  }
+
+  /** 清理已经修复的导出错误。 */
+  #clearExportError(id: string): void {
+    this.db.query('DELETE FROM store_meta WHERE key = ?').run(`export_error:${id}`)
   }
 }

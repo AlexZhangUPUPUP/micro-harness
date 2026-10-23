@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { SessionStore, deriveMeta, ftsMatch } from '../src/store.ts'
@@ -118,6 +118,23 @@ test('reads canonical events when the JSONL export is missing', () => {
     reopened.exportSession(meta.id)
     expect(existsSync(store.eventsFile(meta.id))).toBe(true)
     reopened.close()
+    store.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// 兼容导出失败不能让调用方重复提交已经成功落库的事件。
+test('records export failure after the SQLite transaction commits', () => {
+  const dir = sandbox()
+  try {
+    const store = new SessionStore(dir)
+    const meta = store.create({ model: 'm' })
+    rmSync(store.dir(meta.id), { recursive: true, force: true })
+    writeFileSync(store.dir(meta.id), 'blocked')
+    store.append(meta.id, tag('main', null, 1, { type: 'user.message', text: 'sqlite wins' }))
+    expect(store.events(meta.id)).toHaveLength(1)
+    expect(store.exportStatus(meta.id).ok).toBe(false)
     store.close()
   } finally {
     rmSync(dir, { recursive: true, force: true })

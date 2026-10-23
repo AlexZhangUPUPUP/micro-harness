@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows
 - v0.3 第一条纵向切片：新增结构化任务状态（目标、状态、步骤、约束、验证、阻塞项），提供 `GET/POST /api/sessions/:id/task`，并通过 `task.update` 事件持久化和实时广播。
 - GUI 新增任务状态面板，从同一事件流展示任务目标、步骤、约束、验证结果和修订版本。
 - 存储层将 SQLite 提升为会话元数据和事件的事务事实来源，JSONL 保留为可读兼容导出，并新增从 SQLite 修复导出的接口。
+- 新增离线 `micro-harness-storage migrate/export/restore` 命令，支持旧 JSONL 导入、版本化备份和空目录恢复。
 - Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
 - 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
 - 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。

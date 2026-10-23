@@ -330,6 +330,14 @@ The core runs the loop: request a model response, execute tools, and send the re
 
 **Separate canonical storage from export.** Web sessions commit events and metadata to SQLite transactions, maintain an FTS5 index, and keep JSONL as a portable compatibility export. A fresh database can still be rebuilt from existing session records, and the export can be regenerated from SQLite. See the [session store](packages/server/src/store.ts).
 
+Offline storage maintenance is available without an API key:
+
+```sh
+micro-harness-storage migrate --data-dir ~/.micro-harness
+micro-harness-storage export --data-dir ~/.micro-harness --out ./harness-backup
+micro-harness-storage restore --from ./harness-backup --data-dir ./restored-harness
+```
+
 Explore the implementation, evaluations, and project history:
 
 | Document | What to explore |
