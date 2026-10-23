@@ -549,14 +549,28 @@ export function createServer(options: ServerOptions): HarnessServer {
     let off: (() => void) | undefined
     let heartbeat: ReturnType<typeof setInterval> | undefined
     let closed = false
+    let replaying = true
+    const pendingLive: TaggedEvent[] = []
+    let pendingEnd = false
+    const eventKey = (event: TaggedEvent): string => `${event.agentId}:${event.seq}:${event.t}:${event.event.type}`
+    let finish: () => void = () => undefined
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        // 统一关闭实时流，确保 end、取消和慢消费者路径释放相同资源。
+        finish = () => {
+          if (closed) return
+          write?.('event: end\ndata: {}\n\n')
+          closed = true
+          off?.()
+          if (heartbeat) clearInterval(heartbeat)
+          try { controller.close() } catch { /* 已关闭 */ }
+        }
         write = (chunk: string) => {
           // 慢消费者达到上限时主动断开，客户端可用最后收到的游标续传，避免无限积压。
           // 历史回放阶段由浏览器一次性消费，不能因缓冲区暂时变负而截断数万条事件；
           // 只有进入 live-tail 后才启用慢消费者保护，避免实时连接无限积压。
-          if (closed || (off && controller.desiredSize !== null && controller.desiredSize <= -64)) {
+          if (closed || (off && !replaying && controller.desiredSize !== null && controller.desiredSize <= -64)) {
             closed = true
             off?.()
             if (heartbeat) clearInterval(heartbeat)
@@ -570,35 +584,37 @@ export function createServer(options: ServerOptions): HarnessServer {
             off?.()
           }
         }
-        // 1. 只回放游标之后的事件；游标是会话级索引，不与 Agent 局部 seq 混用。
-        for (let i = after; i < history.length; i++) write(`id: ${i + 1}\ndata: ${JSON.stringify(history[i])}\n\n`)
-        // 2. live-tail a running session
-        // 已完成的 runtime 可能暂留在内存中；只有仍在运行时才建立 live-tail，
-        // 否则必须立即发送 end，避免客户端长期等待并误报断开。
+        // 1. 先注册实时监听；历史回放期间产生的事件暂存，避免丢失。
         if (runtime?.running && !runtime.controller.signal.aborted) {
           off = runtime.hub.on((e) => {
+            if (replaying) {
+              pendingLive.push(e)
+              return
+            }
             cursor += 1
             write?.(`id: ${cursor}\ndata: ${JSON.stringify(e)}\n\n`)
           })
           heartbeat = setInterval(() => write?.(': ping\n\n'), 15_000)
           runtime.done.finally(() => {
-            if (closed) return
-            write?.('event: end\ndata: {}\n\n')
-            closed = true
-            try {
-              controller.close()
-            } catch {
-              /* already closed */
-            }
+            if (replaying) pendingEnd = true
+            else finish()
           })
-        } else {
-          write('event: end\ndata: {}\n\n')
-          try {
-            controller.close()
-          } catch {
-            /* already closed */
-          }
         }
+        // 2. 只回放游标之后的事件；游标是会话级索引，不与 Agent 局部 seq 混用。
+        for (let i = after; i < history.length; i++) write(`id: ${i + 1}\ndata: ${JSON.stringify(history[i])}\n\n`)
+        // 3. 回放完成后补发期间落盘的事件，再切换到实时尾随。
+        const latest = store.events(id)
+        for (let i = history.length; i < latest.length; i++) write(`id: ${i + 1}\ndata: ${JSON.stringify(latest[i])}\n\n`)
+        cursor = latest.length
+        const sent = new Set(latest.slice(history.length).map(eventKey))
+        replaying = false
+        for (const event of pendingLive) {
+          if (sent.has(eventKey(event))) continue
+          cursor += 1
+          write?.(`id: ${cursor}\ndata: ${JSON.stringify(event)}\n\n`)
+        }
+        pendingLive.length = 0
+        if (!runtime?.running || runtime.controller.signal.aborted || pendingEnd) finish()
         req.signal.addEventListener('abort', () => {
           off?.()
           if (heartbeat) clearInterval(heartbeat)
