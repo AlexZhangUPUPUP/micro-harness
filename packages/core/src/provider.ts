@@ -37,6 +37,18 @@ export interface Provider {
   chat(req: ChatRequest): Promise<ChatResponse>
 }
 
+/** 在发请求前检查 Provider 明确声明为不支持的能力。未声明能力保持兼容。 */
+export function providerCapabilityError(provider: Provider, request: ChatRequest): string | undefined {
+  const capabilities = provider.capabilities
+  if (!capabilities) return undefined
+  if (request.onDelta && capabilities.streaming === false) return 'provider does not support streaming'
+  if (request.tools.length > 0 && capabilities.tools === false) return 'provider does not support tools'
+  const hasImage = request.messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'))
+  if (hasImage && capabilities.images === false) return 'provider does not support images'
+  if (request.signal && capabilities.cancellation === false) return 'provider does not support cancellation'
+  return undefined
+}
+
 export interface OpenAIProviderConfig {
   name?: string
   baseUrl: string

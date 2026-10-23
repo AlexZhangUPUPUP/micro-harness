@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { openaiProvider } from '../src/provider.ts'
+import { openaiProvider, providerCapabilityError, type ChatRequest, type Provider } from '../src/provider.ts'
 
 // 请求级输出预算必须落实到 HTTP，且不能放宽提供方已有的更小上限。
 test('provider sends the tighter output budget for streamed and ordinary requests', async () => {
@@ -28,4 +28,15 @@ test('provider sends the tighter output budget for streamed and ordinary request
     // 所有断言结束或失败后均关闭本地服务。
     server.stop(true)
   }
+})
+
+test('provider capability declarations reject unsupported request features before transport', () => {
+  const request: ChatRequest = {
+    model: 'fake', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,x' } }] }],
+    tools: [{ type: 'function', function: { name: 'tool', description: 'test', parameters: {} } }],
+    signal: new AbortController().signal, onDelta: () => undefined,
+  }
+  const provider: Provider = { name: 'limited', capabilities: { streaming: false, tools: false, images: false, cancellation: false }, async chat() { return { message: { role: 'assistant', content: 'never' } } } }
+  expect(providerCapabilityError(provider, request)).toBe('provider does not support streaming')
+  expect(providerCapabilityError({ ...provider, capabilities: { tools: false } }, { ...request, onDelta: undefined, signal: undefined })).toBe('provider does not support tools')
 })

@@ -16,7 +16,7 @@ import { cacheReadTokens, reasoningTokens, userContent } from './model.ts'
 import { ContextManager, makeSummarizer, type TrimResult } from './context/index.ts'
 import { localFs, type FileSystem } from './fs.ts'
 import type { ChatMessage, ToolCall, Usage } from './model.ts'
-import type { Provider } from './provider.ts'
+import { providerCapabilityError, type ChatRequest, type Provider } from './provider.ts'
 import { dispatch, makeTools, toolDefs, type Tool, type ToolContext, type ToolResult } from './tools.ts'
 import { AgentLog, EventHub, type TaggedEvent } from './events.ts'
 import type { Sandbox } from './sandbox.ts'
@@ -270,13 +270,16 @@ export class Harness {
     let streamedText = false
     const messages = structuredClone(this.messages)
     const started = Date.now()
-    const { message, usage } = await this.#provider.chat({
+    const request: ChatRequest = {
       model: this.model, messages, tools: toolDefs(this.#tools), signal, maxTokens,
       onDelta: (delta) => {
         if (delta.type === 'text') streamedText = true
         this.log.emit({ type: delta.type === 'text' ? 'text.delta' : 'thinking.delta', text: delta.text })
       },
-    })
+    }
+    const capabilityError = providerCapabilityError(this.#provider, request)
+    if (capabilityError) throw new Error(capabilityError)
+    const { message, usage } = await this.#provider.chat(request)
     if (usage) {
       this.#context.observeUsage(usage, messages)
       this.#recordUsage(usage, Date.now() - started)
