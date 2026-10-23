@@ -142,6 +142,8 @@ export interface AgentResult {
   cost: number
   durationMs: number
   error?: string
+  /** 子任务契约；当前只记录声明，验收仍需显式验证步骤完成。 */
+  contract?: AgentContract
   /** Set when the agent ran in its own git worktree (isolation: 'worktree'). */
   worktree?: Worktree | null
 }
@@ -256,13 +258,13 @@ export class AgentRunner {
     const started = Date.now()
     const agentId = `${parentId}/${roleName}-${++this.#counter}`
     // 提前失败不产生模型用量，也不创建子运行时。
-    const fail = (error: string): AgentResult => ({
-      agentId, role: roleName, ok: false, status: 'failed', text: '', input: 0, output: 0, cost: 0,
+    const fail = (error: string, status: AgentResult['status'] = 'failed'): AgentResult => ({
+      agentId, role: roleName, ok: false, status, text: '', input: 0, output: 0, cost: 0,
       durationMs: Date.now() - started, error,
     })
     if (!role) return fail(`unknown agent role: ${roleName} (known: ${this.roles.list().join(', ')})`)
     const maxDepth = this.#opts.maxDepth ?? 3
-    if (depth >= maxDepth) return fail(`max agent depth ${maxDepth} reached (depth ${depth})`)
+    if (depth >= maxDepth) return fail(`max agent depth ${maxDepth} reached (depth ${depth})`, 'budget_exceeded')
     if (parentSignal?.aborted) return fail(String(parentSignal.reason?.message ?? parentSignal.reason ?? 'parent run aborted'))
 
     // 将隔离初始化纳入资源释放范围，禁止失败后使用共享工作区。
@@ -383,6 +385,20 @@ export class AgentRunner {
 export interface TaskSpec {
   role?: string
   prompt: string
+  /** 任务要达成的可读目标。 */
+  goal?: string
+  /** 父任务可据此执行的验收条件。 */
+  acceptance?: string[]
+  /** 预期由子任务生成或更新的产物路径。 */
+  artifacts?: string[]
+}
+
+export interface AgentContract {
+  goal?: string
+  acceptance: string[]
+  artifacts: string[]
+  /** 契约是否已经由独立验证步骤确认。 */
+  verification: 'unverified'
 }
 
 export type TaskMode = 'single' | 'parallel' | 'chain' | 'race'
@@ -391,14 +407,34 @@ function summarize(result: AgentResult, winner = false): string {
   const cost = result.cost ? ` $${result.cost.toFixed(6)}` : ''
   const status = result.ok ? 'ok' : `${result.status}: ${result.error ?? 'failed'}`
   const head = `[${result.role} · ${result.agentId} · ${status} · ${Math.round(result.durationMs)}ms · ${result.input + result.output}tok${cost}]${winner ? ' ★ winner' : ''}`
-  return `${head}\n${result.text || '(no output)'}`
+  const contract = result.contract
+    ? `\n契约：${result.contract.goal ?? '未声明目标'}；验收条件 ${result.contract.acceptance.length} 项；状态 ${result.contract.verification}`
+    : ''
+  return `${head}${contract}\n${result.text || '(no output)'}`
 }
 
 function collectTasks(args: Record<string, unknown>): TaskSpec[] {
   const list = Array.isArray(args.tasks) ? (args.tasks as Array<Record<string, unknown>>) : []
-  if (list.length) return list.map((t) => ({ role: t.role ? String(t.role) : undefined, prompt: String(t.prompt ?? '') }))
-  if (args.prompt) return [{ role: args.role ? String(args.role) : undefined, prompt: String(args.prompt) }]
+  const parse = (t: Record<string, unknown>): TaskSpec => ({
+    role: t.role ? String(t.role) : undefined,
+    prompt: String(t.prompt ?? ''),
+    goal: t.goal ? String(t.goal) : undefined,
+    acceptance: Array.isArray(t.acceptance) ? t.acceptance.map(String) : undefined,
+    artifacts: Array.isArray(t.artifacts) ? t.artifacts.map(String) : undefined,
+  })
+  if (list.length) return list.map(parse)
+  if (args.prompt) return [parse(args)]
   return []
+}
+
+function contractFor(task: TaskSpec): AgentContract | undefined {
+  if (!task.goal && !task.acceptance?.length && !task.artifacts?.length) return undefined
+  return {
+    goal: task.goal,
+    acceptance: task.acceptance ?? [],
+    artifacts: task.artifacts ?? [],
+    verification: 'unverified',
+  }
 }
 
 export async function runTask(runner: AgentRunner, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -412,11 +448,13 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
 
   if (mode === 'single') {
     const result = await runner.run(roles[0]!, tasks[0]!.prompt, parentId, depth, ctx.signal)
+    result.contract = contractFor(tasks[0]!)
     return { output: summarize(result), isError: !result.ok }
   }
 
   if (mode === 'parallel') {
     const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth, ctx.signal)))
+    results.forEach((result, i) => { result.contract = contractFor(tasks[i]!) })
     return { output: results.map((r) => summarize(r)).join('\n\n'), isError: results.every((r) => !r.ok) }
   }
 
@@ -426,6 +464,7 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
     for (let i = 0; i < tasks.length; i++) {
       const prompt = tasks[i]!.prompt.replaceAll('{previous}', previous)
       const result = await runner.run(roles[i]!, prompt, parentId, depth, ctx.signal)
+      result.contract = contractFor(tasks[i]!)
       results.push(result)
       previous = result.text
     }
@@ -434,6 +473,7 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
 
   if (mode === 'race') {
     const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth, ctx.signal)))
+    results.forEach((result, i) => { result.contract = contractFor(tasks[i]!) })
     const winnerIndex = results.reduce((best, r, i) => (r.durationMs < results[best]!.durationMs ? i : best), 0)
     return {
       output: results.map((r, i) => summarize(r, i === winnerIndex)).join('\n\n'),
@@ -465,10 +505,16 @@ export function makeTaskTool(runner: AgentRunner): Tool {
             properties: {
               role: { type: 'string', description: 'agent role (default "agent")' },
               prompt: { type: 'string', description: 'the task prompt' },
+              goal: { type: 'string', description: '声明子任务目标' },
+              acceptance: { type: 'array', items: { type: 'string' }, description: '验收条件列表' },
+              artifacts: { type: 'array', items: { type: 'string' }, description: '预期产物路径列表' },
             },
             required: ['prompt'],
           },
         },
+        goal: { type: 'string', description: '单任务目标' },
+        acceptance: { type: 'array', items: { type: 'string' }, description: '单任务验收条件列表' },
+        artifacts: { type: 'array', items: { type: 'string' }, description: '单任务产物路径列表' },
       },
       required: ['mode'],
     },

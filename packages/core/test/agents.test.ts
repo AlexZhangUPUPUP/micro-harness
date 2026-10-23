@@ -282,6 +282,22 @@ test('task tool exposes the orchestration modes it implements', () => {
   expect(modes).toEqual(['single', 'parallel', 'chain', 'race'])
 })
 
+test('task tool preserves the declared agent contract as unverified metadata', async () => {
+  const runner = {
+    run: async () => ({
+      agentId: 'main/agent-1', role: 'agent', ok: true, status: 'succeeded' as const,
+      text: '完成', input: 1, output: 1, cost: 0, durationMs: 1,
+    }),
+  } as unknown as AgentRunner
+  const result = await runTask(runner, {
+    mode: 'single', prompt: '实现功能', goal: '完成代码检查',
+    acceptance: ['类型检查通过'], artifacts: ['reports/check.txt'],
+  }, { cwd: process.cwd(), allowBash: false, signal: new AbortController().signal })
+  expect(result.isError).toBe(false)
+  expect(result.output).toContain('契约：完成代码检查')
+  expect(result.output).toContain('验收条件 1 项；状态 unverified')
+})
+
 test('formats an agent tree with per-agent tokens and cost', () => {
   const events: TaggedEvent[] = [
     { agentId: 'main', parentId: null, seq: 1, t: 0, event: { type: 'session.start', model: 'm', cwd: '.' } },
