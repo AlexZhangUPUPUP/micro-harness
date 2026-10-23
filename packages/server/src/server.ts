@@ -994,8 +994,10 @@ export function createServer(options: ServerOptions): HarnessServer {
     stop: (closeStore = false) => {
       // 停止服务先取消运行，再回收失败/取消的子 Agent 工作区。
       for (const runtime of runtimes.values()) {
-        if (runtime.running) runtime.controller.abort(new Error('server stopping'))
-        runtime.runner.cleanupWorktrees()
+        if (runtime.running) {
+          runtime.controller.abort(new Error('server stopping'))
+          void runtime.done.finally(() => runtime.runner.cleanupWorktrees())
+        }
       }
       server.stop(true)
       if (closeStore) store.close()
