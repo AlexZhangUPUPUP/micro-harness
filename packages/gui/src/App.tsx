@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CommandInfo, type FileAttachment, type ImageInput, type SessionMeta, type SkillInfo, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveInspector, deriveUsageSeries, deriveUsageStats, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveInspector, deriveTask, deriveUsageSeries, deriveUsageStats, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
@@ -11,14 +11,15 @@ import { AgentsPanel } from './components/AgentsPanel.tsx'
 import { TracePanel } from './components/TracePanel.tsx'
 import { ChangesPanel } from './components/ChangesPanel.tsx'
 import { InspectorPanel } from './components/InspectorPanel.tsx'
+import { TaskPanel } from './components/TaskPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
 import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
 import { UsagePanel } from './components/UsagePanel.tsx'
 import { loadScoped, startSessionLifecycle } from './lib/sessionLifecycle.ts'
 import { createPermissionScope, type PermissionState } from './lib/permissionState.ts'
 
-type View = 'chat' | 'trace' | 'changes' | 'inspector'
-const VIEWS: View[] = ['chat', 'trace', 'changes', 'inspector']
+type View = 'chat' | 'task' | 'trace' | 'changes' | 'inspector'
+const VIEWS: View[] = ['chat', 'task', 'trace', 'changes', 'inspector']
 const NEW_KEY = '__new__'
 
 /** Thin draggable divider between a side column and the main area. */
@@ -305,6 +306,7 @@ export default function App() {
   // Chat + any not-yet-acknowledged local echoes.
   const items = useMemo(() => withOptimistic(chat, optimistic), [chat, optimistic])
   const tree = useMemo(() => deriveAgents(shown), [shown])
+  const task = useMemo(() => deriveTask(shown), [shown])
   const requests = useMemo(() => deriveInspector(shown), [shown])
   const approvals = useMemo(() => pendingApprovals(events), [events])
 
@@ -652,6 +654,8 @@ export default function App() {
           <div id={`panel-${view}`} role="tabpanel" key={view} className="animate-slide min-h-0 flex-1">
             {view === 'chat' ? (
               <AgentsPanel roots={tree.roots} total={tree.total} />
+            ) : view === 'task' ? (
+              <TaskPanel task={task} />
             ) : view === 'trace' ? (
               <TracePanel events={events} replayAt={replayAt} setReplayAt={setReplayAt} />
             ) : view === 'inspector' ? (

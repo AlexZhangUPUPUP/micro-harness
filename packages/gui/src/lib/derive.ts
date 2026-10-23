@@ -4,7 +4,19 @@
  * is unit-testable without a browser.
  */
 
-import type { TaggedEvent } from './api.ts'
+import type { TaggedEvent, TaskSnapshot } from './api.ts'
+
+/** 从同一条事件流重建任务快照，保证回放和实时视图一致。 */
+export function deriveTask(events: TaggedEvent[]): TaskSnapshot {
+  let state: TaskSnapshot = { version: 1, revision: 0, goal: '', status: 'queued', constraints: [], steps: [], verifications: [], blockers: [], updatedAt: 0 }
+  for (const item of events) {
+    const event = item.event
+    if (event.type !== 'task.update' || !event.snapshot || typeof event.snapshot !== 'object') continue
+    const snapshot = event.snapshot as TaskSnapshot
+    if (snapshot.version === 1 && snapshot.revision > state.revision) state = snapshot
+  }
+  return state
+}
 
 export type ChatItem =
   // `at` is the index of this event in the input `events` array (not its `seq`).

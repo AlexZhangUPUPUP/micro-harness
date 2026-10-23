@@ -103,6 +103,23 @@ test('health, create, get, list and delete a session', async () => {
   }
 })
 
+test('task endpoint persists structured state and rejects stale revisions', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    const update = await fetch(`${h.srv.url}/api/sessions/${session.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: '完成任务', status: 'running', expectedRevision: 0 }) })
+    expect(update.status).toBe(200)
+    const task = (await update.json()) as { task: { revision: number; goal: string } }
+    expect(task.task.goal).toBe('完成任务')
+    expect(task.task.revision).toBe(1)
+    const stale = await fetch(`${h.srv.url}/api/sessions/${session.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed', expectedRevision: 0 }) })
+    expect(stale.status).toBe(409)
+  } finally {
+    h.stop()
+  }
+})
+
 test('SSE stream replays recorded events and terminates', async () => {
   const h = boot()
   try {

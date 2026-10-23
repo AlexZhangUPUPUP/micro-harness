@@ -39,6 +39,14 @@ export interface SearchHit {
   model?: string
 }
 
+export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'interrupted' | 'completed' | 'failed' | 'cancelled'
+export type TaskStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
+export type VerificationStatus = 'not_run' | 'passed' | 'failed' | 'stale'
+export interface TaskStep { id: string; title: string; status: TaskStepStatus }
+export interface TaskVerification { id: string; label: string; status: VerificationStatus; details?: string }
+export interface TaskSnapshot { version: 1; revision: number; goal: string; status: TaskStatus; constraints: string[]; steps: TaskStep[]; verifications: TaskVerification[]; blockers: string[]; updatedAt: number }
+export interface TaskUpdate { expectedRevision?: number; goal?: string; status?: TaskStatus; constraints?: string[]; steps?: TaskStep[]; verifications?: TaskVerification[]; blockers?: string[] }
+
 /** An image attached to a prompt (base64, no data-URL prefix). */
 export interface ImageInput {
   mimeType: string
@@ -135,6 +143,8 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   list: () => j<{ sessions: SessionMeta[] }>('/api/sessions').then((d) => d.sessions),
   get: (id: string) => j<{ session: SessionMeta; events: TaggedEvent[] }>(`/api/sessions/${id}`),
+  task: (id: string) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`),
+  updateTask: (id: string, update: TaskUpdate) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`, { method: 'POST', body: JSON.stringify(update) }),
   models: () => j<{ models: string[]; default: string }>('/api/models'),
   create: (prompt: string, opts: { title?: string; model?: string; images?: ImageInput[] } = {}) =>
     j<{ session: SessionMeta }>('/api/sessions', { method: 'POST', body: JSON.stringify({ prompt, ...opts }) }).then(

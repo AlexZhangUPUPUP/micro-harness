@@ -10,6 +10,8 @@
  *   GET    /api/mcp                      connected MCP servers + their tools
  *   POST   /api/sessions/:id/permissions/:requestId   answer an approval { allow }
  *   GET    /api/sessions/:id             session header + recorded events
+ *   GET    /api/sessions/:id/task        structured task state
+ *   POST   /api/sessions/:id/task        append a structured task update
  *   PATCH  /api/sessions/:id             rename a session          { title }
  *   DELETE /api/sessions/:id             delete a session
  *   POST   /api/sessions/:id/resume      continue a session        { prompt }
@@ -36,6 +38,10 @@ import {
   loadSkills,
   makeTaskTool,
   makeTools,
+  applyTaskUpdate,
+  createTaskSnapshot,
+  deriveTaskState,
+  type TaskUpdate,
   promoteWorktree,
   removeWorktree,
   skillsToPrompt,
@@ -380,6 +386,21 @@ export function createServer(options: ServerOptions): HarnessServer {
     })()
   }
 
+  /** 写入结构化任务快照；运行中通过 hub 广播，空闲时直接追加持久化事件。 */
+  const writeTaskSnapshot = (id: string, snapshot: ReturnType<typeof createTaskSnapshot>): void => {
+    const history = store.events(id)
+    const tagged: TaggedEvent = {
+      agentId: 'main',
+      parentId: null,
+      seq: history.reduce((max, event) => Math.max(max, event.seq), 0) + 1,
+      t: Date.now(),
+      event: { type: 'task.update', snapshot },
+    }
+    const runtime = runtimes.get(id)
+    if (runtime && !runtime.controller.signal.aborted) runtime.hub.forward(tagged)
+    else store.append(id, tagged)
+  }
+
   const create = (body: { prompt?: string; model?: string; cwd?: string; title?: string; images?: ImageInput[] }): SessionMeta => {
     const dir = body.cwd ?? cwd
     const prompt = body.prompt ? expandCommand(body.prompt, dir) : undefined
@@ -624,6 +645,26 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (parts[0] === 'api' && parts[1] === 'sessions' && parts[2]) {
       const id = decodeURIComponent(parts[2])
       const action = parts[3]
+      if (action === 'task') {
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        if (req.method === 'GET') return json({ task: deriveTaskState(store.events(id)) })
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        let body: TaskUpdate = {}
+        try {
+          body = (await req.json()) as TaskUpdate
+        } catch {
+          return json({ error: 'invalid JSON body' }, 400)
+        }
+        try {
+          const current = deriveTaskState(store.events(id))
+          const next = applyTaskUpdate(current, body)
+          writeTaskSnapshot(id, next)
+          return json({ task: next })
+        } catch (err) {
+          const message = String((err as Error).message)
+          return json({ error: message }, message.includes('conflict') ? 409 : 400)
+        }
+      }
       if (action === 'events') {
         if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
         return sse(id, req)

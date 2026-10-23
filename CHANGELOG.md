@@ -10,6 +10,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- v0.3 第一条纵向切片：新增结构化任务状态（目标、状态、步骤、约束、验证、阻塞项），提供 `GET/POST /api/sessions/:id/task`，并通过 `task.update` 事件持久化和实时广播。
+- GUI 新增任务状态面板，从同一事件流展示任务目标、步骤、约束、验证结果和修订版本。
 - Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
 - 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
 - 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。
@@ -23,8 +25,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Validation
 
-- 53 个上下文、恢复、Provider 和 Server 定向测试通过。
-- TypeScript 与上下文 mock 评测通过；真实模型结果和限制见 `specs/007-task-state/tasks.md`。
+- 新增结构化任务状态冲突与事件重建测试；TypeScript 类型检查和 GUI 生产构建通过。
+- 原有 53 个上下文、恢复、Provider 和 Server 定向测试结果保持有效；真实模型结果和限制见 `specs/007-task-state/tasks.md`。
 
 ### Release notes
 

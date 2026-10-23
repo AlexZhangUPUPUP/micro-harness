@@ -28,6 +28,8 @@ export type AgentEvent =
   | { type: 'context.trim'; dropped: number; tokens: number; strategy: string }
   /** 实际模型工作窗口，用于续聊恢复；原始事件仍完整保留。 */
   | { type: 'context.checkpoint'; checkpoint: ContextCheckpoint }
+  /** 结构化任务状态快照，所有客户端从同一事件重建。 */
+  | { type: 'task.update'; snapshot: import('./task/plan.ts').TaskSnapshot }
   | { type: 'agent.worktree'; path: string; branch: string; base: string }
   | { type: 'permission.request'; id: string; tool: string; args: unknown; sandbox?: string; preview?: { before?: string } }
   | { type: 'permission.result'; id: string; decision: 'allow' | 'deny' }
