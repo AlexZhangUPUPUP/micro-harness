@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CommandInfo, type FileAttachment, type ImageInput, type SessionMeta, type SkillInfo, type TaggedEvent, type WebProvider } from './lib/api.ts'
 import { useT } from './lib/i18n.tsx'
-import { deriveAgents, deriveChat, deriveInspector, deriveTask, deriveUsageSeries, deriveUsageStats, IncrementalTaskProjector, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
+import { deriveAgents, deriveChat, deriveContext, deriveInspector, deriveTask, deriveUsageSeries, deriveUsageStats, IncrementalTaskProjector, toMarkdown, truncate, withOptimistic } from './lib/derive.ts'
 import { pendingApprovals, decidePermission } from './lib/approvals.ts'
 import { Header } from './components/Header.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
@@ -11,6 +11,7 @@ import { AgentsPanel } from './components/AgentsPanel.tsx'
 import { TracePanel } from './components/TracePanel.tsx'
 import { ChangesPanel } from './components/ChangesPanel.tsx'
 import { InspectorPanel } from './components/InspectorPanel.tsx'
+import { ContextPanel } from './components/ContextPanel.tsx'
 import { TaskPanel } from './components/TaskPanel.tsx'
 import { ArtifactsPanel } from './components/ArtifactsPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
@@ -19,8 +20,8 @@ import { UsagePanel } from './components/UsagePanel.tsx'
 import { loadScoped, startSessionLifecycle } from './lib/sessionLifecycle.ts'
 import { createPermissionScope, type PermissionState } from './lib/permissionState.ts'
 
-type View = 'chat' | 'task' | 'trace' | 'changes' | 'artifacts' | 'inspector'
-const VIEWS: View[] = ['chat', 'task', 'trace', 'changes', 'artifacts', 'inspector']
+type View = 'chat' | 'task' | 'trace' | 'context' | 'changes' | 'artifacts' | 'inspector'
+const VIEWS: View[] = ['chat', 'task', 'trace', 'context', 'changes', 'artifacts', 'inspector']
 const NEW_KEY = '__new__'
 
 /** Thin draggable divider between a side column and the main area. */
@@ -320,6 +321,7 @@ export default function App() {
     }
   }, [current, task.revision, task.status])
   const requests = useMemo(() => deriveInspector(shown), [shown])
+  const contextEvents = useMemo(() => deriveContext(shown), [shown])
   const approvals = useMemo(() => pendingApprovals(events), [events])
 
   // Follow the stream only while the user is parked at the bottom — scrolling up
@@ -503,6 +505,7 @@ export default function App() {
       { id: 'new', label: t('palette.newSession'), run: () => { composing.current = true; setCurrent(null); setEvents([]); setOptimistic([]); setFiles([]) } },
       { id: 'chat', label: t('tabs.chat'), run: () => setView('chat') },
       { id: 'trace', label: t('tabs.trace'), run: () => setView('trace') },
+      { id: 'context', label: t('tabs.context'), run: () => setView('context') },
       { id: 'changes', label: t('tabs.changes'), run: () => setView('changes') },
       { id: 'theme', label: t('palette.theme'), run: toggleTheme },
       { id: 'lang', label: t('palette.lang'), run: () => setLang(lang === 'zh' ? 'en' : 'zh') },
@@ -670,6 +673,8 @@ export default function App() {
               <TaskPanel task={task} onComplete={completeTask} />
             ) : view === 'trace' ? (
               <TracePanel events={events} replayAt={replayAt} setReplayAt={setReplayAt} />
+            ) : view === 'context' ? (
+              <ContextPanel events={contextEvents} sessionId={current} />
             ) : view === 'inspector' ? (
               <InspectorPanel requests={requests} />
             ) : view === 'artifacts' ? (

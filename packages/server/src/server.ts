@@ -11,6 +11,8 @@
  *   POST   /api/sessions/:id/permissions/:requestId   answer an approval { allow }
  *   GET    /api/sessions/:id             session header + recorded events
  *   GET    /api/sessions/:id/task        structured task state
+ *   GET    /api/sessions/:id/context     context snapshots and compactions
+ *   GET    /api/sessions/:id/context/export  Markdown context history
  *   POST   /api/sessions/:id/task        append a structured task update
  *   PATCH  /api/sessions/:id             rename a session          { title }
  *   DELETE /api/sessions/:id             delete a session
@@ -105,6 +107,23 @@ function parseByteRange(value: string | null, size: number): { start: number; en
   const end = match[2] ? Number(match[2]) : size - 1
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size) return undefined
   return { start, end: Math.min(end, size - 1) }
+}
+
+/** 将 Context 事件转换为可人工审查的追加式 Markdown。 */
+function contextMarkdown(events: TaggedEvent[]): string {
+  const lines = ['# Context history', '', '由 session 事件生成；原始消息仍以 SQLite 事件记录为准。', '']
+  let index = 0
+  for (const tagged of events) {
+    const event = tagged.event
+    if (event.type === 'context.snapshot') {
+      lines.push(`## Snapshot ${++index}`, '', `- 时间：${new Date(tagged.t).toISOString()}`, `- ID：${event.snapshotId}`, `- 触发：${event.trigger}`, `- Token：${event.tokens} / ${event.budget}`, `- 消息：${event.messages.length}`, '')
+      lines.push('### 来源', '', ...Object.entries(event.sources).map(([name, count]) => `- ${name}：${count}`), '')
+    }
+    if (event.type === 'context.compaction') {
+      lines.push(`## Compaction ${event.compactionId}`, '', `- 时间：${new Date(tagged.t).toISOString()}`, `- 原因：${event.reason}`, `- 策略：${event.strategy}`, `- Token：${event.beforeTokens} → ${event.afterTokens}`, `- 删除：${event.dropped}`, `- 摘要：${event.summarized}`, `- 降级：${event.fallback ? '是' : '否'}`, '', '### 压缩前窗口', '', '```json', JSON.stringify(event.beforeMessages, null, 2), '```', '', '### 压缩后窗口', '', '```json', JSON.stringify(event.afterMessages, null, 2), '```', '')
+    }
+  }
+  return lines.join('\n')
 }
 
 /** 执行有界验证命令，统一返回退出码和截断后的诊断输出。 */
@@ -738,6 +757,13 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (parts[0] === 'api' && parts[1] === 'sessions' && parts[2]) {
       const id = decodeURIComponent(parts[2])
       const action = parts[3]
+      if (action === 'context') {
+        if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        const contextEvents = store.events(id).filter((item) => item.event.type === 'context.snapshot' || item.event.type === 'context.compaction')
+        if (parts[4] === 'export') return new Response(contextMarkdown(contextEvents), { headers: { 'content-type': 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename="${id}-context.md"` } })
+        return json({ events: contextEvents, markdown: contextMarkdown(contextEvents) })
+      }
       if (action === 'worktrees') {
         if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
         const meta = store.require(id)

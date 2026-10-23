@@ -16,6 +16,9 @@ export interface TaggedEvent {
   event: AgentEvent
 }
 
+/** Context Inspector 使用的结构化事件，实际内容来自同一条 session 事件流。 */
+export type ContextEvent = TaggedEvent & { event: AgentEvent & ({ type: 'context.snapshot' } | { type: 'context.compaction' }) }
+
 export interface SessionMeta {
   id: string
   title: string
@@ -154,6 +157,8 @@ export const api = {
     j<{ verification: { id: string; label: string; exitCode: number; output: string }; task: TaskSnapshot }>(`/api/sessions/${id}/verify`, { method: 'POST', body: JSON.stringify(input) }),
   artifacts: (id: string) => j<{ artifacts: ArtifactRecord[] }>(`/api/sessions/${id}/artifacts`).then((d) => d.artifacts),
   worktrees: (id: string) => j<{ worktrees: WorktreeInspection[] }>(`/api/sessions/${id}/worktrees`).then((d) => d.worktrees),
+  context: (id: string) => j<{ events: ContextEvent[]; markdown: string }>(`/api/sessions/${id}/context`),
+  contextExportUrl: (id: string) => withToken(`/api/sessions/${id}/context/export`),
   deleteArtifact: (id: string, artifactId: string) => j<{ ok: boolean }>(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`, { method: 'DELETE' }),
   artifactUrl: (id: string, artifactId: string) => withToken(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`),
   models: () => j<{ models: string[]; default: string }>('/api/models'),

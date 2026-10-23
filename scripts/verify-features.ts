@@ -169,6 +169,9 @@ async function verifyP4(): Promise<void> {
       if (text) break
     }
     check('session ran to completion over the provider', text.includes('SRV(verify p4 roundtrip)'), text.slice(0, 50))
+    const context = await (await fetch(`${base}/api/sessions/${id}/context`, { headers: auth })).json()
+    const contextMarkdown = await (await fetch(`${base}/api/sessions/${id}/context/export`, { headers: auth })).text()
+    check('Context Inspector exposes snapshots and Markdown export', context.events?.some((e: any) => e.event?.type === 'context.snapshot') && contextMarkdown.includes('# Context history'))
 
     // Provider 能力声明、分页和任务验证状态。
     const providerInfo = await (await fetch(`${base}/api/provider`)).json()

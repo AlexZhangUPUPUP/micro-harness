@@ -135,6 +135,28 @@ test('session event endpoint supports bounded pagination', async () => {
   }
 })
 
+// Context Inspector 接口只返回上下文事件，并提供可下载的 Markdown 审查记录。
+test('context inspector endpoint returns snapshots and markdown export', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', body: JSON.stringify({ prompt: 'inspect context' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await h.srv.idle(session.id)
+    const response = await fetch(`${h.srv.url}/api/sessions/${session.id}/context`)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { events: Array<{ event: { type: string } }>; markdown: string }
+    expect(body.events.some((item) => item.event.type === 'context.snapshot')).toBe(true)
+    expect(body.markdown).toContain('# Context history')
+    expect(existsSync(h.store.contextFile(session.id))).toBe(true)
+    expect(readFileSync(h.store.contextFile(session.id), 'utf8')).toContain('Snapshot')
+    const exported = await fetch(`${h.srv.url}/api/sessions/${session.id}/context/export`)
+    expect(exported.headers.get('content-type')).toContain('text/markdown')
+    expect(await exported.text()).toContain('Snapshot')
+  } finally {
+    h.stop()
+  }
+})
+
 test('worktree inspection is exposed as a read-only session endpoint', async () => {
   const h = boot()
   try {

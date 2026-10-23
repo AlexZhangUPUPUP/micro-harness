@@ -24,4 +24,6 @@ export interface TrimResult {
   summarized?: number
   changed: boolean
   overflow?: boolean
+  /** 摘要不可用时是否退回确定性裁剪。 */
+  fallback?: boolean
 }

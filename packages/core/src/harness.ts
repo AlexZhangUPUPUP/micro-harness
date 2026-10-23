@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { cacheReadTokens, reasoningTokens, userContent } from './model.ts'
-import { ContextManager, makeSummarizer, type TrimResult } from './context/index.ts'
+import { ContextManager, estimateTokens, makeSummarizer, type TrimResult } from './context/index.ts'
 import { localFs, type FileSystem } from './fs.ts'
 import type { ChatMessage, ToolCall, Usage } from './model.ts'
 import { providerCapabilityError, type ChatRequest, type Provider } from './provider.ts'
@@ -157,6 +157,7 @@ export class Harness {
   readonly #completedTools = new Map<string, ToolResult>()
   readonly #blockedToolIds: ReadonlySet<string>
   #mutationTail: Promise<void> = Promise.resolve()
+  #contextSnapshot = 0
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
@@ -232,11 +233,12 @@ export class Harness {
     const existingLimit = this.#costLimit()
     if (existingLimit) return this.#finish(existingLimit, 'budget')
     this.log.emit({ type: 'turn.start', turn: step })
+    const beforeMessages = structuredClone(this.messages)
     const prepared = await this.#context.prepare(signal)
     // 摘要也可能耗尽费用预算，必须在正式请求前再次检查。
     const summaryLimit = this.#costLimit()
     if (summaryLimit) return this.#finish(summaryLimit, 'budget')
-    this.#recordContext(prepared)
+    this.#recordContext(prepared, beforeMessages)
     // 只在压缩改变窗口时保存请求前快照，避免逐请求重复存储完整历史。
     if (prepared.changed) this.#checkpoint()
     const { message, streamedText } = await this.#requestModel(prepared.outputReserveTokens, signal)
@@ -254,10 +256,23 @@ export class Harness {
   }
 
   /** 记录真实压缩与模型输入；快照不受后续消息修改影响。 */
-  #recordContext(prepared: TrimResult & { inputTokens: number }): void {
+  #recordContext(prepared: TrimResult & { inputTokens: number; messageBudget: number; outputReserveTokens: number }, beforeMessages: ChatMessage[]): void {
     if (prepared.changed) {
       this.log.emit({ type: 'context.trim', dropped: prepared.dropped, tokens: prepared.tokens, strategy: prepared.strategy })
+      this.log.emit({
+        type: 'context.compaction', compactionId: `${this.log.agentId}:compact:${++this.#contextSnapshot}`,
+        reason: 'context_budget', strategy: prepared.strategy, beforeTokens: estimateContextTokens(beforeMessages),
+        afterTokens: prepared.inputTokens, dropped: prepared.dropped, summarized: prepared.summarized ?? 0,
+        beforeMessages, afterMessages: structuredClone(this.messages),
+        ...(prepared.fallback ? { fallback: true } : {}),
+      })
     }
+    this.log.emit({
+      type: 'context.snapshot', snapshotId: `${this.log.agentId}:snapshot:${++this.#contextSnapshot}`,
+      trigger: prepared.changed ? 'compaction' : 'model_request', tokens: prepared.inputTokens,
+      budget: prepared.messageBudget + prepared.outputReserveTokens,
+      messages: structuredClone(this.messages), sources: contextSources(this.messages),
+    })
     this.log.emit({
       type: 'model.request', model: this.model, system: this.#system,
       tools: this.#tools.map((tool) => tool.name), messages: structuredClone(this.messages),
@@ -473,4 +488,16 @@ export class Harness {
       this.#context.append({ role: 'tool', tool_call_id: call.id, name: call.function?.name ?? '', content: result.output })
     }
   }
+}
+
+/** 使用与上下文模块一致的粗估统计，避免 Inspector 引入第二套 token 算法。 */
+function estimateContextTokens(messages: ChatMessage[]): number {
+  return estimateTokens(messages)
+}
+
+/** 按消息角色汇总来源，供界面快速显示上下文构成。 */
+function contextSources(messages: ChatMessage[]): Record<string, number> {
+  const sources: Record<string, number> = {}
+  for (const message of messages) sources[message.role] = (sources[message.role] ?? 0) + 1
+  return sources
 }

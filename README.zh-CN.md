@@ -45,6 +45,7 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 
 - **运行生命周期：** 共享 Token/成本预算、取消传播、审批释放、幂等恢复、启动恢复诊断和明确的终态。
 - **上下文与 Agent 契约：** 独立任务证据、检查点快照、有界搜索与验证工具、验收检查、产物检查，以及可独立报告的子 Agent 结果。
+- **Context Inspector：** 每次模型调用都有可回放快照；压缩记录展示前后消息、Token 变化、策略和降级原因，并可在 GUI 与 Markdown 导出中查看。
 - **可审查执行：** 隔离 worktree、只读 worktree 生命周期检查、分块集成、带 SHA-256 和 HTTP Range 的产物存储，以及分页事件回放。
 - **运行与互操作：** SQLite 事务会话源、FTS5 检索、带游标和慢消费者保护的 SSE、Provider 能力检查、MCP 取消/重连、ACP，以及 Ubuntu/macOS CI。
 
@@ -323,7 +324,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。当前回归门是 `bun run verify`（31 项离线功能检查）、`bun test`（299 个测试）、`bun run typecheck` 和 GUI 生产构建。评测套件仍是 26 个任务，按精确断言或 LLM 裁判评分，另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。当前回归门是 `bun run verify`（32 项离线功能检查）、`bun test`（301 个测试）、`bun run typecheck` 和 GUI 生产构建。评测套件仍是 26 个任务，按精确断言或 LLM 裁判评分，另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 

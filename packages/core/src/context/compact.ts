@@ -99,22 +99,22 @@ export async function compactMessagesAsync(
   if (!options.summarizer || !base.dropped || base.overflow) return base
   const reserve = Math.max(1, Math.min(300, Math.floor(options.maxTokens * 0.15)))
   const plan = makePlan(messages, { ...options, maxTokens: options.maxTokens - reserve })
-  if (estimateTokens(plan.messages) > options.maxTokens - reserve) return base
+  if (estimateTokens(plan.messages) > options.maxTokens - reserve) return { ...base, fallback: true }
   try {
     // 摘要调用只得到预留输出预算，并继承父请求的取消信号。
     const summary = await options.summarizer(plan.dropped, { signal: options.signal, maxTokens: reserve })
     options.signal?.throwIfAborted()
     const recap = boundedRecap(summary, reserve)
-    if (!recap) return base
+    if (!recap) return { ...base, fallback: true }
     const compacted = insertRecap(messages, plan, recap)
     const tokens = estimateTokens(compacted)
-    if (tokens > options.maxTokens) return base
+    if (tokens > options.maxTokens) return { ...base, fallback: true }
     return { messages: compacted, dropped: plan.dropped.length - 1, tokens,
       strategy: 'summarize', summarized: plan.dropped.length, changed: true }
   } catch {
     // 摘要提供方失败允许降级，用户取消必须终止整个请求。
     options.signal?.throwIfAborted()
-    return base
+    return { ...base, fallback: true }
   }
 }
 

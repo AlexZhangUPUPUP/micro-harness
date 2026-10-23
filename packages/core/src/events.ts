@@ -28,6 +28,10 @@ export type AgentEvent =
   | { type: 'tool.result'; id: string; name: string; ok: boolean; output: string; ms: number; elided?: number }
   | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number; model?: string; reasoning?: number; durationMs?: number; purpose?: 'summary' }
   | { type: 'context.trim'; dropped: number; tokens: number; strategy: string }
+  /** 模型调用前的完整上下文快照，供 Context Inspector 展示实际输入。 */
+  | { type: 'context.snapshot'; snapshotId: string; trigger: 'model_request' | 'compaction'; tokens: number; budget: number; messages: unknown[]; sources: Record<string, number> }
+  /** 一次压缩的前后窗口和可解释原因；原始消息不被修改。 */
+  | { type: 'context.compaction'; compactionId: string; reason: string; strategy: string; beforeTokens: number; afterTokens: number; dropped: number; summarized: number; beforeMessages: unknown[]; afterMessages: unknown[]; fallback?: boolean }
   /** 实际模型工作窗口，用于续聊恢复；原始事件仍完整保留。 */
   | { type: 'context.checkpoint'; checkpoint: ContextCheckpoint }
   /** 结构化任务状态快照，所有客户端从同一事件重建。 */

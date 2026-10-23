@@ -10,6 +10,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Context Inspector：每次模型调用记录可回放的上下文快照，压缩记录前后窗口、删除/摘要数量与降级原因；Server 提供 Context 查询和 Markdown 导出，GUI 增加实时 Context 面板。
+
 - v0.3 第一条纵向切片：新增结构化任务状态（目标、状态、步骤、约束、验证、阻塞项），提供 `GET/POST /api/sessions/:id/task`，并通过 `task.update` 事件持久化和实时广播。
 - GUI 新增任务状态面板，从同一事件流展示任务目标、步骤、约束、验证结果和修订版本。
 - 存储层将 SQLite 提升为会话元数据和事件的事务事实来源，JSONL 保留为可读兼容导出，并新增从 SQLite 修复导出的接口。

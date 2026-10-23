@@ -45,6 +45,7 @@ The current implementation includes the reliability and review loop needed for a
 
 - **Run lifecycle:** shared token/cost budgets, cancellation propagation, approval release, idempotent resume, startup recovery diagnostics, and explicit terminal states.
 - **Context and agent contracts:** dedicated task evidence, checkpoint snapshots, bounded search and verification tools, acceptance checks, artifact checks, and independently reported child-agent results.
+- **Context Inspector:** each model request has a replayable snapshot; compaction records show before/after messages, token changes, strategy, and fallback reason in the GUI and Markdown export.
 - **Reviewable execution:** isolated worktrees, read-only worktree lifecycle inspection, hunk-level integration, artifact storage with SHA-256 and HTTP Range reads, plus paginated event replay.
 - **Operations:** SQLite as the transactional session source, FTS5 search, SSE cursors with slow-consumer backpressure, provider capability checks, MCP cancellation/reconnect, ACP, and Ubuntu/macOS CI.
 
@@ -323,7 +324,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The current regression gate is `bun run verify` (31 offline feature checks), `bun test` (299 tests), `bun run typecheck`, and the GUI production build. The eval suite remains 26 tasks graded by exact assertions or an LLM judge, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The current regression gate is `bun run verify` (32 offline feature checks), `bun test` (301 tests), `bun run typecheck`, and the GUI production build. The eval suite remains 26 tasks graded by exact assertions or an LLM judge, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
 
 ## Architecture and documentation
 

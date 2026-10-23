@@ -4,7 +4,12 @@
  * is unit-testable without a browser.
  */
 
-import type { TaggedEvent, TaskSnapshot } from './api.ts'
+import type { ContextEvent, TaggedEvent, TaskSnapshot } from './api.ts'
+
+/** 从完整事件流筛选 Context Inspector 需要的快照和压缩记录。 */
+export function deriveContext(events: TaggedEvent[]): ContextEvent[] {
+  return events.filter((item): item is ContextEvent => item.event.type === 'context.snapshot' || item.event.type === 'context.compaction')
+}
 
 /** 从同一条事件流重建任务快照，保证回放和实时视图一致。 */
 export function deriveTask(events: TaggedEvent[]): TaskSnapshot {

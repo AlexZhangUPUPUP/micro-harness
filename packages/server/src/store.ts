@@ -221,6 +221,11 @@ export class SessionStore {
     return path.join(this.dir(id), 'events.jsonl')
   }
 
+  /** 返回 session 的人类可读上下文日志路径，供运行中人工审查。 */
+  contextFile(id: string): string {
+    return path.join(this.dir(id), 'context', 'context-log.md')
+  }
+
   metaFile(id: string): string {
     return path.join(this.dir(id), 'meta.json')
   }
@@ -362,6 +367,7 @@ export class SessionStore {
     const next = write()
     // SQLite 提交成功后再更新兼容导出；导出失败不影响主存储可读性。
     this.#appendExport(id, event, next)
+    this.#appendContextLog(id, event)
     return next
   }
 
@@ -386,8 +392,27 @@ export class SessionStore {
       } catch (error) {
         this.#recordExportFailure(id, error)
       }
+      for (const event of events) this.#appendContextLog(id, event)
     }
     return meta
+  }
+
+  /** 追加上下文快照与压缩摘要，确保运行过程中即可人工审查。 */
+  #appendContextLog(id: string, tagged: TaggedEvent): void {
+    const event = tagged.event
+    if (event.type !== 'context.snapshot' && event.type !== 'context.compaction') return
+    const file = this.contextFile(id)
+    mkdirSync(path.dirname(file), { recursive: true })
+    const header = existsSync(file) ? '' : '# Context history\n\n由 session 事件追加生成；SQLite 事件仍是事实来源。\n\n'
+    const lines = event.type === 'context.snapshot'
+      ? [`## Snapshot ${event.snapshotId}`, '', `- 时间：${new Date(tagged.t).toISOString()}`, `- 触发：${event.trigger}`, `- Token：${event.tokens} / ${event.budget}`, `- 消息：${event.messages.length}`, `- 来源：${JSON.stringify(event.sources)}`, '']
+      : [`## Compaction ${event.compactionId}`, '', `- 时间：${new Date(tagged.t).toISOString()}`, `- 原因：${event.reason}`, `- 策略：${event.strategy}`, `- Token：${event.beforeTokens} → ${event.afterTokens}`, `- 删除：${event.dropped}`, `- 摘要：${event.summarized}`, `- 降级：${event.fallback ? '是' : '否'}`, '', '### 压缩前窗口', '', '```json', JSON.stringify(event.beforeMessages, null, 2), '```', '', '### 压缩后窗口', '', '```json', JSON.stringify(event.afterMessages, null, 2), '```', '']
+    try {
+      appendFileSync(file, header + lines.join('\n') + '\n')
+    } catch (error) {
+      // Markdown 是审查副本，写入失败不能回滚已经提交的 SQLite 事件。
+      this.#recordExportFailure(id, error)
+    }
   }
 
   update(id: string, patch: Partial<SessionMeta>): SessionMeta {

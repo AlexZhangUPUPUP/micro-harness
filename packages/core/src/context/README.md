@@ -43,6 +43,8 @@
 
 ## 检查点与恢复
 
+Context Inspector 通过 `context.snapshot` 和 `context.compaction` 记录每次模型实际收到的窗口及压缩前后差异。SQLite/JSONL 只保存事件，Server 和 GUI 可据此实时回放、审查和导出 Markdown；原始用户输入与工具事件不会被压缩记录覆盖。
+
 `context.checkpoint` 保存版本化消息窗口、当时的工具输出截断配置以及可选的 `taskState` 来源证据。压缩改变窗口、完整工具步骤完成及用户轮结束时记录，存储层只负责持久化事件。
 
 恢复先定位当前 Agent 的最新有效检查点，再回放其后原始事件。旧日志没有检查点时从头恢复；未知或损坏检查点不作为窗口来源。

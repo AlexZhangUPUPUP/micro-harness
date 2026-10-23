@@ -52,6 +52,27 @@ test('single-message summary is applied and checkpointed before the model call',
   expect(checkpoint?.type === 'context.checkpoint' && checkpoint.checkpoint.messages).toEqual(request!.messages)
 })
 
+// Context Inspector 必须记录每次实际模型输入，并在窗口变化时保留前后版本。
+test('context inspector records snapshots and compaction history', async () => {
+  const hub = new EventHub()
+  const events = hub.collect()
+  const provider: Provider = { name: 'inspector', async chat() {
+    return { message: { role: 'assistant', content: 'done' } }
+  } }
+  const harness = new Harness({ provider, model: 'fake', cwd: process.cwd(), tools: [], hub,
+    systemPrompt: 'rules', maxContextTokens: 120 })
+  seed(harness)
+  await harness.send('next')
+  const snapshots = events.filter((item) => item.event.type === 'context.snapshot')
+  const compactions = events.filter((item) => item.event.type === 'context.compaction')
+  expect(snapshots.length).toBeGreaterThan(0)
+  expect(compactions.length).toBeGreaterThan(0)
+  const snapshot = snapshots[0]!.event
+  if (snapshot.type === 'context.snapshot') expect(snapshot.messages.length).toBeGreaterThan(0)
+  const compaction = compactions[0]!.event
+  if (compaction.type === 'context.compaction') expect(compaction.beforeMessages.length).toBeGreaterThan(compaction.afterMessages.length)
+})
+
 // 摘要费用耗尽预算后，不允许继续启动主模型请求。
 test('summary usage counts toward the run budget before the next generation', async () => {
   const hub = new EventHub()
