@@ -252,3 +252,20 @@ test('sub-agent events do not overwrite the session header', () => {
   const mainEnd: TaggedEvent = { agentId: 'main', parentId: null, seq: 4, t: 4, event: { type: 'turn.end', stopReason: 'stop', text: '' } }
   expect(deriveMeta(afterStart, mainEnd).status).toBe('done')
 })
+
+test('persists tool execution ledger and removes it with the session', () => {
+  const dir = sandbox()
+  try {
+    const store = new SessionStore(dir)
+    const meta = store.create({ model: 'm', cwd: '/w' })
+    store.append(meta.id, tag('main', null, 1, { type: 'tool.call', id: 'c1', name: 'write_file', args: { path: 'x' } }))
+    store.append(meta.id, tag('main', null, 2, { type: 'tool.status', id: 'c1', name: 'write_file', status: 'started' }))
+    store.append(meta.id, tag('main', null, 3, { type: 'tool.result', id: 'c1', name: 'write_file', ok: true, output: 'done', ms: 2 }))
+    expect(store.toolExecutions(meta.id)).toEqual([{ sessionId: meta.id, agentId: 'main', callId: 'c1', name: 'write_file', status: 'succeeded', reason: undefined, output: 'done', updatedAt: expect.any(Number) }])
+    expect(store.delete(meta.id)).toBe(true)
+    expect(store.list()).toEqual([])
+    store.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

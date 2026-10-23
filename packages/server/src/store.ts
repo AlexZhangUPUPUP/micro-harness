@@ -39,6 +39,18 @@ export interface SessionSearchHit {
   model: string
 }
 
+/** 工具执行账本中的最终可审计状态。 */
+export interface ToolExecutionRecord {
+  sessionId: string
+  agentId: string
+  callId: string
+  name: string
+  status: string
+  reason?: string
+  output?: string
+  updatedAt: number
+}
+
 export interface CreateSessionInput {
   id?: string
   title?: string
@@ -163,6 +175,17 @@ export class SessionStore {
       );
       CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, rowid_idx);
       CREATE INDEX IF NOT EXISTS idx_events_identity ON events(session_id, agent_id, seq);
+      CREATE TABLE IF NOT EXISTS tool_executions (
+        session_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        call_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        reason TEXT,
+        output TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, agent_id, call_id)
+      );
       CREATE TABLE IF NOT EXISTS store_meta (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -176,9 +199,9 @@ export class SessionStore {
     `)
     // 版本号用于后续 schema migration；当前版本只增加索引和元数据表，不改写已有事件。
     const version = this.db.query<{ value: string }, [string]>('SELECT value FROM store_meta WHERE key = ?').get('schema_version')
-    if (!version) this.db.query('INSERT INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '2')
-    else if (Number(version.value) < 2) this.db.query('UPDATE store_meta SET value = ? WHERE key = ?').run('2', 'schema_version')
-    else if (Number(version.value) > 2) throw new Error(`unsupported storage schema: ${version.value}`)
+    if (!version) this.db.query('INSERT INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '3')
+    else if (Number(version.value) < 3) this.db.query('UPDATE store_meta SET value = ? WHERE key = ?').run('3', 'schema_version')
+    else if (Number(version.value) > 3) throw new Error(`unsupported storage schema: ${version.value}`)
   }
 
   dir(id: string): string {
@@ -243,6 +266,15 @@ export class SessionStore {
       .query<{ data: string }, [string]>('SELECT data FROM events WHERE session_id = ? ORDER BY rowid_idx')
       .all(id)
       .map((r) => JSON.parse(r.data) as TaggedEvent)
+  }
+
+  /** 查询某个会话中已知的工具执行状态，供恢复和审计使用。 */
+  toolExecutions(id: string): ToolExecutionRecord[] {
+    this.require(id)
+    return this.db.query<ToolExecutionRecord, [string]>(
+      `SELECT session_id AS sessionId, agent_id AS agentId, call_id AS callId, name, status, reason, output, updated_at AS updatedAt
+         FROM tool_executions WHERE session_id = ? ORDER BY updated_at, call_id`,
+    ).all(id).map((record) => ({ ...record, reason: record.reason ?? undefined, output: record.output ?? undefined }))
   }
 
   /** 将 SQLite 主存储重新导出为 JSONL 和元数据文件，修复中断的兼容导出。 */
@@ -323,6 +355,7 @@ export class SessionStore {
     const remove = this.db.transaction(() => {
       this.db.query('DELETE FROM events WHERE session_id = ?').run(id)
       this.db.query('DELETE FROM events_fts WHERE session_id = ?').run(id)
+      this.db.query('DELETE FROM tool_executions WHERE session_id = ?').run(id)
       this.db.query('DELETE FROM sessions WHERE id = ?').run(id)
       this.db.query('DELETE FROM store_meta WHERE key = ?').run(`export_error:${id}`)
     })
@@ -437,6 +470,24 @@ export class SessionStore {
       )
       .run(sessionId, event.agentId, event.parentId, event.seq, event.t, event.event.type, JSON.stringify(event))
     this.#insertFts(sessionId, event)
+    this.#recordToolExecution(sessionId, event)
+  }
+
+  /** 从状态和结果事件维护幂等执行账本；重复事件只更新最新观察。 */
+  #recordToolExecution(sessionId: string, tagged: TaggedEvent): void {
+    const event = tagged.event
+    if (event.type !== 'tool.status' && event.type !== 'tool.result') return
+    const current = this.db.query<{ name: string; status: string; reason?: string; output?: string }, [string, string, string]>(
+      'SELECT name, status, reason, output FROM tool_executions WHERE session_id = ? AND agent_id = ? AND call_id = ?',
+    ).get(sessionId, tagged.agentId, event.id)
+    const name = event.name
+    const status = event.type === 'tool.status' ? event.status : (event.ok ? 'succeeded' : 'failed')
+    const reason = event.type === 'tool.status' ? event.reason : current?.reason
+    const output = event.type === 'tool.result' ? event.output : current?.output
+    this.db.query(
+      `INSERT OR REPLACE INTO tool_executions (session_id, agent_id, call_id, name, status, reason, output, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(sessionId, tagged.agentId, event.id, name, status, reason ?? null, output ?? null, tagged.t)
   }
 
   /** 为单个事件写入全文索引。 */
