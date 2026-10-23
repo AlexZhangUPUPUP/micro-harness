@@ -176,6 +176,8 @@ function stdioChannel(command: string, args: string[], env: Record<string, strin
           if (!pending.has(id)) return
           pending.delete(id)
           clearTimeout(timer)
+          // MCP 标准取消通知是尽力而为；服务端不支持时仍将结果标记为未知。
+          try { child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: '$/cancelRequest', params: { requestId: id } }) + '\n') } catch { /* 管道已关闭 */ }
           reject(signal?.reason ?? new Error('mcp request aborted'))
         }
         signal?.addEventListener('abort', onAbort, { once: true })
@@ -218,7 +220,7 @@ function httpChannel(url: string, headers: Record<string, string> = {}): JsonRpc
   let sessionId: string | undefined
   let closed = false
 
-  const send = async (body: unknown): Promise<JsonRpcResponse> => {
+  const send = async (body: unknown, signal?: AbortSignal): Promise<JsonRpcResponse> => {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -229,6 +231,7 @@ function httpChannel(url: string, headers: Record<string, string> = {}): JsonRpc
         ...headers,
       },
       body: JSON.stringify(body),
+      signal,
     })
     const sid = res.headers.get('mcp-session-id')
     if (sid) sessionId = sid
@@ -257,16 +260,26 @@ function httpChannel(url: string, headers: Record<string, string> = {}): JsonRpc
       if (closed) throw new Error('mcp channel is closed')
       if (signal?.aborted) throw signal.reason ?? new Error('mcp request aborted')
       const id = ++nextId
-      const call = send({ jsonrpc: '2.0', id, method, params })
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`mcp ${method} timed out after ${timeoutMs}ms`)), timeoutMs),
-      )
+      const call = send({ jsonrpc: '2.0', id, method, params }, signal)
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error(`mcp ${method} timed out after ${timeoutMs}ms`)), timeoutMs)
+      })
+      let onAbort: (() => void) | undefined
       const aborted = signal
-        ? new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason ?? new Error('mcp request aborted')), { once: true }))
+        ? new Promise<never>((_, reject) => {
+            onAbort = () => reject(signal.reason ?? new Error('mcp request aborted'))
+            signal.addEventListener('abort', onAbort, { once: true })
+          })
         : undefined
-      const msg = await Promise.race(aborted ? [call, timeout, aborted] : [call, timeout])
-      if (msg.error) throw new Error(msg.error.message ?? 'mcp error')
-      return msg.result as T
+      try {
+        const msg = await Promise.race(aborted ? [call, timeout, aborted] : [call, timeout])
+        if (msg.error) throw new Error(msg.error.message ?? 'mcp error')
+        return msg.result as T
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle)
+        if (onAbort && signal) signal.removeEventListener('abort', onAbort)
+      }
     },
     notify(method: string, params?: unknown): void {
       if (closed) return

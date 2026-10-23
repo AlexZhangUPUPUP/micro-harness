@@ -135,6 +135,29 @@ test('the SSE branch of the HTTP transport', async () => {
   }
 })
 
+test('HTTP MCP calls abort the underlying fetch', async () => {
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      const body = (await req.json()) as { id?: number; method?: string }
+      if (body.method === 'initialize') return Response.json({ jsonrpc: '2.0', id: body.id, result: { capabilities: { tools: {} } } })
+      if (body.method === 'tools/list') return Response.json({ jsonrpc: '2.0', id: body.id, result: { tools: [{ name: 'slow', inputSchema: { type: 'object' } }] } })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      return Response.json({ jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'text', text: 'late' }] } })
+    },
+  })
+  try {
+    const conn = await connectMcpServer({ name: 'slow', url: `http://127.0.0.1:${server.port}/mcp` })
+    const controller = new AbortController()
+    const pending = conn.tools[0]!.run({}, { cwd: '.', allowBash: false, signal: controller.signal })
+    setTimeout(() => controller.abort(new Error('cancel test')), 10)
+    await expect(pending).rejects.toThrow('cancel test')
+    await conn.close()
+  } finally {
+    server.stop(true)
+  }
+})
+
 test('config: parses the Claude/Cursor shape and finds the standard paths', () => {
   const servers = parseMcpConfig('{"mcpServers":{"fs":{"command":"npx","args":["-y","x"]},"web":{"url":"https://x/mcp"}}}')
   expect(servers).toEqual([
