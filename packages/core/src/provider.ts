@@ -21,8 +21,19 @@ export interface ChatResponse {
   usage?: Usage
 }
 
+/** Provider 在请求前可声明的能力边界；缺省表示兼容旧 Provider 的未知能力。 */
+export interface ProviderCapabilities {
+  streaming?: boolean
+  tools?: boolean
+  images?: boolean
+  cancellation?: boolean
+  usage?: boolean
+  structuredOutput?: boolean
+}
+
 export interface Provider {
   name: string
+  capabilities?: ProviderCapabilities
   chat(req: ChatRequest): Promise<ChatResponse>
 }
 
@@ -38,6 +49,7 @@ export interface OpenAIProviderConfig {
 export function openaiProvider(cfg: OpenAIProviderConfig): Provider {
   return {
     name: cfg.name ?? 'openai-compatible',
+    capabilities: { streaming: true, tools: true, images: true, cancellation: true, usage: true },
     async chat(req) {
       const modelCfg = {
         baseUrl: cfg.baseUrl,

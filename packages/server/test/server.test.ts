@@ -327,6 +327,16 @@ test('GET /api/models falls back to the single default model', async () => {
   }
 })
 
+test('GET /api/provider exposes declared capabilities without changing model response', async () => {
+  const h = boot()
+  try {
+    const response = await fetch(`${h.srv.url}/api/provider`)
+    expect(await response.json()).toEqual({ name: 'echo', capabilities: {} })
+  } finally {
+    h.stop()
+  }
+})
+
 test('resume reconstructs prior context before continuing', async () => {
   const h = boot()
   try {

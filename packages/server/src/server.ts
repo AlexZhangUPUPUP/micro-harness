@@ -574,6 +574,9 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (url.pathname === '/api/budget') {
       return json({ maxCost: options.maxCost ?? null, maxTokens: options.maxRunTokens ?? null })
     }
+    if (url.pathname === '/api/provider') {
+      return json({ name: provider.name, capabilities: provider.capabilities ?? {} })
+    }
     if (url.pathname === '/api/limits') {
       return json({ maxContext: options.maxContextTokens ?? 24_000 })
     }
