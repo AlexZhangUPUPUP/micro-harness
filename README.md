@@ -328,7 +328,7 @@ The core runs the loop: request a model response, execute tools, and send the re
 
 **Interfaces with explicit composition.** Models, tools, and file access are replaceable through interfaces, assembled at the CLI or server entry point. MCP configuration is loaded at startup, without runtime hot-plugging, keeping plugin lifecycle management out of the loop. See the [design comparison](docs/design-comparison.md) for the reasoning.
 
-**Separate records from search.** Web sessions append events to JSONL and maintain SQLite metadata and an FTS5 index. The index can be rebuilt from session records on disk, allowing records to be read independently while supporting search in the interface. See the [session store](packages/server/src/store.ts).
+**Separate canonical storage from export.** Web sessions commit events and metadata to SQLite transactions, maintain an FTS5 index, and keep JSONL as a portable compatibility export. A fresh database can still be rebuilt from existing session records, and the export can be regenerated from SQLite. See the [session store](packages/server/src/store.ts).
 
 Explore the implementation, evaluations, and project history:
 

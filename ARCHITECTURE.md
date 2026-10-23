@@ -172,7 +172,7 @@ export type AgentEvent =
   | { type: 'error';          message: string; fatal?: boolean }
 ```
 
-**所有事件**：① 追加到会话 JSONL（事实来源）；② 通过 SSE / ACP 广播。前端 = 事件消费者。GUI 的 trace / inspector / replay 全部基于它。
+**所有事件**：① 在 SQLite 事务中写入事实存储；② 更新 JSONL 兼容导出；③ 通过 SSE / ACP 广播。前端 = 事件消费者。GUI 的 trace / inspector / replay 全部基于同一事件表。
 
 ---
 
@@ -236,8 +236,8 @@ export type AgentEvent =
 
 ## 7. 存储
 
-- **事实来源**：会话 **JSONL**（append-only），与 pi 的做法一致——脱离本工具也能读。
-- **索引**：**SQLite**（Bun 用 `bun:sqlite`），存会话元数据 + FTS5 全文 + 用量/运行历史。**可删可重建**。
+- **事实来源**：**SQLite**（Bun 用 `bun:sqlite`），以事务保存会话元数据、完整事件和 FTS5 索引。
+- **兼容导出**：会话 JSONL 和 `meta.json` 保留为可读备份、迁移输入和故障诊断材料，可用 `SessionStore.exportSession()` 从 SQLite 重建。
 - **trace**：`traces/run-*.jsonl`，每条事件一行。
 
 ---
@@ -273,7 +273,7 @@ export type AgentEvent =
 
 - **ADR-001 自研内核，不直接用 Cordis。** 插件面窄，通用框架 60% 用不上；自研可完全掌控；接口按 Cordis 的样子设计，将来可平滑迁移。
 - **ADR-002 TypeScript + Bun，不用 Rust/Go。** 主流 harness（pi / OpenCode / Claude Code）源码都是 TS；Bun 编译解决启动与分发；Codex 那种 Rust core 留作后期 sidecar。
-- **ADR-003 JSONL 为事实来源 + SQLite 为索引。** 可移植、可重建、可 grep。
+- **ADR-003 SQLite 为事实来源 + JSONL 为兼容导出。** 事务保证一致性，导出保留可移植和可 grep 能力。
 - **ADR-004 事件是唯一契约。** loop 只发事件；server/GUI/CLI/trace 全是消费者。
 - **ADR-005 进程内插件 + MCP 进程外 + ACP 边缘。** 可信的进程内，不可信的走 MCP。
 - **ADR-006 不与 DSH 竞争，做它的邻居。** 通过 ACP 可被 DSH/Zed 驱动；也可作为 DSH 插件存在。

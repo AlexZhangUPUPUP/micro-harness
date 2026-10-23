@@ -104,6 +104,26 @@ test('index is disposable: delete index.sqlite and rebuild from JSONL', () => {
   }
 })
 
+// SQLite 是主存储，兼容导出损坏时仍可直接读取完整事件。
+test('reads canonical events when the JSONL export is missing', () => {
+  const dir = sandbox()
+  try {
+    const store = new SessionStore(dir)
+    const meta = store.create({ model: 'm' })
+    store.append(meta.id, tag('main', null, 1, { type: 'user.message', text: 'canonical event' }))
+    rmSync(store.eventsFile(meta.id))
+    const reopened = new SessionStore(dir)
+    expect(reopened.events(meta.id)).toHaveLength(1)
+    expect(reopened.events(meta.id)[0]?.event.type).toBe('user.message')
+    reopened.exportSession(meta.id)
+    expect(existsSync(store.eventsFile(meta.id))).toBe(true)
+    reopened.close()
+    store.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 // 连续重建必须保持主、子 Agent 总用量稳定，同时保留人工元数据。
 test('rebuilding repeatedly preserves usage totals and manually edited metadata', () => {
   // 准备包含主、子 Agent 用量和后续人工重命名的会话。

@@ -1,15 +1,14 @@
 /**
  * Session storage — ROADMAP P4 / ARCHITECTURE.md §7.
  *
- * JSONL is the source of truth, one append-only file per session; SQLite is a
- * *derived* index (metadata + FTS5 full-text) that can be deleted and rebuilt
- * from the JSONL files at any time. Nothing here imports HTTP: the store is a
- * plain library so the CLI, server and tests all use the same code.
+ * SQLite is the source of truth for sessions and events; JSONL remains an
+ * append-only compatibility export that can rebuild a fresh database. Nothing
+ * here imports HTTP: the store is a plain library for CLI, server and tests.
  *
  * Layout:
- *   <dataDir>/sessions/<id>/meta.json     small, human-readable session header
- *   <dataDir>/sessions/<id>/events.jsonl  every tagged AgentEvent, in order
- *   <dataDir>/index.sqlite                derived index (safe to delete)
+ *   <dataDir>/sessions/<id>/meta.json     human-readable metadata export
+ *   <dataDir>/sessions/<id>/events.jsonl  portable event export
+ *   <dataDir>/index.sqlite                canonical event and metadata store
  */
 
 import { Database } from 'bun:sqlite'
@@ -163,6 +162,11 @@ export class SessionStore {
         data       TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, rowid_idx);
+      CREATE INDEX IF NOT EXISTS idx_events_identity ON events(session_id, agent_id, seq);
+      CREATE TABLE IF NOT EXISTS store_meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
       CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
         session_id UNINDEXED,
         agent_id   UNINDEXED,
@@ -170,6 +174,8 @@ export class SessionStore {
         content
       );
     `)
+    // 版本号用于后续 schema migration；旧数据库没有该表时会安全初始化。
+    this.db.query('INSERT OR IGNORE INTO store_meta (key, value) VALUES (?, ?)').run('schema_version', '2')
   }
 
   dir(id: string): string {
@@ -235,33 +241,51 @@ export class SessionStore {
       .map((r) => JSON.parse(r.data) as TaggedEvent)
   }
 
+  /** 将 SQLite 主存储重新导出为 JSONL 和元数据文件，修复中断的兼容导出。 */
+  exportSession(id: string): void {
+    const meta = this.require(id)
+    const events = this.events(id)
+    writeFileSync(this.eventsFile(id), events.map((event) => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''))
+    writeFileSync(this.metaFile(id), JSON.stringify(meta, null, 2))
+  }
+
   append(id: string, event: TaggedEvent): SessionMeta {
-    this.require(id)
+    const write = this.db.transaction(() => {
+      const current = this.require(id)
+      const next = deriveMeta(current, event)
+      this.#insertEvent(id, event)
+      this.#insertMeta(next)
+      return next
+    })
+    const next = write()
+    // SQLite 提交成功后再更新兼容导出；导出失败不影响主存储可读性。
     appendFileSync(this.eventsFile(id), JSON.stringify(event) + '\n')
-    this.#insertEvent(id, event)
-    const next = deriveMeta(this.require(id), event)
     writeFileSync(this.metaFile(id), JSON.stringify(next, null, 2))
-    this.#insertMeta(next)
     return next
   }
 
   /** Append many events (used by fork and rebuild paths). */
   appendAll(id: string, events: TaggedEvent[]): SessionMeta {
-    let meta = this.require(id)
-    for (const event of events) {
-      appendFileSync(this.eventsFile(id), JSON.stringify(event) + '\n')
-      this.#insertEvent(id, event)
-      meta = deriveMeta(meta, event)
-    }
+    const write = this.db.transaction(() => {
+      let meta = this.require(id)
+      for (const event of events) {
+        this.#insertEvent(id, event)
+        meta = deriveMeta(meta, event)
+      }
+      this.#insertMeta(meta)
+      return meta
+    })
+    const meta = write()
+    // 批量写入一次性追加，避免每个事件都单独刷新文件。
+    if (events.length) appendFileSync(this.eventsFile(id), events.map((event) => JSON.stringify(event)).join('\n') + '\n')
     writeFileSync(this.metaFile(id), JSON.stringify(meta, null, 2))
-    this.#insertMeta(meta)
     return meta
   }
 
   update(id: string, patch: Partial<SessionMeta>): SessionMeta {
     const next = { ...this.require(id), ...patch, id, updatedAt: Date.now() }
-    writeFileSync(this.metaFile(id), JSON.stringify(next, null, 2))
     this.#insertMeta(next)
+    writeFileSync(this.metaFile(id), JSON.stringify(next, null, 2))
     return next
   }
 
