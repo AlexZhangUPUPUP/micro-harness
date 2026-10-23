@@ -37,6 +37,21 @@ test('list_dir lists entries and marks directories', async () => {
   }
 })
 
+test('search returns bounded matches without shell interpolation', async () => {
+  const dir = await sandbox()
+  try {
+    const tools = makeTools()
+    const ctx: ToolContext = { cwd: dir, allowBash: false }
+    await dispatch(tools, 'write_file', JSON.stringify({ path: 'a.ts', content: 'needle\nother\nneedle\n' }), ctx)
+    const out = await dispatch(tools, 'search', JSON.stringify({ query: 'needle', glob: '*.ts', max_results: 1 }), ctx)
+    assert.equal(out.isError, undefined)
+    assert.match(out.output, /a\.ts:1:needle/)
+    assert.doesNotMatch(out.output, /a\.ts:3:needle/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('path traversal is refused', async () => {
   const dir = await sandbox()
   try {

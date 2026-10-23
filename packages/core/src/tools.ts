@@ -7,6 +7,7 @@
  */
 
 import { exec, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { localFs, type FileSystem } from './fs.ts'
 import type { Sandbox } from './sandbox.ts'
 import { loadWebConfig } from './web/config.ts'
@@ -51,6 +52,7 @@ export interface Tool {
 }
 
 const MAX_OUTPUT = 20_000
+const execFileAsync = promisify(execFile)
 
 function clip(text: string, max = MAX_OUTPUT): string {
   if (text.length <= max) return text
@@ -252,6 +254,37 @@ export function makeTools(env: NodeJS.ProcessEnv = process.env): Tool[] {
         entries.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
         const out = entries.map((e) => (e.dir ? e.name + '/' : e.name)).join('\n')
         return { output: clip(out || '(empty)') }
+      },
+    },
+    {
+      name: 'search',
+      description: 'Search text with ripgrep using bounded results and optional glob/path filters.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'literal or regular expression to search' },
+          path: { type: 'string', description: 'file or directory path (default ".")' },
+          glob: { type: 'string', description: 'optional ripgrep glob filter' },
+          max_results: { type: 'integer', description: 'maximum matching lines (default 100)' },
+        },
+        required: ['query'],
+      },
+      async run(args, ctx) {
+        // 通过参数数组调用 ripgrep，避免把搜索内容拼接进 shell 命令。
+        const query = String(args.query ?? '')
+        if (!query) return { output: 'search: query is required', isError: true }
+        const max = Math.min(500, Math.max(1, Number(args.max_results) || 100))
+        const target = String(args.path ?? '.')
+        const rgArgs = ['--line-number', '--no-heading', '--color', 'never', '-m', String(max), query, target]
+        if (args.glob) rgArgs.splice(4, 0, '--glob', String(args.glob))
+        try {
+          const result = await execFileAsync('rg', rgArgs, { cwd: ctx.cwd, timeout: 30_000, maxBuffer: 2 * 1024 * 1024, signal: ctx.signal })
+          return { output: clip(String(result.stdout).trim() || '(no matches)') }
+        } catch (err) {
+          const error = err as { code?: number; stdout?: string; stderr?: string; message?: string }
+          if (error.code === 1) return { output: '(no matches)' }
+          return { output: clip(String(error.stdout ?? error.stderr ?? error.message ?? error)), isError: true }
+        }
       },
     },
     {
