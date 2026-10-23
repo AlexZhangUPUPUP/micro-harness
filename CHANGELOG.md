@@ -44,6 +44,7 @@ All notable changes to this project are documented here. The format follows
 - 并行工具调用对 mutating 工具增加执行锁，避免写入和外部副作用重叠；只读工具仍保持并行。
 - Provider 明确声明不支持流式、工具、图像或取消时，Harness 会在请求前拒绝并返回可诊断错误。
 - Server 启动会扫描遗留 active 会话，写入 `server_restarted` 诊断错误并保留 resume 恢复入口。
+- CI 主测试改为 Ubuntu 与 macOS 双平台矩阵，分别验证测试、类型、文档和 GUI 构建。
 - Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - AgentResult 增加结构化终态，区分成功、普通失败、取消、超时和预算停止。
 - task 委派支持目标、验收条件和预期产物契约，并明确标记未独立验证的结果。

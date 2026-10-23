@@ -13,6 +13,8 @@
 | ACP | 本地协议夹具和会话状态路径 | `packages/core/test/acp.test.ts` |
 | Provider | Provider 接口与能力声明 | `packages/core/test/context-provider.test.ts`、Server `/api/provider` |
 
+CI 主测试矩阵覆盖 Ubuntu 与 macOS；Release 另外构建 darwin-arm64 和 linux-x64 单文件 CLI。
+
 ## 发布检查
 
 发布前至少执行：
