@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Bun 1.1+" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
+  <img alt="Bun 1.4.3" src="https://img.shields.io/badge/Bun-1.4.3-black?style=flat-square&logo=bun">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square"></a>
 </p>
 
@@ -37,7 +37,18 @@ Connect any OpenAI Chat Completions–compatible service to read projects, edit 
 - **One event stream, four views.** The same tagged events are the session log, the SSE feed, replay, Trace and Inspector. “What the model saw” is recorded, not reconstructed from a separate UI state.
 - **Capability *is* the permission model.** `read-only` / `workspace` / `full` / `auto-review` decide which tools exist, whether the shell is available, and whether `network` tools need approval per call.
 - **Delegation with a review step.** Sub-agents get separate context (optionally a git worktree); their diffs land hunk by hunk, and a drifted hunk is reported rather than mis-applied.
-- **Tests and evals as first-class.** 238 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
+- **Tests and evals as first-class.** 299 tests, a 26-task eval suite, a deterministic `--mock` mode and a golden set with judge calibration — all runnable offline.
+
+### Current release surface
+
+The current implementation includes the reliability and review loop needed for a long-running local harness:
+
+- **Run lifecycle:** shared token/cost budgets, cancellation propagation, approval release, idempotent resume, startup recovery diagnostics, and explicit terminal states.
+- **Context and agent contracts:** dedicated task evidence, checkpoint snapshots, bounded search and verification tools, acceptance checks, artifact checks, and independently reported child-agent results.
+- **Reviewable execution:** isolated worktrees, read-only worktree lifecycle inspection, hunk-level integration, artifact storage with SHA-256 and HTTP Range reads, plus paginated event replay.
+- **Operations:** SQLite as the transactional session source, FTS5 search, SSE cursors with slow-consumer backpressure, provider capability checks, MCP cancellation/reconnect, ACP, and Ubuntu/macOS CI.
+
+The release boundary and known platform limitations are kept in the [support matrix](docs/support-matrix.zh-CN.md), [changelog](CHANGELOG.md), and [version plan](docs/version-plan.zh-CN.md).
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
@@ -100,7 +111,7 @@ What is **not** a difference: having a server with SSE (opencode does), supporti
 
 ## Quick start
 
-You need [Bun](https://bun.sh) ≥ 1.1 and an API key for your model service. Worktree isolation also requires Git and a target project that is a Git repository.
+You need [Bun](https://bun.sh) 1.4.3 and an API key for your model service. Worktree isolation also requires Git and a target project that is a Git repository. The supported-platform baseline is documented in the [support matrix](docs/support-matrix.zh-CN.md).
 
 ### 1. Get the project and configure a model
 
@@ -108,7 +119,7 @@ You need [Bun](https://bun.sh) ≥ 1.1 and an API key for your model service. Wo
 # Clone the project and install dependencies.
 git clone https://github.com/AlexZhangUPUPUP/micro-harness.git
 cd micro-harness
-bun install
+bun install --frozen-lockfile
 
 # DeepSeek shown as an example; use your own key.
 export MICRO_BASE_URL=https://api.deepseek.com
@@ -312,7 +323,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The full suite is `bun test` (238 tests) plus `bun run eval:mock`: 26 tasks graded by exact assertions or an LLM judge, deterministic offline, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
+These cover context mechanisms and task execution respectively. `bun run eval:mock` prints a deterministic summary: 26 tasks × 2 runs = 52 attempts, 44 pass, 0 fail, 8 skipped — 100% of the graded attempts. These are scripted runs: they prove the harness executes the tasks, not that a real model solves them. A spot check on 2026-10-19 with `deepseek-chat` (deterministic tasks only, one run each) passed 5 of 5: `exact-file`, `fix-failing-test`, `rename-symbol`, `json-shape`, `append-section`. This is a smoke test, not a benchmark. Token counts use a local estimate. The current regression gate is `bun run verify` (31 offline feature checks), `bun test` (299 tests), `bun run typecheck`, and the GUI production build. The eval suite remains 26 tasks graded by exact assertions or an LLM judge, with a golden set and a judge-calibration command (`--min-accuracy`) for real-model runs. See the [evaluation guide](scripts/evals/README.md) for real-model runs, the judge and known limitations.
 
 ## Architecture and documentation
 
@@ -321,14 +332,14 @@ The core runs the loop: request a model response, execute tools, and send the re
 | Directory | Responsibility |
 |---|---|
 | [`packages/core`](packages/core) | Agent loop, built-in tools (files, shell, web search/fetch), context management, multiple agents, CLI, MCP and ACP |
-| [`packages/server`](packages/server) | HTTP API, SSE streaming, session storage, and full-text search |
+| [`packages/server`](packages/server) | HTTP API, SSE streaming, SQLite session storage, artifact APIs, and full-text search |
 | [`packages/gui`](packages/gui) | React interface, conversations, traces, change review, and Inspector |
 
 ### Two design decisions
 
 **Interfaces with explicit composition.** Models, tools, and file access are replaceable through interfaces, assembled at the CLI or server entry point. MCP configuration is loaded at startup, without runtime hot-plugging, keeping plugin lifecycle management out of the loop. See the [design comparison](docs/design-comparison.md) for the reasoning.
 
-**Separate canonical storage from export.** Web sessions commit events and metadata to SQLite transactions, maintain an FTS5 index, and keep JSONL as a portable compatibility export. A fresh database can still be rebuilt from existing session records, and the export can be regenerated from SQLite. See the [session store](packages/server/src/store.ts).
+**Separate canonical storage from export.** Web sessions commit events and metadata to SQLite transactions, maintain an FTS5 index, and keep JSONL as a portable compatibility export. A fresh database can be rebuilt from existing session records, and the export can be regenerated from SQLite. See the [session store](packages/server/src/store.ts) and the offline [storage commands](packages/server/src/storage-cli.ts).
 
 Offline storage maintenance is available without an API key:
 
@@ -346,6 +357,9 @@ Explore the implementation, evaluations, and project history:
 | [Design comparison](docs/design-comparison.md) | Other harnesses, design choices, and the reasons behind them |
 | [Evaluation guide](scripts/evals/README.md) | Tasks, grading, context experiments, and evaluation limits |
 | [Roadmap](ROADMAP.md) / [Build log](PROGRESS.md) | Project evolution and milestones; current code takes precedence over historical status |
+| [Changelog](CHANGELOG.md) | Versioned release notes and the current unreleased changes |
+| [Support matrix](docs/support-matrix.zh-CN.md) | Runtime, platform, protocol, and CI support boundaries |
+| [Version plan](docs/version-plan.zh-CN.md) | Planned waves, release gates, and follow-up work |
 | [Minimal seed: seed-v1](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) | The original agent loop in six source files, running on Node ≥ 22.18 |
 
 ## Development and contributing

@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AlexZhangUPUPUP/micro-harness/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Bun 1.1+" src="https://img.shields.io/badge/Bun-1.1+-black?style=flat-square&logo=bun">
+  <img alt="Bun 1.4.3" src="https://img.shields.io/badge/Bun-1.4.3-black?style=flat-square&logo=bun">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square"></a>
 </p>
 
@@ -37,7 +37,18 @@ micro-harness 是一个用 TypeScript 构建的编码 Agent 运行时。**Agent 
 - **一条事件流，四个视图。** 同一批带标签的事件既是会话日志，也是 SSE、回放、Trace 与 Inspector 的数据源。“模型看到了什么”是被记录下来的，而不是从另一套 UI 状态反推的。
 - **能力即权限模型。** `read-only` / `workspace` / `full` / `auto-review` 决定哪些工具存在、有没有 shell、`network` 工具是否逐次审批。
 - **带审阅的委派。** 子 Agent 拥有独立上下文（可选独立 git worktree）；改动逐块落地，上下文漂移的 hunk 会被报告而不是错应用。
-- **测试与评测是一等公民。** 238 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
+- **测试与评测是一等公民。** 299 个测试、26 个评测任务、确定性的 `--mock`、带裁判校准的金标集——全部可离线跑。
+
+### 当前能力边界
+
+当前实现已经覆盖长时间本地运行所需的可靠性和审查闭环：
+
+- **运行生命周期：** 共享 Token/成本预算、取消传播、审批释放、幂等恢复、启动恢复诊断和明确的终态。
+- **上下文与 Agent 契约：** 独立任务证据、检查点快照、有界搜索与验证工具、验收检查、产物检查，以及可独立报告的子 Agent 结果。
+- **可审查执行：** 隔离 worktree、只读 worktree 生命周期检查、分块集成、带 SHA-256 和 HTTP Range 的产物存储，以及分页事件回放。
+- **运行与互操作：** SQLite 事务会话源、FTS5 检索、带游标和慢消费者保护的 SSE、Provider 能力检查、MCP 取消/重连、ACP，以及 Ubuntu/macOS CI。
+
+发布边界和已知平台限制见[支持矩阵](docs/support-matrix.zh-CN.md)、[变更记录](CHANGELOG.md)与[版本计划](docs/version-plan.zh-CN.md)。
 
 <!-- 产品静态截图独立展示，避免与星标引导混淆。 -->
 <p align="center">
@@ -100,7 +111,7 @@ DeepSeek Harness 列核对于 **2026-10-17**，依据其[官方架构文档](htt
 
 ## 快速开始
 
-需要 [Bun](https://bun.sh) ≥ 1.1，以及模型服务的 API Key。使用 worktree 隔离时还需要 Git，目标项目应为 Git 仓库。
+需要 [Bun](https://bun.sh) 1.4.3，以及模型服务的 API Key。使用 worktree 隔离时还需要 Git，目标项目应为 Git 仓库。支持的平台基线见[支持矩阵](docs/support-matrix.zh-CN.md)。
 
 ### 1. 下载并配置模型
 
@@ -108,7 +119,7 @@ DeepSeek Harness 列核对于 **2026-10-17**，依据其[官方架构文档](htt
 # 下载项目并安装依赖。
 git clone https://github.com/AlexZhangUPUPUP/micro-harness.git
 cd micro-harness
-bun install
+bun install --frozen-lockfile
 
 # 以 DeepSeek 为例，替换为你自己的 API Key。
 export MICRO_BASE_URL=https://api.deepseek.com
@@ -312,7 +323,7 @@ bun test packages/core/test/context.test.ts
 bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 ```
 
-上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。完整套件是 `bun test`（238 个测试）加 `bun run eval:mock`：26 个任务，按精确断言或 LLM 裁判评分，离线确定性运行；另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
+上述两组分别检查上下文机制与任务执行。`bun run eval:mock` 会打印确定性汇总：26 个任务 × 2 次 = 52 次尝试，44 通过、0 失败、8 跳过——计分部分 100%。这些是脚本化运行：证明 harness 能执行任务，不代表真实模型能解出。2026-10-19 用 `deepseek-chat` 做的抽查（只用确定性评分任务、每个 1 次）5/5 通过：`exact-file`、`fix-failing-test`、`rename-symbol`、`json-shape`、`append-section`。这是冒烟检查，不是 benchmark；token 数使用本地估算。当前回归门是 `bun run verify`（31 项离线功能检查）、`bun test`（299 个测试）、`bun run typecheck` 和 GUI 生产构建。评测套件仍是 26 个任务，按精确断言或 LLM 裁判评分，另有金标集与裁判校准命令（`--min-accuracy`）用于真实模型评测。真实模型评测、裁判与已知局限见[评测说明](scripts/evals/README.md)。
 
 ## 架构与文档
 
@@ -328,7 +339,7 @@ bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 
 **接口扩展，显式组装。** 模型、工具与文件系统通过接口替换，在 CLI 或服务端入口完成组装。当前 MCP 配置在启动时加载，不提供运行中热插拔；这一边界让执行循环不必承担插件生命周期管理。取舍依据见[设计对比](docs/design-comparison.zh-CN.md)。
 
-**记录与检索分开。** Web 会话将事件追加到 JSONL，并维护 SQLite 元数据与 FTS5 检索索引；索引可从磁盘上的会话记录重建。这样运行记录既能被独立读取，也能支持界面检索。实现见[会话存储](packages/server/src/store.ts)。
+**记录与检索分开。** Web 会话将事件和元数据以事务方式写入 SQLite，并维护 FTS5 检索索引；JSONL 保留为可读、可移植的兼容导出。数据库可从既有会话记录修复，导出也可从 SQLite 重新生成。实现见[会话存储](packages/server/src/store.ts)与离线[存储命令](packages/server/src/storage-cli.ts)。
 
 继续了解实现、评测与项目演进：
 
@@ -338,6 +349,9 @@ bun run eval:mock --tasks=exact-file,fix-failing-test --runs=1
 | [设计对比](docs/design-comparison.zh-CN.md) | 与其他 harness 的设计对照，以及采用或舍弃某种机制的原因 |
 | [评测说明（英文）](scripts/evals/README.md) | 任务集、评分方法、上下文实验与评测局限 |
 | [路线图](ROADMAP.md) / [构建记录](PROGRESS.md) | 项目演进与阶段记录；历史状态以当前代码为准 |
+| [变更记录](CHANGELOG.md) | 版本发布说明与当前未发布变更 |
+| [支持矩阵](docs/support-matrix.zh-CN.md) | 运行时、平台、协议与 CI 支持边界 |
+| [版本计划](docs/version-plan.zh-CN.md) | 版本波次、发布门槛与后续工作 |
 | [极简种子 seed-v1](https://github.com/AlexZhangUPUPUP/micro-harness/tree/seed-v1) | 从六个源码文件理解最初的 Agent 循环；该版本使用 Node ≥ 22.18 |
 
 ## 开发与贡献
