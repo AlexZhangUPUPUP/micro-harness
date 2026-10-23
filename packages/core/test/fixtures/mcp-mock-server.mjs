@@ -24,6 +24,11 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
   },
+  {
+    name: 'slow',
+    description: 'Waits before replying',
+    inputSchema: { type: 'object', properties: {} },
+  },
 ]
 
 process.stdin.on('data', (chunk) => {
@@ -64,6 +69,9 @@ process.stdin.on('data', (chunk) => {
         send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'peeked' }] } })
       } else if (name === 'boom') {
         send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'kaboom' }], isError: true } })
+      } else if (name === 'slow') {
+        // 模拟不可安全复用的长调用，测试取消时进程组是否被终止。
+        setTimeout(() => send({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: 'late' }] } }), 5000)
       } else {
         send({ jsonrpc: '2.0', id: msg.id, error: { code: -32602, message: `unknown tool: ${name}` } })
       }

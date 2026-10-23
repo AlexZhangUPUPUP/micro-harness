@@ -39,6 +39,8 @@ export interface McpServerConfig {
    * asks before each call.
    */
   network?: boolean
+  /** 取消 stdio 调用时终止整个 MCP 进程组；适用于不可安全复用的副作用调用。 */
+  terminateOnAbort?: boolean
 }
 
 /** One server from `mcpServers` in the config file. */
@@ -101,17 +103,29 @@ interface JsonRpcChannel {
 
 /* --------------------------------------------------------------- stdio */
 
-function stdioChannel(command: string, args: string[], env: Record<string, string> = {}, cwd?: string): JsonRpcChannel {
+function stdioChannel(command: string, args: string[], env: Record<string, string> = {}, cwd?: string, terminateOnAbort = false): JsonRpcChannel {
   const child: ChildProcessWithoutNullStreams = spawn(command, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, ...env },
     cwd,
+    detached: process.platform !== 'win32',
   })
   let nextId = 0
   let buffer = ''
   let stderr = ''
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>()
   let closed = false
+
+  // 终止独立进程组，避免取消后 MCP 子进程继续执行后台副作用。
+  const terminate = (): void => {
+    closed = true
+    try {
+      if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGTERM')
+      else child.kill()
+    } catch {
+      /* 子进程已经退出 */
+    }
+  }
 
   const fail = (err: Error): void => {
     for (const [, p] of pending) {
@@ -178,6 +192,7 @@ function stdioChannel(command: string, args: string[], env: Record<string, strin
           clearTimeout(timer)
           // MCP 标准取消通知是尽力而为；服务端不支持时仍将结果标记为未知。
           try { child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: '$/cancelRequest', params: { requestId: id } }) + '\n') } catch { /* 管道已关闭 */ }
+          if (terminateOnAbort) terminate()
           reject(signal?.reason ?? new Error('mcp request aborted'))
         }
         signal?.addEventListener('abort', onAbort, { once: true })
@@ -201,11 +216,10 @@ function stdioChannel(command: string, args: string[], env: Record<string, strin
       }
     },
     close(): void {
-      closed = true
+      terminate()
       fail(new Error('mcp channel closed'))
       try {
         child.stdin.end()
-        child.kill()
       } catch {
         /* already gone */
       }
@@ -323,7 +337,7 @@ export async function connectMcpServer(
   const channel =
     transport === 'http'
       ? httpChannel(config.url!, config.headers)
-      : stdioChannel(String(config.command ?? ''), config.args ?? [], config.env, opts.cwd)
+      : stdioChannel(String(config.command ?? ''), config.args ?? [], config.env, opts.cwd, config.terminateOnAbort === true)
 
   try {
     await channel.request(

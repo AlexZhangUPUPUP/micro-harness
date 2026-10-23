@@ -13,8 +13,8 @@ test('stdio: initialize, list tools, call them, and namespace the names', async 
   const conn = await connectMcpServer(stdioConfig, { timeoutMs: 10_000 })
   expect(conn.info.status).toBe('ready')
   expect(conn.info.transport).toBe('stdio')
-  expect(conn.info.tools).toEqual(['mock__echo', 'mock__boom', 'mock__peek'])
-  expect(conn.tools.map((t) => t.name)).toEqual(['mock__echo', 'mock__boom', 'mock__peek'])
+  expect(conn.info.tools).toEqual(['mock__echo', 'mock__boom', 'mock__peek', 'mock__slow'])
+  expect(conn.tools.map((t) => t.name)).toEqual(['mock__echo', 'mock__boom', 'mock__peek', 'mock__slow'])
 
   const echo = conn.tools.find((t) => t.name === 'mock__echo')!
   expect(echo.description).toBe('Echo the text back')
@@ -63,7 +63,7 @@ test('a server that cannot start is reported, not thrown', async () => {
 test('several servers connect together; a broken one does not take the others down', async () => {
   const conns = await connectMcpServers([stdioConfig, { name: 'broken', command: 'nope-not-here' }], { timeoutMs: 8000 })
   expect(conns.map((c) => c.info.status)).toEqual(['ready', 'error'])
-  expect(mcpTools(conns).map((t) => t.name)).toEqual(['mock__echo', 'mock__boom', 'mock__peek'])
+  expect(mcpTools(conns).map((t) => t.name)).toEqual(['mock__echo', 'mock__boom', 'mock__peek', 'mock__slow'])
   await Promise.all(conns.map((c) => c.close()))
 })
 
@@ -156,6 +156,16 @@ test('HTTP MCP calls abort the underlying fetch', async () => {
   } finally {
     server.stop(true)
   }
+})
+
+test('stdio MCP can terminate its process group on cancellation when configured', async () => {
+  const conn = await connectMcpServer({ ...stdioConfig, terminateOnAbort: true }, { timeoutMs: 10_000 })
+  const controller = new AbortController()
+  const pending = conn.tools.find((tool) => tool.name === 'mock__slow')!.run({}, { cwd: '.', allowBash: false, signal: controller.signal })
+  setTimeout(() => controller.abort(new Error('stdio cancel')), 20)
+  await expect(pending).rejects.toThrow('stdio cancel')
+  await expect(conn.tools.find((tool) => tool.name === 'mock__echo')!.run({ text: 'after' }, { cwd: '.', allowBash: false })).rejects.toThrow(/closed|exited/)
+  await conn.close()
 })
 
 test('config: parses the Claude/Cursor shape and finds the standard paths', () => {
