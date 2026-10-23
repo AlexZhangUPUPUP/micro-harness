@@ -46,6 +46,7 @@ export interface TaskStep { id: string; title: string; status: TaskStepStatus }
 export interface TaskVerification { id: string; label: string; status: VerificationStatus; details?: string }
 export interface TaskSnapshot { version: 1; revision: number; goal: string; status: TaskStatus; constraints: string[]; steps: TaskStep[]; verifications: TaskVerification[]; blockers: string[]; updatedAt: number }
 export interface TaskUpdate { expectedRevision?: number; goal?: string; status?: TaskStatus; constraints?: string[]; steps?: TaskStep[]; verifications?: TaskVerification[]; blockers?: string[] }
+export interface ArtifactRecord { id: string; sessionId: string; agentId?: string; name: string; mime: string; size: number; sha256: string; createdAt: number }
 
 /** An image attached to a prompt (base64, no data-URL prefix). */
 export interface ImageInput {
@@ -145,6 +146,9 @@ export const api = {
   get: (id: string) => j<{ session: SessionMeta; events: TaggedEvent[] }>(`/api/sessions/${id}`),
   task: (id: string) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`),
   updateTask: (id: string, update: TaskUpdate) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`, { method: 'POST', body: JSON.stringify(update) }),
+  artifacts: (id: string) => j<{ artifacts: ArtifactRecord[] }>(`/api/sessions/${id}/artifacts`).then((d) => d.artifacts),
+  deleteArtifact: (id: string, artifactId: string) => j<{ ok: boolean }>(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`, { method: 'DELETE' }),
+  artifactUrl: (id: string, artifactId: string) => withToken(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`),
   models: () => j<{ models: string[]; default: string }>('/api/models'),
   create: (prompt: string, opts: { title?: string; model?: string; images?: ImageInput[] } = {}) =>
     j<{ session: SessionMeta }>('/api/sessions', { method: 'POST', body: JSON.stringify({ prompt, ...opts }) }).then(

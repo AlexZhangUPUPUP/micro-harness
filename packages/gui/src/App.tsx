@@ -12,14 +12,15 @@ import { TracePanel } from './components/TracePanel.tsx'
 import { ChangesPanel } from './components/ChangesPanel.tsx'
 import { InspectorPanel } from './components/InspectorPanel.tsx'
 import { TaskPanel } from './components/TaskPanel.tsx'
+import { ArtifactsPanel } from './components/ArtifactsPanel.tsx'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette.tsx'
 import { ShortcutsDialog } from './components/ShortcutsDialog.tsx'
 import { UsagePanel } from './components/UsagePanel.tsx'
 import { loadScoped, startSessionLifecycle } from './lib/sessionLifecycle.ts'
 import { createPermissionScope, type PermissionState } from './lib/permissionState.ts'
 
-type View = 'chat' | 'task' | 'trace' | 'changes' | 'inspector'
-const VIEWS: View[] = ['chat', 'task', 'trace', 'changes', 'inspector']
+type View = 'chat' | 'task' | 'trace' | 'changes' | 'artifacts' | 'inspector'
+const VIEWS: View[] = ['chat', 'task', 'trace', 'changes', 'artifacts', 'inspector']
 const NEW_KEY = '__new__'
 
 /** Thin draggable divider between a side column and the main area. */
@@ -670,6 +671,8 @@ export default function App() {
               <TracePanel events={events} replayAt={replayAt} setReplayAt={setReplayAt} />
             ) : view === 'inspector' ? (
               <InspectorPanel requests={requests} />
+            ) : view === 'artifacts' ? (
+              <ArtifactsPanel sessionId={current} />
             ) : current ? (
               <ChangesPanel sessionId={current} />
             ) : null}
