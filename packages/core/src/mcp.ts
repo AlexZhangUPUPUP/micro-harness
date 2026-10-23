@@ -94,7 +94,7 @@ interface McpToolDef {
 
 /** Whatever the transport is, this is all the client needs from it. */
 interface JsonRpcChannel {
-  request<T>(method: string, params?: unknown, timeoutMs?: number): Promise<T>
+  request<T>(method: string, params?: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<T>
   notify(method: string, params?: unknown): void
   close(): void
 }
@@ -162,19 +162,29 @@ function stdioChannel(command: string, args: string[], env: Record<string, strin
   child.on('exit', (code) => fail(new Error(`${command} exited${code === null ? '' : ` with ${code}`}${stderr ? `: ${stderr.trim().slice(-400)}` : ''}`)))
 
   return {
-    request<T>(method: string, params?: unknown, timeoutMs = 15_000): Promise<T> {
+    request<T>(method: string, params?: unknown, timeoutMs = 15_000, signal?: AbortSignal): Promise<T> {
       if (closed) return Promise.reject(new Error('mcp channel is closed'))
+      if (signal?.aborted) return Promise.reject(signal.reason ?? new Error('mcp request aborted'))
       const id = ++nextId
       return new Promise<T>((resolve, reject) => {
         const timer = setTimeout(() => {
           pending.delete(id)
+          if (signal && onAbort) signal.removeEventListener('abort', onAbort)
           reject(new Error(`mcp ${method} timed out after ${timeoutMs}ms`))
         }, timeoutMs)
+        const onAbort = (): void => {
+          if (!pending.has(id)) return
+          pending.delete(id)
+          clearTimeout(timer)
+          reject(signal?.reason ?? new Error('mcp request aborted'))
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
         pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer })
         try {
           child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params } satisfies JsonRpcRequest) + '\n')
         } catch (err) {
           clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
           pending.delete(id)
           reject(err as Error)
         }
@@ -243,14 +253,18 @@ function httpChannel(url: string, headers: Record<string, string> = {}): JsonRpc
   }
 
   return {
-    async request<T>(method: string, params?: unknown, timeoutMs = 15_000): Promise<T> {
+    async request<T>(method: string, params?: unknown, timeoutMs = 15_000, signal?: AbortSignal): Promise<T> {
       if (closed) throw new Error('mcp channel is closed')
+      if (signal?.aborted) throw signal.reason ?? new Error('mcp request aborted')
       const id = ++nextId
       const call = send({ jsonrpc: '2.0', id, method, params })
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(`mcp ${method} timed out after ${timeoutMs}ms`)), timeoutMs),
       )
-      const msg = await Promise.race([call, timeout])
+      const aborted = signal
+        ? new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason ?? new Error('mcp request aborted')), { once: true }))
+        : undefined
+      const msg = await Promise.race(aborted ? [call, timeout, aborted] : [call, timeout])
       if (msg.error) throw new Error(msg.error.message ?? 'mcp error')
       return msg.result as T
     },
@@ -328,11 +342,12 @@ export async function connectMcpServer(
       parameters: (def.inputSchema as Record<string, unknown>) ?? { type: 'object', properties: {} },
       mutating: def.annotations?.readOnlyHint !== true, // undeclared = assume it can write
       network: config.network === true,
-      async run(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
+      async run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
         const result = await channel.request<{ content?: unknown; isError?: boolean }>(
           'tools/call',
           { name: def.name, arguments: args },
           60_000,
+          ctx.signal,
         )
         return { output: textOf(result), isError: result?.isError === true }
       },

@@ -65,6 +65,7 @@ function sh(
   cwd: string,
   timeout = 60_000,
   wrap?: { command: string; args: string[]; env?: NodeJS.ProcessEnv },
+  signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     const options = {
@@ -72,6 +73,7 @@ function sh(
       timeout,
       maxBuffer: 1024 * 1024,
       encoding: 'utf8' as const,
+      ...(signal ? { signal } : {}),
       ...(wrap?.env ? { env: wrap.env } : {}),
     }
     const done = (err: unknown, stdout: string | Buffer, stderr: string | Buffer): void => {
@@ -244,7 +246,7 @@ export function makeTools(env: NodeJS.ProcessEnv = process.env): Tool[] {
         const command = String(args.command ?? '').trim()
         if (!command) return { output: 'no command given', isError: true }
         const wrapped = ctx.sandbox?.wrap(command, { cwd: ctx.cwd, network: ctx.network === true })
-        const { stdout, stderr, code } = await sh(command, ctx.cwd, 60_000, wrapped)
+        const { stdout, stderr, code } = await sh(command, ctx.cwd, 60_000, wrapped, ctx.signal)
         const combined = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n')
         return { output: clip(combined || `(no output, exit ${code})`), isError: code !== 0 }
       },
