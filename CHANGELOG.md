@@ -45,6 +45,7 @@ All notable changes to this project are documented here. The format follows
 - Provider 明确声明不支持流式、工具、图像或取消时，Harness 会在请求前拒绝并返回可诊断错误。
 - Server 启动会扫描遗留 active 会话，写入 `server_restarted` 诊断错误并保留 resume 恢复入口。
 - CI 主测试改为 Ubuntu 与 macOS 双平台矩阵，分别验证测试、类型、文档和 GUI 构建。
+- `bun run verify` 扩展为第二至第四波纵向回归门，覆盖 Provider、任务验证、事件分页、Artifact Range、SSE 和 MCP 重连。
 - Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - AgentResult 增加结构化终态，区分成功、普通失败、取消、超时和预算停止。
 - task 委派支持目标、验收条件和预期产物契约，并明确标记未独立验证的结果。

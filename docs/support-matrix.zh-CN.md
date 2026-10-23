@@ -27,3 +27,5 @@ cd packages/gui && bun run build
 ```
 
 真实模型、外部 MCP 服务和非 Linux 沙箱组合必须单独标记为实验性，并记录模型、配置、代码版本和费用口径。
+
+发布前还应执行 `bun run verify`；该命令不需要 API Key，使用脚本 Provider 和本地 MCP 夹具验证关键纵向链路。

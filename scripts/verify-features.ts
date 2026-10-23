@@ -26,6 +26,7 @@ import {
   makeTaskTool,
   runAuto,
   runTask,
+  connectMcpServer,
   type ChatMessage,
   type ChatResponse,
   type Provider,
@@ -134,6 +135,7 @@ async function verifyP4(): Promise<void> {
     hostname: '127.0.0.1',
     port: 0,
     token: 'verify-token',
+    permission: 'full',
   })
   const base = server.url
   const auth = { authorization: 'Bearer verify-token' }
@@ -168,6 +170,24 @@ async function verifyP4(): Promise<void> {
     }
     check('session ran to completion over the provider', text.includes('SRV(verify p4 roundtrip)'), text.slice(0, 50))
 
+    // Provider 能力声明、分页和任务验证状态。
+    const providerInfo = await (await fetch(`${base}/api/provider`)).json()
+    check('GET /api/provider exposes capabilities', providerInfo.name === 'echo' && typeof providerInfo.capabilities === 'object')
+    const page = await (await fetch(`${base}/api/sessions/${id}?after=0&limit=1`, { headers: auth })).json()
+    check('session events support pagination', page.events?.length === 1 && page.total > 1 && page.next === 1)
+    const verification = await (await fetch(`${base}/api/sessions/${id}/verify`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'smoke', label: 'smoke', command: 'printf pass' }),
+    })).json()
+    check('verification evidence is persisted', verification.verification?.exitCode === 0 && verification.task?.verifications?.[0]?.status === 'passed')
+    const artifact = await (await fetch(`${base}/api/sessions/${id}/artifacts`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'text/plain', 'x-artifact-name': 'smoke.txt' }, body: 'artifact-pass',
+    })).json()
+    const artifactId = artifact.artifact?.id
+    const ranged = await fetch(`${base}/api/sessions/${id}/artifacts/${artifactId}`, { headers: { ...auth, Range: 'bytes=0-6' } })
+    const rangedText = await ranged.text()
+    check('artifact downloads support Range', ranged.status === 206 && rangedText === 'artifac', `${ranged.status} ${rangedText}`)
+
     // SSE
     const sse = await fetch(`${base}/api/sessions/${id}/events`, { headers: auth })
     let sseData = ''
@@ -181,7 +201,7 @@ async function verifyP4(): Promise<void> {
       if (sseData.includes('session.start')) break
     }
     void reader.cancel().catch(() => {})
-    check('GET /events streams SSE', sseData.startsWith('data:') && sseData.includes('"type":"session.start"'))
+    check('GET /events streams SSE', (sseData.startsWith('id:') || sseData.startsWith('data:')) && sseData.includes('"type":"session.start"'))
 
     // FTS search
     const search = await (await fetch(`${base}/api/search?q=roundtrip`, { headers: auth })).json()
@@ -296,6 +316,13 @@ async function verifyP5(): Promise<void> {
   } finally {
     rmSync(cwd, { recursive: true, force: true })
   }
+
+  // MCP stdio 重连：每次重连都重新 initialize/tools-list。
+  const mcp = await connectMcpServer({ name: 'verify', command: process.execPath, args: [path.resolve('packages/core/test/fixtures/mcp-mock-server.mjs')] }, { timeoutMs: 10_000 })
+  const fresh = await mcp.reconnect()
+  check('MCP reconnect negotiates a fresh connection', fresh.info.status === 'ready' && fresh.tools.some((tool) => tool.name === 'verify__echo'))
+  await mcp.close()
+  await fresh.close()
 }
 
 /* ----------------------------------------------------------------- main ---- */
