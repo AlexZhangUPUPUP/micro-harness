@@ -28,6 +28,8 @@
 
 执行治理第一步已落地：工具状态事件、审批取消清理和 GUI 状态展示，详见 [specs/009-execution-governance](specs/009-execution-governance)。
 
+第二至第四波已拆为独立 Spec：执行策略 [010](specs/010-execution-policy)、恢复工作区 [011](specs/011-recovery-workspace)、代码闭环 [012](specs/012-code-loop)、Agent 契约 [013](specs/013-agent-contract)、Provider 互操作 [014](specs/014-provider-protocols)、大会话体验 [015](specs/015-large-session-ux)。
+
 以上均为计划版本，尚未发布。下一项是整理 v0.2.2，再实现 v0.3；不因列入路线图而自动执行所有开发或发布操作。
 
 ---
