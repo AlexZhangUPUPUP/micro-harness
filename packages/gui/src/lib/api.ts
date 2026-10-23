@@ -47,6 +47,7 @@ export interface TaskVerification { id: string; label: string; status: Verificat
 export interface TaskSnapshot { version: 1; revision: number; goal: string; status: TaskStatus; constraints: string[]; steps: TaskStep[]; verifications: TaskVerification[]; blockers: string[]; updatedAt: number }
 export interface TaskUpdate { expectedRevision?: number; goal?: string; status?: TaskStatus; constraints?: string[]; steps?: TaskStep[]; verifications?: TaskVerification[]; blockers?: string[] }
 export interface ArtifactRecord { id: string; sessionId: string; agentId?: string; name: string; mime: string; size: number; sha256: string; createdAt: number }
+export interface WorktreeInspection { path: string; head: string; branch: string | null; status: 'clean' | 'dirty' | 'missing' | 'unknown' }
 
 /** An image attached to a prompt (base64, no data-URL prefix). */
 export interface ImageInput {
@@ -152,6 +153,7 @@ export const api = {
   verify: (id: string, input: { id: string; label: string; command: string; timeoutMs?: number }) =>
     j<{ verification: { id: string; label: string; exitCode: number; output: string }; task: TaskSnapshot }>(`/api/sessions/${id}/verify`, { method: 'POST', body: JSON.stringify(input) }),
   artifacts: (id: string) => j<{ artifacts: ArtifactRecord[] }>(`/api/sessions/${id}/artifacts`).then((d) => d.artifacts),
+  worktrees: (id: string) => j<{ worktrees: WorktreeInspection[] }>(`/api/sessions/${id}/worktrees`).then((d) => d.worktrees),
   deleteArtifact: (id: string, artifactId: string) => j<{ ok: boolean }>(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`, { method: 'DELETE' }),
   artifactUrl: (id: string, artifactId: string) => withToken(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`),
   models: () => j<{ models: string[]; default: string }>('/api/models'),

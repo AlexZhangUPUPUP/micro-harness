@@ -38,6 +38,8 @@ CI 主测试已扩展为 Ubuntu/macOS 矩阵，Release 继续产出 darwin-arm64
 
 启动恢复扫描已覆盖遗留 active 会话，恢复不会伪造仍在运行的状态。
 
+worktree 扫描已通过 Server/GUI API 暴露，审查端可以读取 clean、dirty、missing、unknown 状态。
+
 Provider 能力夹具已覆盖请求前拒绝路径，避免未验证的能力被静默降级。
 
 `bun run verify` 现已覆盖第二至第四波关键链路，当前本地 31/31 checks 通过。

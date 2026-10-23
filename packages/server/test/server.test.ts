@@ -135,6 +135,20 @@ test('session event endpoint supports bounded pagination', async () => {
   }
 })
 
+test('worktree inspection is exposed as a read-only session endpoint', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', body: JSON.stringify({ title: 'worktrees' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    const response = await fetch(`${h.srv.url}/api/sessions/${session.id}/worktrees`)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { worktrees: Array<{ path: string; status: string }> }
+    expect(Array.isArray(body.worktrees)).toBe(true)
+  } finally {
+    h.stop()
+  }
+})
+
 test('task endpoint persists structured state and rejects stale revisions', async () => {
   const h = boot()
   try {

@@ -34,6 +34,8 @@ import {
   expandTemplate,
   integrateApply,
   integratePreview,
+  inspectWorktrees,
+  isGitRepo,
   loadPromptTemplates,
   loadSkills,
   makeTaskTool,
@@ -736,6 +738,16 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (parts[0] === 'api' && parts[1] === 'sessions' && parts[2]) {
       const id = decodeURIComponent(parts[2])
       const action = parts[3]
+      if (action === 'worktrees') {
+        if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
+        const meta = store.require(id)
+        try {
+          const root = meta.cwd || cwd
+          return json({ worktrees: isGitRepo(root) ? inspectWorktrees(root) : [] })
+        } catch (err) {
+          return json({ error: String((err as Error).message) }, 500)
+        }
+      }
       if (action === 'verify') {
         if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         if (!store.has(id)) return json({ error: 'session not found' }, 404)

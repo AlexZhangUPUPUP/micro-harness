@@ -8,6 +8,8 @@
 
 Server 启动会把 SQLite 中遗留的 active 会话收敛为 error，并追加 `server restarted while the session was active` 事件；用户可通过 resume 重建上下文继续执行。
 
+`GET /api/sessions/:id/worktrees` 暴露只读扫描结果；非 Git 工作区返回空列表，不影响普通会话。
+
 成功执行留下的 worktree 供人工审阅；取消、失败和服务停止中的运行在完成后自动清理。
 
 Artifact 生命周期通过 `artifact.created`/`artifact.deleted` 事件关联到会话。
