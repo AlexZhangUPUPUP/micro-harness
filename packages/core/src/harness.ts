@@ -151,6 +151,8 @@ export class Harness {
   readonly #confirm?: ConfirmFn
   readonly #pricing?: { input: number; output: number; inputCached?: number }
   readonly #budget?: RunBudget
+  /** 当前运行内按模型调用 ID 记录已完成结果，避免恢复/重试重复副作用。 */
+  readonly #completedTools = new Map<string, ToolResult>()
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
@@ -387,6 +389,13 @@ export class Harness {
       type: 'tool.call', id: call.id, name, args,
       ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
     })
+    const previous = this.#completedTools.get(call.id)
+    if (previous) {
+      // 已有确定结果时只回放结果，不再次触发文件、shell 或外部服务副作用。
+      this.log.emit({ type: 'tool.status', id: call.id, name, status: previous.isError ? 'failed' : 'succeeded', reason: 'replayed_result' })
+      this.log.emit({ type: 'tool.result', id: call.id, name, ok: !previous.isError, output: previous.output, ms: 0 })
+      return { call, result: previous }
+    }
     this.log.emit({ type: 'tool.status', id: call.id, name, status: 'planned' })
     const allowed = await this.#approve(call, args)
     this.#toolCtx.signal?.throwIfAborted()
@@ -417,6 +426,7 @@ export class Harness {
       ...(elided > 0 ? { elided } : {}),
     })
     this.log.emit({ type: 'tool.status', id: call.id, name, status: result.isError ? 'failed' : 'succeeded' })
+    this.#completedTools.set(call.id, result)
     return { call, result }
   }
 
