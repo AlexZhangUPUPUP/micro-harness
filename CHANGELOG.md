@@ -37,6 +37,7 @@ All notable changes to this project are documented here. The format follows
 - Session 事件查询支持 `after`/`limit` 分页和 `next` 游标，大历史加载不再强制返回完整事件流。
 - MCP stdio 配置支持取消时终止独立进程组，避免不可安全重用的长调用在取消后继续执行。
 - MCP 连接增加显式 `reconnect()`，重新初始化并协商工具列表，不复用断开连接的未知状态。
+- Agent 契约支持父任务执行确定性 checks，并把每项命令输出与 passed/failed 状态返回给父任务。
 - Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - AgentResult 增加结构化终态，区分成功、普通失败、取消、超时和预算停止。
 - task 委派支持目标、验收条件和预期产物契约，并明确标记未独立验证的结果。

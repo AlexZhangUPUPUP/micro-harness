@@ -237,6 +237,19 @@ export class AgentRunner {
     return new Map(this.#worktrees)
   }
 
+  /** 使用父任务可见的 verify 工具独立验收子任务结果。 */
+  async verify(checks: AgentCheck[], ctx: ToolContext): Promise<AgentCheckResult[]> {
+    const tool = this.#opts.tools.find((item) => item.name === 'verify')
+    if (!tool) return checks.map((check) => ({ ...check, ok: false, output: 'verify tool is unavailable' }))
+    const results: AgentCheckResult[] = []
+    for (const check of checks) {
+      if (ctx.signal?.aborted) break
+      const result = await tool.run({ command: check.command, timeout_ms: check.timeoutMs }, ctx)
+      results.push({ ...check, ok: result.isError !== true, output: result.output })
+    }
+    return results
+  }
+
   /** Remove every worktree this runner created. Returns how many were removed. */
   cleanupWorktrees(): number {
     let n = 0
@@ -391,6 +404,20 @@ export interface TaskSpec {
   acceptance?: string[]
   /** 预期由子任务生成或更新的产物路径。 */
   artifacts?: string[]
+  /** 父任务执行的确定性验收命令。 */
+  checks?: AgentCheck[]
+}
+
+export interface AgentCheck {
+  id: string
+  label: string
+  command: string
+  timeoutMs?: number
+}
+
+export interface AgentCheckResult extends AgentCheck {
+  ok: boolean
+  output: string
 }
 
 export interface AgentContract {
@@ -398,7 +425,8 @@ export interface AgentContract {
   acceptance: string[]
   artifacts: string[]
   /** 契约是否已经由独立验证步骤确认。 */
-  verification: 'unverified'
+  verification: 'unverified' | 'passed' | 'failed'
+  checks?: AgentCheckResult[]
 }
 
 export type TaskMode = 'single' | 'parallel' | 'chain' | 'race'
@@ -421,6 +449,16 @@ function collectTasks(args: Record<string, unknown>): TaskSpec[] {
     goal: t.goal ? String(t.goal) : undefined,
     acceptance: Array.isArray(t.acceptance) ? t.acceptance.map(String) : undefined,
     artifacts: Array.isArray(t.artifacts) ? t.artifacts.map(String) : undefined,
+    checks: Array.isArray(t.checks)
+      ? t.checks.flatMap((item) => {
+          if (!item || typeof item !== 'object') return []
+          const check = item as Record<string, unknown>
+          const id = String(check.id ?? '').trim()
+          const label = String(check.label ?? id).trim()
+          const command = String(check.command ?? '').trim()
+          return id && label && command ? [{ id, label, command, ...(typeof check.timeoutMs === 'number' ? { timeoutMs: check.timeoutMs } : {}) }] : []
+        })
+      : undefined,
   })
   if (list.length) return list.map(parse)
   if (args.prompt) return [parse(args)]
@@ -428,13 +466,24 @@ function collectTasks(args: Record<string, unknown>): TaskSpec[] {
 }
 
 function contractFor(task: TaskSpec): AgentContract | undefined {
-  if (!task.goal && !task.acceptance?.length && !task.artifacts?.length) return undefined
+  if (!task.goal && !task.acceptance?.length && !task.artifacts?.length && !task.checks?.length) return undefined
   return {
     goal: task.goal,
     acceptance: task.acceptance ?? [],
     artifacts: task.artifacts ?? [],
     verification: 'unverified',
   }
+}
+
+async function attachContract(result: AgentResult, task: TaskSpec, runner: AgentRunner, ctx: ToolContext): Promise<void> {
+  const contract = contractFor(task)
+  if (!contract) return
+  if (task.checks?.length) {
+    const checks = await runner.verify(task.checks, ctx)
+    result.contract = { ...contract, checks, verification: checks.length === task.checks.length && checks.every((check) => check.ok) ? 'passed' : 'failed' }
+    return
+  }
+  result.contract = contract
 }
 
 export async function runTask(runner: AgentRunner, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -448,13 +497,13 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
 
   if (mode === 'single') {
     const result = await runner.run(roles[0]!, tasks[0]!.prompt, parentId, depth, ctx.signal)
-    result.contract = contractFor(tasks[0]!)
+    await attachContract(result, tasks[0]!, runner, ctx)
     return { output: summarize(result), isError: !result.ok }
   }
 
   if (mode === 'parallel') {
     const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth, ctx.signal)))
-    results.forEach((result, i) => { result.contract = contractFor(tasks[i]!) })
+    await Promise.all(results.map((result, i) => attachContract(result, tasks[i]!, runner, ctx)))
     return { output: results.map((r) => summarize(r)).join('\n\n'), isError: results.every((r) => !r.ok) }
   }
 
@@ -464,7 +513,7 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
     for (let i = 0; i < tasks.length; i++) {
       const prompt = tasks[i]!.prompt.replaceAll('{previous}', previous)
       const result = await runner.run(roles[i]!, prompt, parentId, depth, ctx.signal)
-      result.contract = contractFor(tasks[i]!)
+      await attachContract(result, tasks[i]!, runner, ctx)
       results.push(result)
       previous = result.text
     }
@@ -473,7 +522,7 @@ export async function runTask(runner: AgentRunner, args: Record<string, unknown>
 
   if (mode === 'race') {
     const results = await Promise.all(tasks.map((t, i) => runner.run(roles[i]!, t.prompt, parentId, depth, ctx.signal)))
-    results.forEach((result, i) => { result.contract = contractFor(tasks[i]!) })
+    await Promise.all(results.map((result, i) => attachContract(result, tasks[i]!, runner, ctx)))
     const winnerIndex = results.reduce((best, r, i) => (r.durationMs < results[best]!.durationMs ? i : best), 0)
     return {
       output: results.map((r, i) => summarize(r, i === winnerIndex)).join('\n\n'),
@@ -508,6 +557,7 @@ export function makeTaskTool(runner: AgentRunner): Tool {
               goal: { type: 'string', description: '声明子任务目标' },
               acceptance: { type: 'array', items: { type: 'string' }, description: '验收条件列表' },
               artifacts: { type: 'array', items: { type: 'string' }, description: '预期产物路径列表' },
+              checks: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' }, command: { type: 'string' }, timeoutMs: { type: 'number' } }, required: ['id', 'label', 'command'] }, description: '父任务执行的确定性验收命令' },
             },
             required: ['prompt'],
           },
@@ -515,6 +565,7 @@ export function makeTaskTool(runner: AgentRunner): Tool {
         goal: { type: 'string', description: '单任务目标' },
         acceptance: { type: 'array', items: { type: 'string' }, description: '单任务验收条件列表' },
         artifacts: { type: 'array', items: { type: 'string' }, description: '单任务产物路径列表' },
+        checks: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' }, command: { type: 'string' }, timeoutMs: { type: 'number' } }, required: ['id', 'label', 'command'] }, description: '单任务确定性验收命令' },
       },
       required: ['mode'],
     },

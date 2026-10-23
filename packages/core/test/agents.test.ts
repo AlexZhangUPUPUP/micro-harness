@@ -298,6 +298,21 @@ test('task tool preserves the declared agent contract as unverified metadata', a
   expect(result.output).toContain('验收条件 1 项；状态 unverified')
 })
 
+test('task tool independently verifies declared checks before marking the contract', async () => {
+  const dir = await sandbox()
+  try {
+    const { runner } = makeRunner(dir, { name: 'x', async chat() { return { message: { role: 'assistant', content: 'x' } } } })
+    const result = await runTask(runner, {
+      mode: 'single', prompt: '实现功能', goal: '完成验证',
+      checks: [{ id: 'check', label: '命令检查', command: 'printf ok' }],
+    }, { cwd: dir, allowBash: false, signal: new AbortController().signal })
+    expect(result.isError).toBe(false)
+    expect(result.output).toContain('状态 passed')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('formats an agent tree with per-agent tokens and cost', () => {
   const events: TaggedEvent[] = [
     { agentId: 'main', parentId: null, seq: 1, t: 0, event: { type: 'session.start', model: 'm', cwd: '.' } },
