@@ -298,6 +298,8 @@ export default function App() {
           setOptimistic([])
         }
       },
+      // 正常结束后清除旧的断开提示，避免完成会话长期显示红色错误条。
+      onEnd: () => setError(''),
       fail: (err) => setError(String((err as Error).message)),
     })
   }, [current, runTick])
@@ -545,8 +547,9 @@ export default function App() {
       />
 
       {error && (
-        <div role="alert" className="border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
-          {error}
+        <div role="alert" className="flex items-center justify-between gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+          <span>{error}</span>
+          {current && <button className="rounded border border-destructive/30 px-2 py-0.5 hover:bg-destructive/10" onClick={() => { setError(''); setRunTick((value) => value + 1) }}>重连</button>}
         </div>
       )}
 

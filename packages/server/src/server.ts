@@ -554,7 +554,9 @@ export function createServer(options: ServerOptions): HarnessServer {
       start(controller) {
         write = (chunk: string) => {
           // 慢消费者达到上限时主动断开，客户端可用最后收到的游标续传，避免无限积压。
-          if (closed || (controller.desiredSize !== null && controller.desiredSize <= -64)) {
+          // 历史回放阶段由浏览器一次性消费，不能因缓冲区暂时变负而截断数万条事件；
+          // 只有进入 live-tail 后才启用慢消费者保护，避免实时连接无限积压。
+          if (closed || (off && controller.desiredSize !== null && controller.desiredSize <= -64)) {
             closed = true
             off?.()
             if (heartbeat) clearInterval(heartbeat)
@@ -571,7 +573,9 @@ export function createServer(options: ServerOptions): HarnessServer {
         // 1. 只回放游标之后的事件；游标是会话级索引，不与 Agent 局部 seq 混用。
         for (let i = after; i < history.length; i++) write(`id: ${i + 1}\ndata: ${JSON.stringify(history[i])}\n\n`)
         // 2. live-tail a running session
-        if (runtime && !runtime.controller.signal.aborted) {
+        // 已完成的 runtime 可能暂留在内存中；只有仍在运行时才建立 live-tail，
+        // 否则必须立即发送 end，避免客户端长期等待并误报断开。
+        if (runtime?.running && !runtime.controller.signal.aborted) {
           off = runtime.hub.on((e) => {
             cursor += 1
             write?.(`id: ${cursor}\ndata: ${JSON.stringify(e)}\n\n`)

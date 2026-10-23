@@ -23,7 +23,7 @@ function mergeEvents(base: TaggedEvent[], extra: TaggedEvent[]): TaggedEvent[] {
   return result
 }
 
-type StreamHandlers = { onEvent: (event: TaggedEvent) => void; onError: () => void }
+type StreamHandlers = { onEvent: (event: TaggedEvent) => void; onError: () => void; onEnd?: () => void }
 type SessionLifecycle = {
   load: () => Promise<{ events: TaggedEvent[] }>
   subscribe: (handlers: StreamHandlers) => () => void
@@ -31,6 +31,7 @@ type SessionLifecycle = {
   append: (event: TaggedEvent) => void
   receive: (event: TaggedEvent) => void
   fail: (error: unknown) => void
+  onEnd?: () => void
 }
 
 /** 隔离会话快照和订阅，切换后所有旧回调失效。 */
@@ -59,6 +60,8 @@ export function startSessionLifecycle(options: SessionLifecycle): () => void {
       if (loaded) options.append(event)
       else buffered.push(event)
     },
+    // 服务端发送 end 代表任务正常结束，不能被浏览器 EventSource 的关闭回调误报成错误。
+    onEnd: () => { if (live) options.onEnd?.() },
     onError: () => { if (live) options.fail(new Error('event stream disconnected')) },
   })
   // 先使回调失效，再关闭底层连接，覆盖关闭过程中的延迟回调。

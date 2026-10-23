@@ -59,6 +59,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- 修复大历史会话的 SSE 回放被慢消费者保护提前截断，已完成会话会正确发送 `end`，GUI 不再把正常结束显示为 `event stream disconnected`；Context Inspector 改为展示压缩原因、token 前后变化、角色统计和可展开消息详情。
+
 - 修复旧检查点恢复时已淘汰的用户消息可能重新变成最新证据的问题。
 - 修复不同工具输出截断方式导致同一个工具调用被重复记录的问题。
 - 修复上下文投影可能挤掉不可裁剪的最新用户输入的问题。
