@@ -33,6 +33,8 @@ export type AgentEvent =
   /** 结构化任务状态快照，所有客户端从同一事件重建。 */
   | { type: 'task.update'; snapshot: import('./task/plan.ts').TaskSnapshot }
   | { type: 'agent.worktree'; path: string; branch: string; base: string }
+  | { type: 'artifact.created'; id: string; name: string; mime: string; size: number; sha256: string }
+  | { type: 'artifact.deleted'; id: string }
   | { type: 'permission.request'; id: string; tool: string; args: unknown; sandbox?: string; preview?: { before?: string } }
   | { type: 'permission.result'; id: string; decision: 'allow' | 'deny' }
   | { type: 'turn.end'; stopReason: string; text: string }

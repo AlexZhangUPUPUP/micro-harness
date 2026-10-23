@@ -725,12 +725,25 @@ export function createServer(options: ServerOptions): HarnessServer {
             mime: req.headers.get('content-type') ?? undefined,
             agentId: req.headers.get('x-agent-id') ?? undefined,
           })
+          const tagged: TaggedEvent = { agentId: req.headers.get('x-agent-id') ?? 'main', parentId: null, seq: store.events(id).reduce((max, event) => Math.max(max, event.seq), 0) + 1, t: Date.now(), event: { type: 'artifact.created', id: record.id, name: record.name, mime: record.mime, size: record.size, sha256: record.sha256 } }
+          const runtime = runtimes.get(id)
+          if (runtime?.running && !runtime.controller.signal.aborted) runtime.harness.log.emit(tagged.event)
+          else store.append(id, tagged)
           return json({ artifact: record }, 201)
         }
         const artifactId = decodeURIComponent(parts[4] ?? '')
         const record = artifacts.get(id, artifactId)
         if (!record) return json({ error: 'artifact not found' }, 404)
-        if (req.method === 'DELETE') return json({ ok: artifacts.remove(id, artifactId) })
+        if (req.method === 'DELETE') {
+          const removed = artifacts.remove(id, artifactId)
+          if (removed) {
+            const tagged: TaggedEvent = { agentId: 'main', parentId: null, seq: store.events(id).reduce((max, event) => Math.max(max, event.seq), 0) + 1, t: Date.now(), event: { type: 'artifact.deleted', id: artifactId } }
+            const runtime = runtimes.get(id)
+            if (runtime?.running && !runtime.controller.signal.aborted) runtime.harness.log.emit(tagged.event)
+            else store.append(id, tagged)
+          }
+          return json({ ok: removed })
+        }
         if (req.method === 'GET') {
           try {
             return new Response(artifacts.read(record) as unknown as BodyInit, { headers: { 'Content-Type': record.mime, 'Content-Length': String(record.size), 'X-Artifact-SHA256': record.sha256 } })

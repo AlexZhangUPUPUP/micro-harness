@@ -28,6 +28,7 @@ All notable changes to this project are documented here. The format follows
 - Unix shell 工具使用独立进程组，取消时终止整个受管理进程树。
 - 恢复时读取执行账本，对历史 unknown 工具调用默认阻止自动重放并要求人工核查。
 - 服务停止只清理取消/失败运行的临时 worktree，成功运行的 reviewable 产物继续保留。
+- Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
 - 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
 - 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。

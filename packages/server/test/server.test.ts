@@ -177,6 +177,7 @@ test('session artifacts are stored atomically and verified on download', async (
     expect(uploaded.status).toBe(201)
     const { artifact } = (await uploaded.json()) as { artifact: { id: string; sha256: string; size: number } }
     expect(artifact.size).toBe(15)
+    expect((await (await fetch(`${h.srv.url}/api/sessions/${session.id}`)).json() as { events: Array<{ event: { type: string } }> }).events.some((item) => item.event.type === 'artifact.created')).toBe(true)
     const downloaded = await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts/${artifact.id}`)
     expect(await downloaded.text()).toBe('verified output')
     expect(downloaded.headers.get('x-artifact-sha256')).toBe(artifact.sha256)
