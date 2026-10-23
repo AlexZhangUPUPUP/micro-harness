@@ -168,6 +168,8 @@ export interface SessionRuntime {
   done: Promise<void>
   /** 当前 Run 是否仍有持久化监听器。 */
   running: boolean
+  /** 当前会话的子 Agent 运行器，用于停止时回收未审阅工作区。 */
+  runner: AgentRunner
   /** Detach this run's store listener once it finishes. */
   off: () => void
 }
@@ -363,13 +365,14 @@ export function createServer(options: ServerOptions): HarnessServer {
       agentId: 'main',
       parentId: meta.parentId ?? null,
     })
-    return { meta, harness, hub, controller: new AbortController(), done: Promise.resolve(), running: false, off }
+    return { meta, harness, hub, controller: new AbortController(), done: Promise.resolve(), running: false, runner, off }
   }
 
   type ImageInput = { mimeType: string; data: string }
 
   const start = (runtime: SessionRuntime, prompt: string, images?: ImageInput[]): void => {
     runtime.running = true
+    let cleanupWorktrees = false
     updateTaskStatus(runtime.meta.id, 'running', prompt)
     runtime.done = (async () => {
       try {
@@ -378,6 +381,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       } catch (err) {
         // A user interrupt is not a failure: stop quietly and record why.
         const aborted = runtime.controller.signal.aborted || (err as Error)?.name === 'AbortError'
+        cleanupWorktrees = true
         updateTaskStatus(runtime.meta.id, aborted ? 'interrupted' : 'failed')
         try {
           store.update(runtime.meta.id, { status: aborted ? 'done' : 'error' })
@@ -394,6 +398,8 @@ export function createServer(options: ServerOptions): HarnessServer {
             : { type: 'error', message: String((err as Error)?.message || err), fatal: true },
         })
       } finally {
+        // 失败或取消的子任务不应把不可审阅的临时工作区遗留在仓库旁。
+        if (cleanupWorktrees) runtime.runner.cleanupWorktrees()
         runtime.running = false
         runtime.off()
       }
@@ -923,6 +929,11 @@ export function createServer(options: ServerOptions): HarnessServer {
       await runtimes.get(id)?.done
     },
     stop: (closeStore = false) => {
+      // 停止服务先取消运行，再回收失败/取消的子 Agent 工作区。
+      for (const runtime of runtimes.values()) {
+        if (runtime.running) runtime.controller.abort(new Error('server stopping'))
+        runtime.runner.cleanupWorktrees()
+      }
       server.stop(true)
       if (closeStore) store.close()
     },
