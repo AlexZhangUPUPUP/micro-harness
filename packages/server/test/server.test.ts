@@ -76,6 +76,7 @@ test('health, create, get, list and delete a session', async () => {
     const health = await fetch(`${h.srv.url}/health`)
     expect(health.status).toBe(200)
     expect(((await health.json()) as { ok: boolean }).ok).toBe(true)
+    expect(((await (await fetch(`${h.srv.url}/health`)).json()) as { ready: boolean }).ready).toBe(true)
 
     const created = await fetch(`${h.srv.url}/api/sessions`, {
       method: 'POST',

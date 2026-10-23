@@ -564,7 +564,12 @@ export function createServer(options: ServerOptions): HarnessServer {
     const parts = url.pathname.split('/').filter(Boolean)
 
     if (url.pathname === '/health') {
-      return json({ ok: true, name: 'micro-harness', version: '0.1.0' })
+      try {
+        const storage = store.health()
+        return json({ ok: true, ready: true, name: 'micro-harness', version: '0.1.0', storage, activeRuns: [...runtimes.values()].filter((runtime) => runtime.running).length })
+      } catch (err) {
+        return json({ ok: false, ready: false, name: 'micro-harness', error: String((err as Error).message) }, 503)
+      }
     }
     if (url.pathname === '/api/budget') {
       return json({ maxCost: options.maxCost ?? null, maxTokens: options.maxRunTokens ?? null })

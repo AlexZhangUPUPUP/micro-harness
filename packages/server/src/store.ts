@@ -261,6 +261,14 @@ export class SessionStore {
       .map(toMeta)
   }
 
+  /** 返回不依赖 HTTP 的存储健康摘要，供 liveness/readiness 端点使用。 */
+  health(): { schemaVersion: number; sessions: number; events: number } {
+    const version = this.db.query<{ value: string }, [string]>('SELECT value FROM store_meta WHERE key = ?').get('schema_version')
+    const sessions = this.db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM sessions').get()?.count ?? 0
+    const events = this.db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM events').get()?.count ?? 0
+    return { schemaVersion: Number(version?.value ?? 0), sessions, events }
+  }
+
   events(id: string): TaggedEvent[] {
     return this.db
       .query<{ data: string }, [string]>('SELECT data FROM events WHERE session_id = ? ORDER BY rowid_idx')
