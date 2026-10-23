@@ -134,6 +134,8 @@ export interface AgentResult {
   agentId: string
   role: string
   ok: boolean
+  /** 结构化终态，供父任务和恢复逻辑区分取消、超时与普通失败。 */
+  status: 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'budget_exceeded'
   text: string
   input: number
   output: number
@@ -255,7 +257,7 @@ export class AgentRunner {
     const agentId = `${parentId}/${roleName}-${++this.#counter}`
     // 提前失败不产生模型用量，也不创建子运行时。
     const fail = (error: string): AgentResult => ({
-      agentId, role: roleName, ok: false, text: '', input: 0, output: 0, cost: 0,
+      agentId, role: roleName, ok: false, status: 'failed', text: '', input: 0, output: 0, cost: 0,
       durationMs: Date.now() - started, error,
     })
     if (!role) return fail(`unknown agent role: ${roleName} (known: ${this.roles.list().join(', ')})`)
@@ -349,13 +351,18 @@ export class AgentRunner {
     })
     try {
       const text = await harness.send(prompt, controller.signal)
-      return { agentId, role, ok: true, text, input, output, cost, durationMs: Date.now() - started, worktree }
+      return { agentId, role, ok: true, status: 'succeeded', text, input, output, cost, durationMs: Date.now() - started, worktree }
     } catch (err) {
       // 取消时优先返回超时或预算原因，保留原有结果契约。
       const message = controller.signal.aborted
         ? String(controller.signal.reason?.message ?? controller.signal.reason ?? 'aborted')
         : String((err as Error)?.message || err)
-      return { agentId, role, ok: false, text: '', input, output, cost, durationMs: Date.now() - started, error: message, worktree }
+      const status = controller.signal.reason?.message?.includes('timed out')
+        ? 'timed_out'
+        : controller.signal.reason?.message?.includes('budget')
+          ? 'budget_exceeded'
+          : controller.signal.aborted ? 'cancelled' : 'failed'
+      return { agentId, role, ok: false, status, text: '', input, output, cost, durationMs: Date.now() - started, error: message, worktree }
     } finally {
       // 正常结束和异常结束均撤销当前任务的用量订阅。
       off()
@@ -382,7 +389,7 @@ export type TaskMode = 'single' | 'parallel' | 'chain' | 'race'
 
 function summarize(result: AgentResult, winner = false): string {
   const cost = result.cost ? ` $${result.cost.toFixed(6)}` : ''
-  const status = result.ok ? 'ok' : `error: ${result.error ?? 'failed'}`
+  const status = result.ok ? 'ok' : `${result.status}: ${result.error ?? 'failed'}`
   const head = `[${result.role} · ${result.agentId} · ${status} · ${Math.round(result.durationMs)}ms · ${result.input + result.output}tok${cost}]${winner ? ' ★ winner' : ''}`
   return `${head}\n${result.text || '(no output)'}`
 }

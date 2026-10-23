@@ -207,6 +207,7 @@ test('refuses to exceed maxDepth', async () => {
     const { runner } = makeRunner(dir, router({ MAIN: () => ({ message: { role: 'assistant', content: 'x' } }), CHILD: () => ({ message: { role: 'assistant', content: 'x' } }) }), { maxDepth: 1 })
     const result = await runner.run('worker', 'deep', 'main', 1)
     expect(result.ok).toBe(false)
+    expect(result.status).toBe('budget_exceeded')
     expect(result.error).toContain('max agent depth')
   } finally {
     await rm(dir, { recursive: true, force: true })
