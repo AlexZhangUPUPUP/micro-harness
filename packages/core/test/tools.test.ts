@@ -71,6 +71,12 @@ test('bash is off by default and unknown tools fail cleanly', async () => {
   assert.equal(unknown.isError, true)
 })
 
+test('verify returns structured exit status and bounded output', async () => {
+  const result = await dispatch(makeTools(), 'verify', JSON.stringify({ command: 'printf verified' }), { cwd: process.cwd(), allowBash: false })
+  assert.equal(result.isError, undefined)
+  assert.deepEqual(JSON.parse(result.output), { command: 'printf verified', exitCode: 0, output: 'verified' })
+})
+
 test('bash cancellation terminates the managed process group', async () => {
   const controller = new AbortController()
   const started = Date.now()

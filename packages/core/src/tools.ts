@@ -305,6 +305,31 @@ export function makeTools(env: NodeJS.ProcessEnv = process.env): Tool[] {
         return { output: clip(combined || `(no output, exit ${code})`), isError: code !== 0 }
       },
     },
+    {
+      name: 'verify',
+      description: 'Run a bounded verification command and return structured exit status and output.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'test, typecheck, lint or build command' },
+          timeout_ms: { type: 'integer', description: 'timeout in milliseconds, capped at 120000' },
+        },
+        required: ['command'],
+      },
+      async run(args, ctx) {
+        // 验证命令沿用沙箱和取消信号，避免验证在主任务停止后继续运行。
+        const command = String(args.command ?? '').trim()
+        if (!command) return { output: 'verify: command is required', isError: true }
+        const timeout = Math.min(120_000, Math.max(1_000, Number(args.timeout_ms) || 60_000))
+        const wrapped = ctx.sandbox?.wrap(command, { cwd: ctx.cwd, network: ctx.network === true })
+        const { stdout, stderr, code } = await sh(command, ctx.cwd, timeout, wrapped, ctx.signal)
+        const output = clip([stdout.trim(), stderr.trim()].filter(Boolean).join('\n'))
+        return {
+          output: JSON.stringify({ command, exitCode: code, output: output || `(no output, exit ${code})` }),
+          isError: code !== 0 ? true : undefined,
+        }
+      },
+    },
   ]
 
   // First-party web tools are built in, not a bundled MCP server: they read the
