@@ -13,3 +13,4 @@
 - [x] ArtifactStore 列表、下载、删除 API
 - [ ] 跨进程恢复时基于账本阻止 unknown 工具自动重放
 - [x] SSE 会话级游标和断线增量恢复基础
+- [x] resume 请求幂等键与 SQLite 首次结果持久化

@@ -255,6 +255,7 @@ export function createServer(options: ServerOptions): HarnessServer {
   ]
 
   const runtimes = new Map<string, SessionRuntime>()
+  const resumeInFlight = new Map<string, Promise<SessionRuntime>>()
   let defaultPermission: PermissionPreset = options.permission ?? 'workspace'
   const sessionPermission = new Map<string, PermissionPreset>()
   const approvals = options.approvals ?? createApprovalBroker()
@@ -759,8 +760,25 @@ export function createServer(options: ServerOptions): HarnessServer {
           /* empty */
         }
         if (!body.prompt) return json({ error: 'prompt is required' }, 400)
-        await resume(id, body.prompt, body.images)
-        return json({ session: store.require(id) }, 202)
+        const key = req.headers.get('idempotency-key')?.trim()
+        if (key) {
+          const cached = store.idempotency(id, 'resume', key)
+          if (cached) return json(cached.body, cached.status)
+        }
+        const inflightKey = key ? `${id}:resume:${key}` : undefined
+        let operation = inflightKey ? resumeInFlight.get(inflightKey) : undefined
+        if (!operation) {
+          operation = resume(id, body.prompt, body.images)
+          if (inflightKey) resumeInFlight.set(inflightKey, operation)
+        }
+        try {
+          await operation
+          const responseBody = { session: store.require(id) }
+          if (key) store.saveIdempotency(id, 'resume', key, 202, responseBody)
+          return json(responseBody, 202)
+        } finally {
+          if (inflightKey) resumeInFlight.delete(inflightKey)
+        }
       }
       if (action === 'fork') {
         if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)

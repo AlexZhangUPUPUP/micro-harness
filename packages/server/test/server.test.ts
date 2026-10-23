@@ -337,6 +337,23 @@ test('GET /api/provider exposes declared capabilities without changing model res
   }
 })
 
+test('resume idempotency key prevents duplicate runs after a client retry', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'first' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    await h.srv.idle(session.id)
+    const headers = { 'Content-Type': 'application/json', 'Idempotency-Key': 'retry-1' }
+    const first = await fetch(`${h.srv.url}/api/sessions/${session.id}/resume`, { method: 'POST', headers, body: JSON.stringify({ prompt: 'second' }) })
+    const second = await fetch(`${h.srv.url}/api/sessions/${session.id}/resume`, { method: 'POST', headers, body: JSON.stringify({ prompt: 'second' }) })
+    expect(first.status).toBe(202)
+    expect(second.status).toBe(202)
+    expect((await (await fetch(`${h.srv.url}/api/sessions/${session.id}`)).json() as { events: Array<{ event: { type: string; text?: string } }> }).events.filter((item) => item.event.type === 'user.message' && item.event.text === 'second')).toHaveLength(1)
+  } finally {
+    h.stop()
+  }
+})
+
 test('resume reconstructs prior context before continuing', async () => {
   const h = boot()
   try {

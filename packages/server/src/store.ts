@@ -186,6 +186,15 @@ export class SessionStore {
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (session_id, agent_id, call_id)
       );
+      CREATE TABLE IF NOT EXISTS idempotency (
+        session_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        key TEXT NOT NULL,
+        status INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, operation, key)
+      );
       CREATE TABLE IF NOT EXISTS store_meta (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -267,6 +276,21 @@ export class SessionStore {
     const sessions = this.db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM sessions').get()?.count ?? 0
     const events = this.db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM events').get()?.count ?? 0
     return { schemaVersion: Number(version?.value ?? 0), sessions, events }
+  }
+
+  /** 读取已提交的请求结果，供 HTTP 重试去重。 */
+  idempotency(id: string, operation: string, key: string): { status: number; body: unknown } | undefined {
+    const row = this.db.query<{ status: number; body: string }, [string, string, string]>(
+      'SELECT status, body FROM idempotency WHERE session_id = ? AND operation = ? AND key = ?',
+    ).get(id, operation, key)
+    return row ? { status: row.status, body: JSON.parse(row.body) as unknown } : undefined
+  }
+
+  /** 原子保存请求结果；重复 key 保留首个结果。 */
+  saveIdempotency(id: string, operation: string, key: string, status: number, body: unknown): void {
+    this.db.query(
+      `INSERT OR IGNORE INTO idempotency (session_id, operation, key, status, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(id, operation, key, status, JSON.stringify(body), Date.now())
   }
 
   events(id: string): TaggedEvent[] {
@@ -364,6 +388,7 @@ export class SessionStore {
       this.db.query('DELETE FROM events WHERE session_id = ?').run(id)
       this.db.query('DELETE FROM events_fts WHERE session_id = ?').run(id)
       this.db.query('DELETE FROM tool_executions WHERE session_id = ?').run(id)
+      this.db.query('DELETE FROM idempotency WHERE session_id = ?').run(id)
       this.db.query('DELETE FROM sessions WHERE id = ?').run(id)
       this.db.query('DELETE FROM store_meta WHERE key = ?').run(`export_error:${id}`)
     })
