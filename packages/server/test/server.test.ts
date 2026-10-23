@@ -181,6 +181,10 @@ test('session artifacts are stored atomically and verified on download', async (
     const downloaded = await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts/${artifact.id}`)
     expect(await downloaded.text()).toBe('verified output')
     expect(downloaded.headers.get('x-artifact-sha256')).toBe(artifact.sha256)
+    const ranged = await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts/${artifact.id}`, { headers: { Range: 'bytes=0-7' } })
+    expect(ranged.status).toBe(206)
+    expect(await ranged.text()).toBe('verified')
+    expect(ranged.headers.get('content-range')).toBe(`bytes 0-7/${artifact.size}`)
     expect(((await (await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts`)).json()) as { artifacts: unknown[] }).artifacts).toHaveLength(1)
     expect((await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts/${artifact.id}`, { method: 'DELETE' })).status).toBe(200)
   } finally {

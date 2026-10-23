@@ -31,6 +31,7 @@ All notable changes to this project are documented here. The format follows
 - 新增只读 worktree 生命周期扫描，可区分 clean、dirty、missing 和 unknown，便于恢复前人工审查遗留工作区。
 - 新增有界 `search` 工具，支持 glob、结果上限和取消信号，为代码理解与验证闭环提供稳定搜索入口。
 - 新增结构化 `verify` 工具，记录命令、退出码和截断输出，供实现后的确定性验证与诊断使用。
+- Artifact 下载支持单段 HTTP Range，长产物可分段读取并继续校验 SHA-256。
 - Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - AgentResult 增加结构化终态，区分成功、普通失败、取消、超时和预算停止。
 - task 委派支持目标、验收条件和预期产物契约，并明确标记未独立验证的结果。

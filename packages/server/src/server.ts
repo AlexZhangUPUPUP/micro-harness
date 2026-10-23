@@ -78,16 +78,27 @@ export const PERMISSIONS: Record<
   PermissionPreset,
   { tools: string[]; bash: boolean; net: boolean; approval: 'suggest' | 'auto-edit' | 'full-auto'; exp?: boolean }
 > = {
-  'read-only': { tools: ['read_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
-  workspace: { tools: ['read_file', 'write_file', 'edit_file', 'list_dir'], bash: false, net: false, approval: 'full-auto' },
-  full: { tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'bash'], bash: true, net: true, approval: 'full-auto' },
+  'read-only': { tools: ['read_file', 'list_dir', 'search'], bash: false, net: false, approval: 'full-auto' },
+  workspace: { tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'search'], bash: false, net: false, approval: 'full-auto' },
+  full: { tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'search', 'verify', 'bash'], bash: true, net: true, approval: 'full-auto' },
   'auto-review': {
-    tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'bash'],
+    tools: ['read_file', 'write_file', 'edit_file', 'list_dir', 'search', 'verify', 'bash'],
     bash: true,
     net: true,
     approval: 'auto-edit',
     exp: true,
   },
+}
+
+/** 解析单段 HTTP 字节范围；非法或多段范围交给完整下载处理。 */
+function parseByteRange(value: string | null, size: number): { start: number; end: number } | undefined {
+  if (!value?.startsWith('bytes=') || value.includes(',')) return undefined
+  const match = value.slice(6).trim().match(/^(\d*)-(\d*)$/)
+  if (!match) return undefined
+  const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]))
+  const end = match[2] ? Number(match[2]) : size - 1
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size) return undefined
+  return { start, end: Math.min(end, size - 1) }
 }
 
 /** Mirror of the web toggle file: a soft on/off plus an optional provider. */
@@ -746,7 +757,12 @@ export function createServer(options: ServerOptions): HarnessServer {
         }
         if (req.method === 'GET') {
           try {
-            return new Response(artifacts.read(record) as unknown as BodyInit, { headers: { 'Content-Type': record.mime, 'Content-Length': String(record.size), 'X-Artifact-SHA256': record.sha256 } })
+            const range = parseByteRange(req.headers.get('range'), record.size)
+            if (range) {
+              const body = artifacts.readRange(record, range.start, range.end)
+              return new Response(body as unknown as BodyInit, { status: 206, headers: { 'Content-Type': record.mime, 'Content-Length': String(body.byteLength), 'Content-Range': `bytes ${range.start}-${range.end}/${record.size}`, 'Accept-Ranges': 'bytes', 'X-Artifact-SHA256': record.sha256 } })
+            }
+            return new Response(artifacts.read(record) as unknown as BodyInit, { headers: { 'Content-Type': record.mime, 'Content-Length': String(record.size), 'Accept-Ranges': 'bytes', 'X-Artifact-SHA256': record.sha256 } })
           } catch (err) {
             return json({ error: String((err as Error).message) }, 500)
           }

@@ -74,6 +74,14 @@ export class ArtifactStore {
     return body
   }
 
+  /** 在完整性校验后返回闭区间字节片段，供大产物断点读取。 */
+  readRange(record: ArtifactRecord, start: number, end: number): Uint8Array {
+    const body = this.read(record)
+    const from = Math.max(0, Math.min(start, body.byteLength))
+    const to = Math.max(from, Math.min(end + 1, body.byteLength))
+    return body.slice(from, to)
+  }
+
   remove(sessionId: string, id: string): boolean {
     const record = this.get(sessionId, id)
     if (!record) return false
