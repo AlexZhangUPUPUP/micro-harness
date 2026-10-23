@@ -62,6 +62,7 @@ import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
 import type { Sandbox, SandboxMode } from '@micro-harness/core'
 import { createApprovalBroker, type ApprovalBroker } from './approvals.ts'
+import { ArtifactStore } from './artifacts.ts'
 
 export type PermissionPreset = 'read-only' | 'workspace' | 'full' | 'auto-review'
 
@@ -257,6 +258,7 @@ export function createServer(options: ServerOptions): HarnessServer {
   let defaultPermission: PermissionPreset = options.permission ?? 'workspace'
   const sessionPermission = new Map<string, PermissionPreset>()
   const approvals = options.approvals ?? createApprovalBroker()
+  const artifacts = new ArtifactStore(store.db, store.dataDir)
   const cwd = options.cwd
 
   // Skills and prompt templates are files in the workspace, same layout as the
@@ -702,6 +704,31 @@ export function createServer(options: ServerOptions): HarnessServer {
           return json({ error: message }, message.includes('conflict') ? 409 : 400)
         }
       }
+      if (action === 'artifacts') {
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        if (req.method === 'GET' && !parts[4]) return json({ artifacts: artifacts.list(id) })
+        if (req.method === 'POST' && !parts[4]) {
+          const body = new Uint8Array(await req.arrayBuffer())
+          const record = artifacts.save(id, body, {
+            name: req.headers.get('x-artifact-name') ?? undefined,
+            mime: req.headers.get('content-type') ?? undefined,
+            agentId: req.headers.get('x-agent-id') ?? undefined,
+          })
+          return json({ artifact: record }, 201)
+        }
+        const artifactId = decodeURIComponent(parts[4] ?? '')
+        const record = artifacts.get(id, artifactId)
+        if (!record) return json({ error: 'artifact not found' }, 404)
+        if (req.method === 'DELETE') return json({ ok: artifacts.remove(id, artifactId) })
+        if (req.method === 'GET') {
+          try {
+            return new Response(artifacts.read(record) as unknown as BodyInit, { headers: { 'Content-Type': record.mime, 'Content-Length': String(record.size), 'X-Artifact-SHA256': record.sha256 } })
+          } catch (err) {
+            return json({ error: String((err as Error).message) }, 500)
+          }
+        }
+        return json({ error: 'method not allowed' }, 405)
+      }
       if (action === 'events') {
         if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405)
         return sse(id, req)
@@ -892,6 +919,7 @@ export function createServer(options: ServerOptions): HarnessServer {
             /* best effort */
           }
         }
+        artifacts.removeSession(id)
         if (!store.delete(id)) return json({ error: 'session not found' }, 404)
         runtimes.delete(id)
         return json({ ok: true })

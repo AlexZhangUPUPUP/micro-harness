@@ -165,6 +165,27 @@ test('SSE stream replays recorded events and terminates', async () => {
   }
 })
 
+test('session artifacts are stored atomically and verified on download', async () => {
+  const h = boot()
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'artifact' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    const uploaded = await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-Artifact-Name': 'report.txt' }, body: 'verified output',
+    })
+    expect(uploaded.status).toBe(201)
+    const { artifact } = (await uploaded.json()) as { artifact: { id: string; sha256: string; size: number } }
+    expect(artifact.size).toBe(15)
+    const downloaded = await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts/${artifact.id}`)
+    expect(await downloaded.text()).toBe('verified output')
+    expect(downloaded.headers.get('x-artifact-sha256')).toBe(artifact.sha256)
+    expect(((await (await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts`)).json()) as { artifacts: unknown[] }).artifacts).toHaveLength(1)
+    expect((await fetch(`${h.srv.url}/api/sessions/${session.id}/artifacts/${artifact.id}`, { method: 'DELETE' })).status).toBe(200)
+  } finally {
+    h.stop()
+  }
+})
+
 test('full-text search finds recorded content', async () => {
   const h = boot()
   try {

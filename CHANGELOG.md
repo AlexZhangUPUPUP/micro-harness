@@ -20,6 +20,7 @@ All notable changes to this project are documented here. The format follows
 - shell 和 MCP 工具调用会接收运行取消信号，避免取消后继续等待底层请求。
 - SSE 支持会话级 `Last-Event-ID` 增量恢复，断线重连无需重复加载完整历史。
 - SQLite 新增工具执行账本，按会话、Agent 和调用 ID 记录状态、原因与结果摘要。
+- 新增会话级 ArtifactStore，产物内容原子落盘、SHA-256 校验，并提供列表、下载和删除 API。
 - Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
 - 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
 - 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。
