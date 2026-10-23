@@ -32,7 +32,7 @@ export type ChatItem =
       input: number
       output: number
     }
-  | { kind: 'tool'; id: string; t: number; agentId: string; name: string; args?: unknown; output?: string; ok?: boolean; ms?: number }
+  | { kind: 'tool'; id: string; t: number; agentId: string; name: string; args?: unknown; output?: string; ok?: boolean; ms?: number; callId?: string; status?: 'planned' | 'approved' | 'started' | 'succeeded' | 'failed' | 'cancelled' | 'unknown' }
   | { kind: 'notice'; id: string; t: number; level: 'info' | 'error'; text: string }
 
 /** Turn a session's event stream into a renderable transcript. */
@@ -100,6 +100,7 @@ export function deriveChat(events: TaggedEvent[]): ChatItem[] {
           agentId: e.agentId,
           name: String(ev.name ?? ''),
           args: ev.args,
+          callId: typeof ev.id === 'string' ? ev.id : undefined,
         }
         items.push(card)
         if (ev.id) toolById.set(String(ev.id), card)
@@ -123,6 +124,12 @@ export function deriveChat(events: TaggedEvent[]): ChatItem[] {
             ms: Number(ev.ms ?? 0),
           })
         }
+        break
+      }
+      case 'tool.status': {
+        // 状态事件按模型生成的调用 ID 回填同一张工具卡片，保证实时和回放一致。
+        const card = ev.id ? toolById.get(String(ev.id)) : undefined
+        if (card && typeof ev.status === 'string') card.status = ev.status as NonNullable<typeof card.status>
         break
       }
       case 'turn.end': {

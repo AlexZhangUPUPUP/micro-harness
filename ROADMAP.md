@@ -26,6 +26,8 @@
 
 第一波已落地最小纵向切片：任务生命周期、共享 RunBudget、父子取消传播和 GUI 显式完成确认，详见 [specs/008-first-wave](specs/008-first-wave)。
 
+执行治理第一步已落地：工具状态事件、审批取消清理和 GUI 状态展示，详见 [specs/009-execution-governance](specs/009-execution-governance)。
+
 以上均为计划版本，尚未发布。下一项是整理 v0.2.2，再实现 v0.3；不因列入路线图而自动执行所有开发或发布操作。
 
 ---

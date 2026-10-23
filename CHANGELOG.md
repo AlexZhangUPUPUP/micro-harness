@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format follows
 - 存储层将 SQLite 提升为会话元数据和事件的事务事实来源，JSONL 保留为可读兼容导出，并新增从 SQLite 修复导出的接口。
 - 新增离线 `micro-harness-storage migrate/export/restore` 命令，支持旧 JSONL 导入、版本化备份和空目录恢复。
 - 第一波运行可靠性：增加共享 RunBudget（成本/Token）、父子 Agent 取消传播、任务运行生命周期和等待验证状态；GUI 只有在验证全部通过后提供显式完成操作。
+- 工具调用新增结构化状态事件，覆盖审批、启动、成功、失败、取消和副作用未知状态。
+- 运行取消会释放 GUI 审批等待，工具卡片展示取消与未知状态。
 - Context 增加独立的 `task/` 来源证据模块，按来源、顺序、工具调用 ID 和截断状态保存用户输入与工具观察。
 - 摘要输入选择优先保留用户约束、途中纠正和不同的短工具观察，并把省略记录纳入预算。
 - 检查点支持可选任务证据快照，兼容旧日志和 Agent 隔离恢复。

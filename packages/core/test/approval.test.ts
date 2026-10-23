@@ -43,6 +43,7 @@ test('suggest mode denies an unconfirmed mutating tool (file is not written)', a
     expect(permission?.decision).toBe('deny')
     const result = events.find((e) => e.type === 'tool.result')
     expect(result?.ok).toBe(false)
+    expect(events.some((e) => e.type === 'tool.status')).toBe(true)
     await expect(readFile(path.join(dir, 'x.txt'), 'utf8')).rejects.toThrow()
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -55,6 +56,7 @@ test('suggest mode writes the file when approved', async () => {
     const { harness, events } = run(dir, 'suggest', () => true)
     await harness.send('write it')
     expect(events.find((e) => e.type === 'permission.result')?.decision).toBe('allow')
+    expect(events.filter((e) => e.type === 'tool.status').length).toBe(4)
     expect(await readFile(path.join(dir, 'x.txt'), 'utf8')).toBe('x')
   } finally {
     await rm(dir, { recursive: true, force: true })

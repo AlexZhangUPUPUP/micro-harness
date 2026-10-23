@@ -9,7 +9,7 @@
 
 export interface ApprovalBroker {
   /** Called by the harness. Resolves when the client answers, or denies on timeout. */
-  ask(req: { id: string; tool: string; args: unknown; agentId: string }): Promise<boolean>
+  ask(req: { id: string; tool: string; args: unknown; agentId: string; signal?: AbortSignal }): Promise<boolean>
   /** Called by the HTTP route. Returns false when the id is unknown/已 resolved. */
   answer(requestId: string, allow: boolean): boolean
   /** Ids currently waiting (for tests / diagnostics). */
@@ -21,6 +21,8 @@ export interface ApprovalBroker {
 interface Waiting {
   resolve: (allow: boolean) => void
   timer: ReturnType<typeof setTimeout>
+  signal?: AbortSignal
+  onAbort?: () => void
 }
 
 export function createApprovalBroker(opts?: { timeoutMs?: number }): ApprovalBroker {
@@ -32,6 +34,7 @@ export function createApprovalBroker(opts?: { timeoutMs?: number }): ApprovalBro
     if (!entry) return false
     waiting.delete(requestId)
     clearTimeout(entry.timer)
+    if (entry.onAbort && entry.signal) entry.signal.removeEventListener('abort', entry.onAbort)
     entry.resolve(allow)
     return true
   }
@@ -39,11 +42,15 @@ export function createApprovalBroker(opts?: { timeoutMs?: number }): ApprovalBro
   return {
     ask(req) {
       return new Promise<boolean>((resolve) => {
-        const entry: Waiting = { resolve, timer: undefined as unknown as ReturnType<typeof setTimeout> }
+        const entry: Waiting = { resolve, timer: undefined as unknown as ReturnType<typeof setTimeout>, signal: req.signal }
+        // 取消运行时立即拒绝审批，避免 Harness 永久挂起在 UI 等待上。
+        entry.onAbort = () => settle(req.id, false)
+        req.signal?.addEventListener('abort', entry.onAbort, { once: true })
         entry.timer = setTimeout(() => {
           // Only remove ourselves: a duplicate `ask` for the same id must not
           // clear the newer entry, and the fired timer needs no clearing.
           if (waiting.get(req.id) === entry) waiting.delete(req.id)
+          if (entry.onAbort && entry.signal) entry.signal.removeEventListener('abort', entry.onAbort)
           resolve(false)
         }, timeoutMs)
         waiting.set(req.id, entry)
@@ -62,6 +69,7 @@ export function createApprovalBroker(opts?: { timeoutMs?: number }): ApprovalBro
       for (const [id, entry] of [...waiting]) {
         waiting.delete(id)
         clearTimeout(entry.timer)
+        if (entry.onAbort && entry.signal) entry.signal.removeEventListener('abort', entry.onAbort)
         entry.resolve(false)
       }
     },

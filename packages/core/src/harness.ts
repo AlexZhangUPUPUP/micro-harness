@@ -81,6 +81,8 @@ export interface ApprovalRequest {
   tool: string
   args: unknown
   agentId: string
+  /** 当前工具调用的取消信号。 */
+  signal?: AbortSignal
 }
 
 export type ConfirmFn = (req: ApprovalRequest) => boolean | Promise<boolean>
@@ -351,6 +353,7 @@ export class Harness {
 
   /** 保留原有审批语义，确认异常按拒绝处理。 */
   async #approve(call: ToolCall, args: unknown): Promise<boolean> {
+    this.#toolCtx.signal?.throwIfAborted()
     const name = call.function.name
     if (!this.#needsApproval(name)) return true
     const id = `perm:${call.id}`
@@ -362,7 +365,7 @@ export class Harness {
     })
     let decision: 'allow' | 'deny' = 'deny'
     try {
-      if (this.#confirm && await this.#confirm({ id, tool: name, args, agentId: this.log.agentId })) decision = 'allow'
+      if (this.#confirm && await this.#confirm({ id, tool: name, args, agentId: this.log.agentId, signal: this.#toolCtx.signal })) decision = 'allow'
     } catch {
       // 确认失败不能放行工具。
       decision = 'deny'
@@ -384,17 +387,36 @@ export class Harness {
       type: 'tool.call', id: call.id, name, args,
       ...(this.#toolCtx.sandbox ? { sandbox: this.#toolCtx.sandbox.kind } : {}),
     })
+    this.log.emit({ type: 'tool.status', id: call.id, name, status: 'planned' })
     const allowed = await this.#approve(call, args)
+    this.#toolCtx.signal?.throwIfAborted()
+    if (!allowed) this.log.emit({ type: 'tool.status', id: call.id, name, status: 'failed', reason: 'approval_denied' })
+    if (allowed) this.log.emit({ type: 'tool.status', id: call.id, name, status: 'approved' })
     const started = Date.now()
-    const result = allowed
-      ? await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
-      : { output: `denied by approval policy: ${name}`, isError: true }
+    let result: ToolResult
+    let dispatched = false
+    try {
+      if (!allowed) result = { output: `denied by approval policy: ${name}`, isError: true }
+      else {
+        dispatched = true
+        this.log.emit({ type: 'tool.status', id: call.id, name, status: 'started' })
+        result = await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
+        // dispatch 会把工具异常转换成结果；取消需要单独抛出，避免把未确认的副作用伪装成普通失败。
+        if (this.#toolCtx.signal?.aborted) this.#toolCtx.signal.throwIfAborted()
+      }
+    } catch (err) {
+      if (this.#toolCtx.signal?.aborted) {
+        this.log.emit({ type: 'tool.status', id: call.id, name, status: dispatched ? 'unknown' : 'cancelled', reason: dispatched ? 'cancelled_after_dispatch' : 'cancelled_before_dispatch' })
+      }
+      throw err
+    }
     // 事件保留完整原文与省略量，实际入窗截断仍由 ContextManager 负责。
     const { elided } = this.#context.previewToolOutput(result.output)
     this.log.emit({ type: 'tool.result', id: call.id, name, ok: !result.isError,
       output: result.output, ms: allowed ? Date.now() - started : 0,
       ...(elided > 0 ? { elided } : {}),
     })
+    this.log.emit({ type: 'tool.status', id: call.id, name, status: result.isError ? 'failed' : 'succeeded' })
     return { call, result }
   }
 

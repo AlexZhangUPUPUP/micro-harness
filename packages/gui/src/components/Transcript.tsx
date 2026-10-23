@@ -141,8 +141,10 @@ function Notice({ item }: { item: Extract<ChatItem, { kind: 'notice' }> }) {
 function ToolCard({ item }: { item: Extract<ChatItem, { kind: 'tool' }> }) {
   const { t } = useT()
   const [open, setOpen] = useState(false)
-  const running = item.ok === undefined && item.output === undefined
-  const failed = item.ok === false
+  const running = item.status === 'planned' || item.status === 'approved' || item.status === 'started' || (item.status === undefined && item.ok === undefined && item.output === undefined)
+  // unknown 表示外部副作用无法确认，视觉上按失败处理并保留审计线索。
+  const failed = item.status === 'failed' || item.status === 'unknown' || item.ok === false
+  const cancelled = item.status === 'cancelled'
   const outputId = `${item.id}-output`
 
   return (
@@ -160,13 +162,14 @@ function ToolCard({ item }: { item: Extract<ChatItem, { kind: 'tool' }> }) {
       <div className="min-w-0 flex-1 rounded-lg border border-border/70 bg-card/70 px-3 py-1.5 backdrop-blur transition hover:border-teal/40">
         <div className="flex items-center gap-2 font-mono text-[11px]">
           <span className={failed ? 'text-destructive' : running ? 'text-gold' : 'text-teal'} aria-hidden="true">
-            {failed ? '✗' : running ? '◌' : '✓'}
+            {failed ? '✗' : cancelled ? 'Ⅱ' : running ? '◌' : '✓'}
           </span>
           <span className="font-semibold">{item.name}</span>
           <span className="min-w-0 truncate text-muted-foreground">
             {item.args ? JSON.stringify(item.args).slice(0, 80) : ''}
           </span>
           {running && <span className="ml-auto shrink-0 text-gold">{t('tool.running')}</span>}
+          {cancelled && <span className="ml-auto shrink-0 text-muted-foreground">{t('tool.cancelled')}</span>}
           {!running && item.ms != null && (
             <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
               {item.ms}ms

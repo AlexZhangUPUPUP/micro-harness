@@ -23,6 +23,8 @@ export type AgentEvent =
   | { type: 'text.delta'; text: string }
   | { type: 'thinking.delta'; text: string }
   | { type: 'tool.call'; id: string; name: string; args: unknown; sandbox?: string }
+  /** 工具执行状态，用于回放、取消和外部副作用不确定性的统一表达。 */
+  | { type: 'tool.status'; id: string; name: string; status: 'planned' | 'approved' | 'started' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'; reason?: string }
   | { type: 'tool.result'; id: string; name: string; ok: boolean; output: string; ms: number; elided?: number }
   | { type: 'usage'; input: number; output: number; cacheRead?: number; cost?: number; model?: string; reasoning?: number; durationMs?: number; purpose?: 'summary' }
   | { type: 'context.trim'; dropped: number; tokens: number; strategy: string }
