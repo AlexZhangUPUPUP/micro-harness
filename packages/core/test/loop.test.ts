@@ -106,6 +106,24 @@ test('runs the tool calls of one assistant message concurrently', async () => {
   }
 })
 
+test('serializes parallel mutating tools while keeping the result order stable', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-lock-'))
+  try {
+    const two: ChatMessage = {
+      role: 'assistant', content: null,
+      tool_calls: [
+        { id: 'first', function: { name: 'write_file', arguments: JSON.stringify({ path: 'same.txt', content: 'first' }) } },
+        { id: 'second', function: { name: 'write_file', arguments: JSON.stringify({ path: 'same.txt', content: 'second' }) } },
+      ],
+    }
+    const { harness } = setup([{ message: two }, { message: { role: 'assistant', content: 'ok' } }], dir)
+    await harness.send('write same file twice')
+    expect(await Bun.file(path.join(dir, 'same.txt')).text()).toBe('second')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('a failing tool is fed back as a message instead of throwing', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'mh-err-'))
   try {

@@ -156,6 +156,7 @@ export class Harness {
   /** 当前运行内按模型调用 ID 记录已完成结果，避免恢复/重试重复副作用。 */
   readonly #completedTools = new Map<string, ToolResult>()
   readonly #blockedToolIds: ReadonlySet<string>
+  #mutationTail: Promise<void> = Promise.resolve()
 
   constructor(opts: HarnessOptions) {
     this.#provider = opts.provider
@@ -419,7 +420,12 @@ export class Harness {
       else {
         dispatched = true
         this.log.emit({ type: 'tool.status', id: call.id, name, status: 'started' })
-        result = await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
+        const release = await this.#acquireMutation(name)
+        try {
+          result = await dispatch(this.#tools, name, call.function?.arguments || '{}', this.#toolCtx)
+        } finally {
+          release()
+        }
         // dispatch 会把工具异常转换成结果；取消需要单独抛出，避免把未确认的副作用伪装成普通失败。
         if (this.#toolCtx.signal?.aborted) this.#toolCtx.signal.throwIfAborted()
       }
@@ -438,6 +444,17 @@ export class Harness {
     this.log.emit({ type: 'tool.status', id: call.id, name, status: result.isError ? 'failed' : 'succeeded' })
     this.#completedTools.set(call.id, result)
     return { call, result }
+  }
+
+  /** 只锁定会改变工作区或触发外部副作用的工具，读工具仍可并行。 */
+  async #acquireMutation(name: string): Promise<() => void> {
+    const tool = this.#tools.find((item) => item.name === name)
+    if (!tool?.mutating) return () => undefined
+    const previous = this.#mutationTail
+    let release!: () => void
+    this.#mutationTail = new Promise<void>((resolve) => { release = resolve })
+    await previous
+    return release
   }
 
   /** 保留既有并发策略，按调用顺序把原始结果交给上下文模块。 */

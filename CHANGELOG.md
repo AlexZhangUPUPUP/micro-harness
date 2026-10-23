@@ -41,6 +41,7 @@ All notable changes to this project are documented here. The format follows
 - GUI 任务状态增加追加式投影，实时事件只处理新增部分，回放或切换会话时自动重置。
 - Agent 契约验收增加产物存在性检查，缺失产物会明确使契约失败。
 - CI 与 Release 固定 Bun 1.4.3、使用冻结 lockfile，并新增支持矩阵文档。
+- 并行工具调用对 mutating 工具增加执行锁，避免写入和外部副作用重叠；只读工具仍保持并行。
 - Artifact 创建和删除现在写入统一事件流，可在 Trace、回放和审计中追溯。
 - AgentResult 增加结构化终态，区分成功、普通失败、取消、超时和预算停止。
 - task 委派支持目标、验收条件和预期产物契约，并明确标记未独立验证的结果。
