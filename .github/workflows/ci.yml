@@ -12,8 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - run: bun install
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
       - run: bun test
       - run: bun run typecheck
       - run: bunx tsc -p scripts/evals/tsconfig.json --noEmit
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.3
       - run: bun install --frozen-lockfile
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       # GitHub runners restrict unprivileged user namespaces on newer images;

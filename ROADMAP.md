@@ -32,6 +32,8 @@
 
 当前增量进度：第二波已覆盖工具状态、幂等/冲突、取消清理、未知副作用恢复和 worktree 扫描；第三波已覆盖 Agent 终态/契约、父任务 checks 与产物验收、有界搜索、结构化验证命令和会话验证状态；第四波已覆盖 Provider 能力声明、MCP/ACP 取消、MCP stdio 进程组终止与显式重连、ArtifactStore、SSE 游标、慢消费者断开、事件分页、GUI 任务增量投影、产物面板和 Artifact Range 下载。剩余验收仍包括完整协议夹具与发布矩阵。
 
+发布矩阵已整理到 [docs/support-matrix.zh-CN.md](docs/support-matrix.zh-CN.md)，CI/Release 固定 Bun 1.4.3 并使用冻结 lockfile；真实模型和外部服务仍需按矩阵单独验证。
+
 以上均为计划版本，尚未发布。下一项是整理 v0.2.2，再实现 v0.3；不因列入路线图而自动执行所有开发或发布操作。
 
 ---

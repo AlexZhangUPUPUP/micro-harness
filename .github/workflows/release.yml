@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.3
       - run: bun install --frozen-lockfile
       - run: bun build --compile --outfile dist/${{ matrix.asset }} packages/core/src/cli.ts
       - run: ./dist/${{ matrix.asset }} --version
