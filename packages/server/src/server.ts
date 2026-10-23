@@ -306,6 +306,7 @@ export function createServer(options: ServerOptions): HarnessServer {
     const off = hub.on((e: TaggedEvent) => store.append(meta.id, e))
     const sessionModel = meta.model || model
     const sessionCwd = meta.cwd || cwd
+    const blockedToolIds = new Set(store.toolExecutions(meta.id).filter((record) => record.status === 'unknown').map((record) => record.callId))
     const preset = sessionPermission.get(meta.id) ?? defaultPermission
     const spec = PERMISSIONS[preset]
     // 只读约束同时覆盖外部工具；同一工具集合传给主 Agent 和子 Agent。
@@ -367,6 +368,7 @@ export function createServer(options: ServerOptions): HarnessServer {
       confirm: (req) => approvals.ask(req),
       agentId: 'main',
       parentId: meta.parentId ?? null,
+      blockedToolIds,
     })
     return { meta, harness, hub, controller: new AbortController(), done: Promise.resolve(), running: false, runner, off }
   }
