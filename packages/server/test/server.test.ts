@@ -45,7 +45,7 @@ function echoProvider(): { provider: Provider; seen: ChatMessage[][] } {
   }
 }
 
-function boot(overrides: { token?: string; requireAuth?: boolean; models?: string[] } = {}): Harness {
+function boot(overrides: { token?: string; requireAuth?: boolean; models?: string[]; permission?: 'workspace' | 'full' } = {}): Harness {
   const dir = mkdtempSync(path.join(tmpdir(), 'mh-server-'))
   const store = new SessionStore(dir)
   const { provider, seen } = echoProvider()
@@ -57,6 +57,7 @@ function boot(overrides: { token?: string; requireAuth?: boolean; models?: strin
     requireAuth: overrides.requireAuth ?? false,
     token: overrides.token,
     models: overrides.models,
+    permission: overrides.permission,
   })
   return {
     srv,
@@ -116,6 +117,26 @@ test('task endpoint persists structured state and rejects stale revisions', asyn
     expect(task.task.revision).toBe(1)
     const stale = await fetch(`${h.srv.url}/api/sessions/${session.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed', expectedRevision: 0 }) })
     expect(stale.status).toBe(409)
+  } finally {
+    h.stop()
+  }
+})
+
+test('verification endpoint records command evidence in task state', async () => {
+  const h = boot({ permission: 'full' })
+  try {
+    const created = await fetch(`${h.srv.url}/api/sessions`, { method: 'POST', body: JSON.stringify({ title: 'verify' }) })
+    const { session } = (await created.json()) as { session: { id: string } }
+    const result = await fetch(`${h.srv.url}/api/sessions/${session.id}/verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'typecheck', label: '类型检查', command: 'printf pass' }),
+    })
+    expect(result.status).toBe(200)
+    const body = (await result.json()) as { verification: { exitCode: number; output: string }; task: { verifications: Array<{ id: string; status: string; details?: string }> } }
+    expect(body.verification.exitCode).toBe(0)
+    expect(body.verification.output).toBe('pass')
+    expect(body.task.verifications[0]).toMatchObject({ id: 'typecheck', status: 'passed' })
+    expect(body.task.verifications[0]?.details).toContain('exit 0')
   } finally {
     h.stop()
   }

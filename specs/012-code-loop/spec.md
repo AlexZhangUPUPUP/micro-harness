@@ -5,3 +5,5 @@
 当前已提供有界 `search` 工具，使用参数化 ripgrep 调用，支持 glob、结果上限和取消；后续继续补仓库概览、结构化诊断及验证循环。
 
 同时提供 `verify` 工具，在沙箱和取消信号下运行有界命令，并返回可持久化的命令、退出码和输出证据；成功结果仍需由任务状态或父 Agent 显式采纳。
+
+Server 提供 `POST /api/sessions/:id/verify`，在 `full` 或 `auto-review` 权限下把验证结果写入 `task.verifications`；接口不会自动把任务标记为完成。

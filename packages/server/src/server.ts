@@ -56,13 +56,17 @@ import {
   RunBudget,
 } from '@micro-harness/core'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { exec } from 'node:child_process'
 import { homedir } from 'node:os'
+import { promisify } from 'node:util'
 import path from 'node:path'
 import type { Server } from 'bun'
 import { SessionStore, type SessionMeta } from './store.ts'
 import type { Sandbox, SandboxMode } from '@micro-harness/core'
 import { createApprovalBroker, type ApprovalBroker } from './approvals.ts'
 import { ArtifactStore } from './artifacts.ts'
+
+const execAsync = promisify(exec)
 
 export type PermissionPreset = 'read-only' | 'workspace' | 'full' | 'auto-review'
 
@@ -99,6 +103,17 @@ function parseByteRange(value: string | null, size: number): { start: number; en
   const end = match[2] ? Number(match[2]) : size - 1
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size) return undefined
   return { start, end: Math.min(end, size - 1) }
+}
+
+/** 执行有界验证命令，统一返回退出码和截断后的诊断输出。 */
+async function runVerificationCommand(command: string, cwd: string, timeoutMs: number): Promise<{ exitCode: number; output: string }> {
+  try {
+    const result = await execAsync(command, { cwd, timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024 })
+    return { exitCode: 0, output: [result.stdout, result.stderr].filter(Boolean).join('\n').slice(-20_000) }
+  } catch (err) {
+    const error = err as { code?: number; stdout?: string; stderr?: string; message?: string }
+    return { exitCode: typeof error.code === 'number' ? error.code : 1, output: [error.stdout, error.stderr, error.message].filter(Boolean).join('\n').slice(-20_000) }
+  }
 }
 
 /** Mirror of the web toggle file: a soft on/off plus an optional provider. */
@@ -706,6 +721,25 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (parts[0] === 'api' && parts[1] === 'sessions' && parts[2]) {
       const id = decodeURIComponent(parts[2])
       const action = parts[3]
+      if (action === 'verify') {
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        if (!store.has(id)) return json({ error: 'session not found' }, 404)
+        const preset = sessionPermission.get(id) ?? defaultPermission
+        if (!PERMISSIONS[preset].tools.includes('verify')) return json({ error: 'verification is disabled by permission preset' }, 403)
+        const body = (await req.json().catch(() => ({}))) as { id?: unknown; label?: unknown; command?: unknown; timeoutMs?: unknown }
+        const verificationId = String(body.id ?? '').trim()
+        const label = String(body.label ?? verificationId).trim()
+        const command = String(body.command ?? '').trim()
+        if (!verificationId || !label || !command) return json({ error: 'id, label and command are required' }, 400)
+        const timeoutMs = Math.min(120_000, Math.max(1_000, Number(body.timeoutMs) || 60_000))
+        const result = await runVerificationCommand(command, store.require(id).cwd || cwd, timeoutMs)
+        const current = deriveTaskState(store.events(id))
+        const verifications = current.verifications.filter((item) => item.id !== verificationId)
+        verifications.push({ id: verificationId, label, status: result.exitCode === 0 ? 'passed' : 'failed', details: `exit ${result.exitCode}\n${result.output}`.slice(0, 2000) })
+        const next = applyTaskUpdate(current, { verifications, status: 'awaiting_verification', expectedRevision: current.revision })
+        writeTaskSnapshot(id, next)
+        return json({ verification: { id: verificationId, label, ...result }, task: next })
+      }
       if (action === 'task') {
         if (!store.has(id)) return json({ error: 'session not found' }, 404)
         if (req.method === 'GET') return json({ task: deriveTaskState(store.events(id)) })

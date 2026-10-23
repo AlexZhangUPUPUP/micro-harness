@@ -146,6 +146,8 @@ export const api = {
   get: (id: string) => j<{ session: SessionMeta; events: TaggedEvent[] }>(`/api/sessions/${id}`),
   task: (id: string) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`),
   updateTask: (id: string, update: TaskUpdate) => j<{ task: TaskSnapshot }>(`/api/sessions/${id}/task`, { method: 'POST', body: JSON.stringify(update) }),
+  verify: (id: string, input: { id: string; label: string; command: string; timeoutMs?: number }) =>
+    j<{ verification: { id: string; label: string; exitCode: number; output: string }; task: TaskSnapshot }>(`/api/sessions/${id}/verify`, { method: 'POST', body: JSON.stringify(input) }),
   artifacts: (id: string) => j<{ artifacts: ArtifactRecord[] }>(`/api/sessions/${id}/artifacts`).then((d) => d.artifacts),
   deleteArtifact: (id: string, artifactId: string) => j<{ ok: boolean }>(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`, { method: 'DELETE' }),
   artifactUrl: (id: string, artifactId: string) => withToken(`/api/sessions/${id}/artifacts/${encodeURIComponent(artifactId)}`),
