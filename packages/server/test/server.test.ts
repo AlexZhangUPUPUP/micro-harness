@@ -156,6 +156,10 @@ test('SSE stream replays recorded events and terminates', async () => {
     expect(text).toContain('"type":"turn.end"')
     expect(text).toContain('event: end')
     expect(text).toContain('echo:stream me')
+    const resumed = await fetch(`${h.srv.url}/api/sessions/${session.id}/events`, { headers: { 'Last-Event-ID': '1' } })
+    const resumedText = await resumed.text()
+    expect(resumedText).not.toContain('"type":"session.start"')
+    expect(resumedText).toContain('"type":"user.message"')
   } finally {
     h.stop()
   }

@@ -487,6 +487,10 @@ export function createServer(options: ServerOptions): HarnessServer {
     if (!store.has(id)) return json({ error: 'session not found' }, 404)
     const encoder = new TextEncoder()
     const runtime = runtimes.get(id)
+    const history = store.events(id)
+    const requestedCursor = Number(req.headers.get('last-event-id') ?? new URL(req.url).searchParams.get('after') ?? '0')
+    const after = Number.isFinite(requestedCursor) && requestedCursor >= 0 ? Math.floor(requestedCursor) : 0
+    let cursor = history.length
     let write: ((chunk: string) => void) | null = null
     let off: (() => void) | undefined
     let heartbeat: ReturnType<typeof setInterval> | undefined
@@ -500,11 +504,14 @@ export function createServer(options: ServerOptions): HarnessServer {
             /* closed */
           }
         }
-        // 1. replay what already happened
-        for (const event of store.events(id)) write(`data: ${JSON.stringify(event)}\n\n`)
+        // 1. 只回放游标之后的事件；游标是会话级索引，不与 Agent 局部 seq 混用。
+        for (let i = after; i < history.length; i++) write(`id: ${i + 1}\ndata: ${JSON.stringify(history[i])}\n\n`)
         // 2. live-tail a running session
         if (runtime && !runtime.controller.signal.aborted) {
-          off = runtime.hub.on((e) => write?.(`data: ${JSON.stringify(e)}\n\n`))
+          off = runtime.hub.on((e) => {
+            cursor += 1
+            write?.(`id: ${cursor}\ndata: ${JSON.stringify(e)}\n\n`)
+          })
           heartbeat = setInterval(() => write?.(': ping\n\n'), 15_000)
           runtime.done.finally(() => {
             write?.('event: end\ndata: {}\n\n')
