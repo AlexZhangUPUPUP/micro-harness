@@ -179,6 +179,8 @@ export function makeTools(env: NodeJS.ProcessEnv = process.env): Tool[] {
         } catch (err) {
           return { output: `edit_file: ${(err as Error).message}`, isError: true }
         }
+        // 记录读取时版本，防止模型思考期间用户修改同一文件后被静默覆盖。
+        const initialFingerprint = fs.fingerprint ? await fs.fingerprint(handle) : undefined
 
         let content = original
         let replacements = 0
@@ -209,6 +211,13 @@ export function makeTools(env: NodeJS.ProcessEnv = process.env): Tool[] {
           replacements += spec.replace_all === true ? count : 1
         }
 
+        // 写入前再次校验版本；不具备指纹能力的远端文件系统沿用旧行为。
+        if (initialFingerprint !== undefined && fs.fingerprint) {
+          const currentFingerprint = await fs.fingerprint(handle)
+          if (currentFingerprint !== initialFingerprint) {
+            return { output: `edit_file: ${rel} changed after it was read; reload and retry`, isError: true }
+          }
+        }
         await fs.write(handle, content)
         return {
           output: batch

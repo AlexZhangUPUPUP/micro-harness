@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { dispatch, makeTools, type ToolContext } from '../src/tools.ts'
+import { localFs } from '../src/fs.ts'
 
 async function setup(content: string): Promise<{ dir: string; ctx: ToolContext; tools: ReturnType<typeof makeTools> }> {
   const dir = await mkdtemp(path.join(tmpdir(), 'mh-edit-'))
@@ -121,6 +122,30 @@ test('edit_file rejects an empty edits array', async () => {
     const res = await edit(tools, ctx, { path: 'a.txt', edits: [] })
     assert.equal(res.isError, true)
     assert.match(res.output, /must not be empty/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('edit_file refuses a concurrent file change before writing', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mh-edit-race-'))
+  try {
+    const fs = localFs(dir)
+    const tools = makeTools()
+    const originalFingerprint = fs.fingerprint!
+    let reads = 0
+    const guarded = {
+      ...fs,
+      async fingerprint(handle: string): Promise<string> {
+        reads += 1
+        if (reads === 2) await writeFile(handle, 'user change', 'utf8')
+        return originalFingerprint(handle)
+      },
+    }
+    await writeFile(path.join(dir, 'x.txt'), 'old', 'utf8')
+    const result = await dispatch(tools, 'edit_file', JSON.stringify({ path: 'x.txt', old_string: 'old', new_string: 'agent' }), { cwd: dir, allowBash: false, fs: guarded })
+    assert.equal(result.isError, true)
+    assert.equal(await readFile(path.join(dir, 'x.txt'), 'utf8'), 'user change')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

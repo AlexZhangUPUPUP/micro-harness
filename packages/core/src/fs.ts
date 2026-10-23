@@ -13,6 +13,7 @@
  */
 
 import { promises as nodeFs, realpathSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 
 export interface DirEntry {
@@ -30,6 +31,8 @@ export interface FileSystem {
   read(handle: string): Promise<string>
   write(handle: string, content: string): Promise<void>
   list(handle: string): Promise<DirEntry[]>
+  /** 可选版本指纹，用于编辑前后的并发修改检测。 */
+  fingerprint?(handle: string): Promise<string>
 }
 
 /** The default provider: the real filesystem, sandboxed to one directory. */
@@ -88,5 +91,7 @@ export function localFs(root: string): FileSystem {
       const entries = await nodeFs.readdir(handle, { withFileTypes: true })
       return entries.map((e) => ({ name: e.name, dir: e.isDirectory() }))
     },
+    // 使用内容哈希而不是 mtime，避免低精度文件系统时间导致漏检。
+    fingerprint: async (handle) => createHash('sha256').update(await nodeFs.readFile(handle)).digest('hex'),
   }
 }
